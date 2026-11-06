@@ -593,7 +593,9 @@
     }
     place(gems);
     for (let attempt = 0; attempt < 100; attempt++) {
-      cells.forEach(pos => { grid[pos.r][pos.c].color = -1; });
+      // Нерассчитанным камням — уникальные «пустые» цвета: они не совпадают
+      // ни друг с другом, ни с настоящими, поэтому проверка идёт честно.
+      cells.forEach((pos, i) => { grid[pos.r][pos.c].color = -1 - i; });
       cells.forEach(pos => {
         const gem = grid[pos.r][pos.c];
         const options = [];

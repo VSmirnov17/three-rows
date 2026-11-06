@@ -578,6 +578,30 @@ test('shuffle не двигает камни в лианах и завершае
   }
 });
 
+test('shuffle выводит доску без ходов (с лианами) на доску с ходом', () => {
+  const DEAD = ['01234501', '23450123', '45012345', '01234501', '23450123', '45012345', '01234501', '23450123'];
+  const vines = { '1,1': LOCK, '2,5': LOCK, '4,4': LOCK, '6,2': LOCK, '7,7': LOCK };
+  for (let seed = 1; seed <= 15; seed++) {
+    const grid = gridFrom(DEAD, vines);
+    assert.equal(Board.hasAnyMatch(grid), false);
+    assert.equal(Board.hasMove(grid), false, 'исходная доска мёртвая');
+    const before = lockedSnapshot(grid);
+    const out = Board.shuffle(grid, seeded(seed), { colors: 6 });
+    assert.deepEqual(lockedSnapshot(out), before);
+    assert.equal(Board.hasAnyMatch(out), false);
+    assert.equal(Board.hasMove(out), true);
+  }
+});
+
+test('shuffle: запасной путь не оставляет совпадений (проверка на многих зерна)', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const grid = gridFrom(Array(8).fill('00000000'), { '3,3': LOCK, '0,5': LOCK });
+    const out = Board.shuffle(grid, seeded(seed), { colors: 5 });
+    assert.equal(Board.hasAnyMatch(out), false, 'seed ' + seed);
+    assert.equal(Board.hasMove(out), true, 'seed ' + seed);
+  }
+});
+
 test('shuffle: спецкамни остаются со своими камнями', () => {
   const grid = Board.generateGrid({ colors: 5, vines: [[2, 2]] }, seeded(5), counter());
   const bomb = grid[0][0];

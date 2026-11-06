@@ -1024,7 +1024,6 @@ button:focus-visible {
    тёмной обводкой поверх камня. Закреплённый камень выше падающих по
    слоям: камни сверху «проходят сквозь» него, а не заслоняют его. */
 .gem.is-locked { z-index: 3; cursor: not-allowed; }
-.gem.is-locked .gem-inner { filter: saturate(.7) brightness(.8); }
 
 .vine-overlay {
   position: absolute;

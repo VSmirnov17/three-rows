@@ -149,7 +149,7 @@
     default: 'Соединяй камни в ряд из трёх и более',
     swap: 'Меняй местами соседние камни',
     bad: 'Так нельзя — нужен ряд из трёх',
-    vines: 'Камень в лианах не сдвинуть — собери ряд рядом с ним'
+    vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним'
   };
 
   function setHint(text, tone) {
@@ -972,6 +972,9 @@
       gem.el.style.transition = '';
       gem.el.style.opacity = '';
     });
+    // Запасной путь ядра не даёт гарантий на совсем тесной доске: если
+    // совпадения всё же остались, разбираем их как обычный каскад.
+    if (Board.hasAnyMatch(state.grid)) await resolveBoard();
     if (!force) state.busy = false;
     state.lastAction = now();
     flashHint('Новая комбинация готова', 'good');
@@ -1092,7 +1095,7 @@
         );
       }
 
-      if (!triggers.length && (clear.size >= 6 || chain >= 3)) {
+      if (cellsArr.length && !triggers.length && (clear.size >= 6 || chain >= 3)) {
         const strength = Math.min(1, (clear.size - 5) / 10 + (chain - 2) * 0.12);
         impactFx(sr / cellsArr.length, sc / cellsArr.length, strength);
         SFX.impact();
