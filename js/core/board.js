@@ -224,6 +224,334 @@
     return findMove(grid) !== null;
   }
 
+  /* ---------- Раскрытие спецкамней ----------
+     baseKeys — клетки совпадения ('r,c'). Спецкамни среди них (и среди
+     вновь задетых) срабатывают цепочкой. protectedKeys — клетки, где
+     только что созданы новые спецкамни: они не очищаются.
+     Возвращает { clear, triggers, unlocks }. unlocks — клетки, камни в
+     которых только «отпирают» (лианы, механика земли 2); сейчас всегда пуст.
+     Когда появятся запертые камни: запертый камень из clear надо переносить
+     в unlocks (и убирать из clear), а не удалять. */
+  function expandSpecials(grid, baseKeys, protectedKeys) {
+    const clear = new Set(baseKeys);
+    const unlocks = new Set();
+    const triggers = [];
+    const queue = [];
+    baseKeys.forEach(k => {
+      const p = parseKey(k);
+      const gem = gemAt(grid, p.r, p.c);
+      if (gem && gem.special) queue.push({ r: p.r, c: p.c });
+    });
+    const seen = new Set();
+
+    while (queue.length) {
+      const { r, c } = queue.shift();
+      const k = keyOf(r, c);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const gem = gemAt(grid, r, c);
+      if (!gem || !gem.special) continue;
+      triggers.push({ r, c, type: gem.special, color: gem.color, lineDir: gem.lineDir });
+
+      const extra = [];
+      if (gem.special === 'line') {
+        if (gem.lineDir === 'col') {
+          for (let rr = 0; rr < ROWS; rr++) extra.push({ r: rr, c });
+        } else {
+          for (let cc = 0; cc < COLS; cc++) extra.push({ r, c: cc });
+        }
+      } else if (gem.special === 'sun') {
+        for (let rr = 0; rr < ROWS; rr++) {
+          for (let cc = 0; cc < COLS; cc++) {
+            const other = gemAt(grid, rr, cc);
+            if (other && other.color === gem.color) extra.push({ r: rr, c: cc });
+          }
+        }
+      } else if (gem.special === 'bomb') {
+        // Область 3×3 вокруг камня; на краю поля — сколько помещается
+        for (let rr = Math.max(0, r - 1); rr <= Math.min(ROWS - 1, r + 1); rr++) {
+          for (let cc = Math.max(0, c - 1); cc <= Math.min(COLS - 1, c + 1); cc++) {
+            extra.push({ r: rr, c: cc });
+          }
+        }
+      } else if (gem.special === 'totem') {
+        // Крест: весь свой ряд и весь свой столбец
+        for (let cc = 0; cc < COLS; cc++) extra.push({ r, c: cc });
+        for (let rr = 0; rr < ROWS; rr++) extra.push({ r: rr, c });
+      }
+
+      extra.forEach(pos => {
+        const kk = keyOf(pos.r, pos.c);
+        clear.add(kk);
+        const other = gemAt(grid, pos.r, pos.c);
+        if (other && other.special && !seen.has(kk)) queue.push(pos);
+      });
+    }
+
+    protectedKeys.forEach(k => {
+      if (clear.has(k)) clear.delete(k);
+    });
+    return { clear, triggers, unlocks };
+  }
+
+  /* ---------- План одного каскада ----------
+     Ничего не меняет в сетке. Возвращает null, если совпадений нет, иначе
+     { matched, creates, clear, triggers, unlocks }.
+
+     Приоритет создания спецкамней (важно):
+       1. уголок/T — «Тотем» (важнее линии и солнца);
+       2. линия из 5 — «Солнце» (важнее квадрата и линии);
+       3. квадрат 2×2 — «Камень-взрыв» (важнее линии);
+       4. линия из 4 — «Камень-молния».
+     На один блок (совокупность пересекающихся клеток) создаётся ровно
+     один спецкамень: клетки блока, который уже дал спецкамень, попадают
+     в usedCells, и более низкий приоритет этот блок не трогает.
+     Позиция: сначала swapCell, если он в паттерне; иначе центр
+     квадрата / угловая клетка уголка (стык у T) / середина линии.
+     Клетка не должна быть спецкамнем или уже занятой другим созданием. */
+  function planCascade(grid, swapCell) {
+    const patterns = analyzePatterns(grid);
+    const groups = patterns.groups;
+    if (!groups.length && !patterns.squares.length && !patterns.corners.length) return null;
+
+    const matched = new Set();
+    groups.forEach(group => group.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
+    patterns.squares.forEach(sq => sq.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
+    patterns.corners.forEach(cn => cn.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
+
+    const creates = [];
+    const reserved = new Set();
+    const usedCells = new Set();
+    const markUsed = cells => cells.forEach(cell => usedCells.add(keyOf(cell.r, cell.c)));
+
+    const pickCreate = (cells, fallback) => {
+      const usable = cells.filter(cell => {
+        const g = gemAt(grid, cell.r, cell.c);
+        return g && !g.special && !reserved.has(keyOf(cell.r, cell.c));
+      });
+      if (!usable.length) return null;
+      const swapped = usable.find(cell =>
+        swapCell && cell.r === swapCell.r && cell.c === swapCell.c);
+      if (swapped) return swapped;
+      const fb = fallback && usable.find(cell => cell.r === fallback.r && cell.c === fallback.c);
+      return fb || usable[0];
+    };
+
+    const addCreate = (cells, type, dir, fallback) => {
+      const pos = pickCreate(cells, fallback);
+      if (!pos) return false;
+      reserved.add(keyOf(pos.r, pos.c));
+      creates.push({ r: pos.r, c: pos.c, type, dir });
+      return true;
+    };
+
+    // 1. Уголок/T → тотем. Уголок из 5 имеет ровно одну угловую клетку
+    //    (соседа по обеим линиям); у T угловых нет — берём стык.
+    patterns.corners.forEach(corner => {
+      if (corner.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
+      const cells = corner.cells;
+      const cornerCell = cells.find(cell =>
+        cells.some(o => o.r === cell.r && Math.abs(o.c - cell.c) === 1) &&
+        cells.some(o => o.c === cell.c && Math.abs(o.r - cell.r) === 1));
+      if (addCreate(cells, 'totem', null, cornerCell || corner.joint)) {
+        markUsed(cells);
+      }
+    });
+
+    // 2. Линия из 5 (и длиннее) → солнце
+    const sunGroups = groups.filter(g => g.len >= 5).sort((a, b) => b.len - a.len);
+    sunGroups.forEach(group => {
+      if (addCreate(group.cells, 'sun', null, group.cells[Math.floor(group.cells.length / 2)])) {
+        markUsed(group.cells);
+      }
+    });
+
+    // 3. Квадрат 2×2 → бомба. Если квадрат — часть блока, который уже
+    //    дал солнце/тотем, второй спецкамень не создаём.
+    patterns.squares.forEach(square => {
+      if (square.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
+      if (addCreate(square.cells, 'bomb', null, square.center)) {
+        markUsed(square.cells);
+      }
+    });
+
+    // 4. Линия из 4 → молния, если её блок ещё не занят спецкамнем
+    groups
+      .filter(group => group.len === 4)
+      .forEach(group => {
+        if (group.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
+        const dir = group.dir === 'h' ? 'row' : 'col';
+        if (addCreate(group.cells, 'line', dir, group.cells[Math.floor(group.cells.length / 2)])) {
+          markUsed(group.cells);
+        }
+      });
+
+    const protectedKeys = new Set(creates.map(cr => keyOf(cr.r, cr.c)));
+    const { clear, triggers, unlocks } = expandSpecials(grid, matched, protectedKeys);
+    if (clear.size === 0 && unlocks.size === 0) return null;
+
+    return { matched, creates, clear, triggers, unlocks };
+  }
+
+  /* Применяет план к сетке: убирает clear, делает из creates спецкамни.
+     Возвращает убранные камни (их el игра убирает сама). Камни в unlocks
+     остаются на месте — их отпирание добавится вместе с лианами. */
+  function applyCascade(grid, plan) {
+    const removed = [];
+    plan.clear.forEach(k => {
+      const p = parseKey(k);
+      const gem = gemAt(grid, p.r, p.c);
+      if (!gem) return;
+      removed.push(gem);
+      grid[p.r][p.c] = null;
+    });
+    plan.creates.forEach(cr => {
+      const gem = gemAt(grid, cr.r, cr.c);
+      if (!gem) return;
+      gem.special = cr.type;
+      gem.lineDir = cr.type === 'line' ? cr.dir : null;
+    });
+    return { removed };
+  }
+
+  /* ---------- Обрушение ----------
+     Камни в каждом столбце падают вниз, сверху досыпаются новые через
+     spawn(r, c) -> gem (ядро DOM не создаёт). Меняет grid и r/c камней.
+     moves — упавшие камни, spawned — новые (по столбцам, снизу вверх).
+     Для запертых клеток (лианы) цикл по столбцу потребуется разбить на
+     отрезки между неподвижными клетками. */
+  function collapse(grid, spawn) {
+    const moves = [];
+    const spawned = [];
+    for (let c = 0; c < COLS; c++) {
+      let write = ROWS - 1;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        const gem = grid[r][c];
+        if (!gem) continue;
+        if (r !== write) {
+          grid[write][c] = gem;
+          grid[r][c] = null;
+          gem.r = write;
+          gem.c = c;
+          moves.push({ gem, fromR: r, toR: write });
+        }
+        write--;
+      }
+      for (let r = write; r >= 0; r--) {
+        const gem = spawn(r, c);
+        gem.r = r;
+        gem.c = c;
+        grid[r][c] = gem;
+        spawned.push(gem);
+      }
+    }
+    return { moves, spawned };
+  }
+
+  /* ---------- Новое поле ----------
+     Без начальных совпадений (серии и квадраты 2×2) и с ходом, до 50
+     попыток. level.colors — число цветов (по умолчанию 6); rng() в [0,1);
+     nextId() выдаёт свежие id камней. */
+  function generateGrid(level, rng, nextId) {
+    const colors = (level && level.colors) || DEFAULT_COLORS;
+    const random = rng || Math.random;
+    const newId = nextId || (() => ++fallbackId);
+    let grid;
+    let attempts = 0;
+    do {
+      grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const banned = new Set();
+          if (c >= 2) {
+            const a = grid[r][c - 1];
+            const b = grid[r][c - 2];
+            if (a && b && a.color === b.color) banned.add(a.color);
+          }
+          if (r >= 2) {
+            const a = grid[r - 1][c];
+            const b = grid[r - 2][c];
+            if (a && b && a.color === b.color) banned.add(a.color);
+          }
+          // Квадрат 2×2 — тоже совпадение: три уже поставленных камня угла
+          // запрещают четвёртый того же цвета.
+          if (r >= 1 && c >= 1) {
+            const a = grid[r - 1][c - 1];
+            const b = grid[r - 1][c];
+            const d = grid[r][c - 1];
+            if (a && b && d && a.color === b.color && a.color === d.color) banned.add(a.color);
+          }
+          const options = [];
+          for (let color = 0; color < colors; color++) {
+            if (!banned.has(color)) options.push(color);
+          }
+          // При очень малом числе цветов запретить может всё — берём любой.
+          const pool = options.length ? options : Array.from({ length: colors }, (_, i) => i);
+          const color = pool[Math.floor(random() * pool.length)];
+          grid[r][c] = { id: newId(), color, special: null, lineDir: null, r, c, el: null };
+        }
+      }
+      attempts++;
+    } while (!hasMove(grid) && attempts < 50);
+    return grid;
+  }
+
+  const DEFAULT_COLORS = 6;
+  let fallbackId = 0;
+
+  /* ---------- Полный ход (для бота) ----------
+     Обмен a<->b, затем все каскады и обрушение до успокоения. Меняет grid.
+     null, если обмен недопустим (не соседи, пустая клетка или нет
+     совпадения) — сетка при этом остаётся как была.
+     opts.colors — число цветов для досыпки (по умолчанию 6). */
+  function simulateMove(grid, a, b, rng, nextId, opts) {
+    if (!a || !b) return null;
+    if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
+    const ga = gemAt(grid, a.r, a.c);
+    const gb = gemAt(grid, b.r, b.c);
+    if (!ga || !gb) return null;
+
+    const colors = (opts && opts.colors) || DEFAULT_COLORS;
+    const random = rng || Math.random;
+    const newId = nextId || (() => ++fallbackId);
+
+    const swap = () => {
+      grid[a.r][a.c] = gb;
+      grid[b.r][b.c] = ga;
+      ga.r = b.r; ga.c = b.c;
+      gb.r = a.r; gb.c = a.c;
+    };
+    swap();
+    if (!hasAnyMatch(grid)) {
+      grid[a.r][a.c] = ga;
+      grid[b.r][b.c] = gb;
+      ga.r = a.r; ga.c = a.c;
+      gb.r = b.r; gb.c = b.c;
+      return null;
+    }
+
+    const swapCell = { r: b.r, c: b.c };
+    const spawn = (r, c) => ({
+      id: newId(),
+      color: Math.floor(random() * colors),
+      special: null,
+      lineDir: null,
+      r,
+      c,
+      el: null
+    });
+    const cascades = [];
+    const removed = [];
+    for (let guard = 0; guard < 200; guard++) {
+      const plan = planCascade(grid, swapCell);
+      if (!plan) break;
+      cascades.push(plan);
+      removed.push(...applyCascade(grid, plan).removed);
+      collapse(grid, spawn);
+    }
+    return { cascades, removed };
+  }
+
   return {
     ROWS,
     COLS,
@@ -236,6 +564,12 @@
     analyzePatterns,
     hasAnyMatch,
     findMove,
-    hasMove
+    hasMove,
+    expandSpecials,
+    planCascade,
+    applyCascade,
+    collapse,
+    generateGrid,
+    simulateMove
   };
 });

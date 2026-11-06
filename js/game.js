@@ -112,7 +112,7 @@
 
   const now = () => performance.now();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const keyOf = (r, c) => r + ',' + c;
+  const { parseKey } = window.BoardCore;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const isAdjacent = (a, b) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
 
@@ -417,8 +417,7 @@
 
   /* ---------- Вспомогательное ---------- */
   function gemAt(r, c) {
-    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
-    return state.grid[r][c];
+    return window.BoardCore.gemAt(state.grid, r, c);
   }
 
   function currentLevel() {
@@ -480,40 +479,7 @@
   }
 
   function generateGridData() {
-    let attempts = 0;
-    do {
-      state.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const banned = new Set();
-          if (c >= 2) {
-            const a = state.grid[r][c - 1];
-            const b = state.grid[r][c - 2];
-            if (a && b && a.color === b.color) banned.add(a.color);
-          }
-          if (r >= 2) {
-            const a = state.grid[r - 1][c];
-            const b = state.grid[r - 2][c];
-            if (a && b && a.color === b.color) banned.add(a.color);
-          }
-          // Квадрат 2×2 — тоже совпадение: три уже поставленных камня угла
-          // запрещают четвёртый того же цвета.
-          if (r >= 1 && c >= 1) {
-            const a = state.grid[r - 1][c - 1];
-            const b = state.grid[r - 1][c];
-            const d = state.grid[r][c - 1];
-            if (a && b && d && a.color === b.color && a.color === d.color) banned.add(a.color);
-          }
-          const options = [];
-          for (let color = 0; color < TYPES; color++) {
-            if (!banned.has(color)) options.push(color);
-          }
-          const color = options[Math.floor(Math.random() * options.length)];
-          state.grid[r][c] = makeGem(color, r, c);
-        }
-      }
-      attempts++;
-    } while (!hasMove() && attempts < 50);
+    state.grid = window.BoardCore.generateGrid({ colors: TYPES }, Math.random, () => ++state.gemSeq);
   }
 
   function spawnBoard() {
@@ -941,80 +907,17 @@
   }
 
   /* ---------- Разрешение совпадений ---------- */
-  function parseKey(k) {
-    const [r, c] = k.split(',').map(Number);
-    return { r, c };
-  }
-
-  function expandSpecials(base, protectedKeys) {
-    const clear = new Set(base);
-    const triggers = [];
-    const queue = [];
-    base.forEach(k => {
-      const p = parseKey(k);
-      const gem = gemAt(p.r, p.c);
-      if (gem && gem.special) queue.push({ r: p.r, c: p.c });
-    });
-    const seen = new Set();
-
-    while (queue.length) {
-      const { r, c } = queue.shift();
-      const k = keyOf(r, c);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      const gem = gemAt(r, c);
-      if (!gem || !gem.special) continue;
-      triggers.push({ r, c, type: gem.special, color: gem.color, lineDir: gem.lineDir });
-
-      const extra = [];
-      if (gem.special === 'line') {
-        if (gem.lineDir === 'col') {
-          for (let rr = 0; rr < ROWS; rr++) extra.push({ r: rr, c });
-        } else {
-          for (let cc = 0; cc < COLS; cc++) extra.push({ r, c: cc });
-        }
-      } else if (gem.special === 'sun') {
-        for (let rr = 0; rr < ROWS; rr++) {
-          for (let cc = 0; cc < COLS; cc++) {
-            const other = gemAt(rr, cc);
-            if (other && other.color === gem.color) extra.push({ r: rr, c: cc });
-          }
-        }
-      } else if (gem.special === 'bomb') {
-        // Область 3×3 вокруг камня; на краю поля — сколько помещается
-        for (let rr = Math.max(0, r - 1); rr <= Math.min(ROWS - 1, r + 1); rr++) {
-          for (let cc = Math.max(0, c - 1); cc <= Math.min(COLS - 1, c + 1); cc++) {
-            extra.push({ r: rr, c: cc });
-          }
-        }
-      } else if (gem.special === 'totem') {
-        // Крест: весь свой ряд и весь свой столбец
-        for (let cc = 0; cc < COLS; cc++) extra.push({ r, c: cc });
-        for (let rr = 0; rr < ROWS; rr++) extra.push({ r: rr, c });
-      }
-
-      extra.forEach(pos => {
-        const kk = keyOf(pos.r, pos.c);
-        clear.add(kk);
-        const other = gemAt(pos.r, pos.c);
-        if (other && other.special && !seen.has(kk)) queue.push(pos);
-      });
-    }
-
-    protectedKeys.forEach(k => {
-      if (clear.has(k)) clear.delete(k);
-    });
-    return { clear, triggers };
-  }
-
   async function resolveBoard() {
     let chain = 0;
     let maxChain = 0;
 
     while (true) {
-      const patterns = analyzePatterns();
-      const groups = patterns.groups;
-      if (!groups.length && !patterns.squares.length && !patterns.corners.length) break;
+      // Решения принимает ядро (js/core/board.js): что совпало, какие
+      // спецкамни создать (тотем > солнце > бомба > молния, по одному на
+      // блок) и что очистить. Здесь — только анимация, звук и подсчёт.
+      const plan = Board.planCascade(state.grid, state.swapCell);
+      if (!plan) break;
+      const { creates, clear, triggers } = plan;
 
       chain++;
       maxChain = Math.max(maxChain, chain);
@@ -1022,100 +925,6 @@
       const mult = Math.min(8, chain + 1);
       setCombo(mult);
       emitVisual('match', { chain, mult });
-
-      const matched = new Set();
-      groups.forEach(group => group.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
-      if (patterns.squares.length) {
-        patterns.squares.forEach(sq => sq.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
-      }
-      if (patterns.corners.length) {
-        patterns.corners.forEach(cn => cn.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
-      }
-
-      /* ---------- Создание спецкамней ----------
-         Приоритет (важно):
-           1. уголок/T — «Тотем» (важнее линии и солнца);
-           2. линия из 5 — «Солнце» (важнее квадрата и линии);
-           3. квадрат 2×2 — «Камень-взрыв» (важнее линии);
-           4. линия из 4 — «Камень-молния».
-         На один блок (совокупность пересекающихся клеток) создаётся ровно
-         один спецкамень: клетки блока, который уже дал спецкамень, попадают
-         в usedCells, и более низкий приоритет этот блок не трогает.
-         Позиция: сначала state.swapCell, если он в паттерне; иначе центр
-         квадрата / угловая клетка уголка (стык у T) / середина линии.
-         Клетка не должна быть спецкамнем или уже занятой другим созданием. */
-      const creates = [];
-      const reserved = new Set();
-      const usedCells = new Set();
-      const markUsed = cells => cells.forEach(cell => usedCells.add(keyOf(cell.r, cell.c)));
-
-      const pickCreate = (cells, fallback) => {
-        const usable = cells.filter(cell => {
-          const g = gemAt(cell.r, cell.c);
-          return g && !g.special && !reserved.has(keyOf(cell.r, cell.c));
-        });
-        if (!usable.length) return null;
-        const swapped = usable.find(cell =>
-          state.swapCell && cell.r === state.swapCell.r && cell.c === state.swapCell.c);
-        if (swapped) return swapped;
-        const fb = fallback && usable.find(cell => cell.r === fallback.r && cell.c === fallback.c);
-        return fb || usable[0];
-      };
-
-      const addCreate = (cells, type, dir, fallback) => {
-        const pos = pickCreate(cells, fallback);
-        if (!pos) return false;
-        reserved.add(keyOf(pos.r, pos.c));
-        creates.push({ r: pos.r, c: pos.c, type, dir });
-        return true;
-      };
-
-      // 1. Уголок/T → тотем. Уголок из 5 имеет ровно одну угловую клетку
-      //    (соседа по обеим линиям); у T угловых нет — берём стык.
-      patterns.corners.forEach(corner => {
-        if (corner.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
-        const cells = corner.cells;
-        const cornerCell = cells.find(cell =>
-          cells.some(o => o.r === cell.r && Math.abs(o.c - cell.c) === 1) &&
-          cells.some(o => o.c === cell.c && Math.abs(o.r - cell.r) === 1));
-        if (addCreate(cells, 'totem', null, cornerCell || corner.joint)) {
-          markUsed(cells);
-        }
-      });
-
-      // 2. Линия из 5 (и длиннее) → солнце
-      const sunGroups = groups.filter(g => g.len >= 5).sort((a, b) => b.len - a.len);
-      sunGroups.forEach(group => {
-        if (addCreate(group.cells, 'sun', null, group.cells[Math.floor(group.cells.length / 2)])) {
-          markUsed(group.cells);
-        }
-      });
-
-      // 3. Квадрат 2×2 → бомба. Если квадрат — часть блока, который уже
-      //    дал солнце/тотем, второй спецкамень не создаём.
-      patterns.squares.forEach(square => {
-        if (square.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
-        if (addCreate(square.cells, 'bomb', null, square.center)) {
-          markUsed(square.cells);
-        }
-      });
-
-      // 4. Линия из 4 → молния, если её блок ещё не занят спецкамнем
-      groups
-        .filter(group => group.len === 4)
-        .sort((a, b) => b.len - a.len)
-        .forEach(group => {
-          if (group.cells.some(cell => usedCells.has(keyOf(cell.r, cell.c)))) return;
-          const dir = group.dir === 'h' ? 'row' : 'col';
-          if (addCreate(group.cells, 'line', dir, group.cells[Math.floor(group.cells.length / 2)])) {
-            markUsed(group.cells);
-          }
-        });
-
-      const protectedKeys = new Set(creates.map(cr => keyOf(cr.r, cr.c)));
-      const { clear, triggers } = expandSpecials(matched, protectedKeys);
-
-      if (clear.size === 0) break;
 
       triggers.forEach(t => blastFx(t));
 
@@ -1207,12 +1016,9 @@
 
       await sleep(310);
 
-      clear.forEach(k => {
-        const p = parseKey(k);
-        const gem = gemAt(p.r, p.c);
-        if (!gem) return;
+      const { removed } = Board.applyCascade(state.grid, plan);
+      removed.forEach(gem => {
         if (gem.el) gem.el.remove();
-        state.grid[p.r][p.c] = null;
       });
 
       creates.forEach(cr => {
@@ -1234,42 +1040,35 @@
   }
 
   async function dropGems() {
+    // Падение и досыпку считает ядро; здесь — только движение и появление узлов.
+    const { moves, spawned } = Board.collapse(state.grid, (r, c) => makeGem(randomColor(), r, c));
+
     let maxDist = 0;
+    moves.forEach(m => {
+      applyPos(m.gem);
+      maxDist = Math.max(maxDist, m.toR - m.fromR);
+    });
 
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--) {
-        const gem = state.grid[r][c];
-        if (!gem) continue;
-        if (r !== write) {
-          state.grid[write][c] = gem;
-          state.grid[r][c] = null;
-          gem.r = write;
-          gem.c = c;
-          applyPos(gem);
-          maxDist = Math.max(maxDist, write - r);
-        }
-        write--;
-      }
-
-      let spawned = 0;
-      for (let r = write; r >= 0; r--) {
-        spawned++;
-        const gem = makeGem(randomColor(), r, c);
-        state.grid[r][c] = gem;
-        const node = createGemEl(gem);
-        node.style.transition = 'none';
-        node.style.transform = `translate(${c * 100}%, ${(r - write - 1) * 100}%)`;
-        dom.tiles.appendChild(node);
-        void node.offsetWidth;
-        const dur = 320 + spawned * 45;
-        node.style.transition = `transform ${dur}ms cubic-bezier(.25,.82,.34,1.05)`;
-        node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
-        setTimeout(() => {
-          if (node.isConnected) node.style.transition = '';
-        }, dur + 80);
-      }
-    }
+    // Новые камни приходят по столбцам снизу вверх; сколько их в столбце —
+    // столько рядов над полем они стартуют.
+    const perCol = new Array(COLS).fill(0);
+    spawned.forEach(gem => { perCol[gem.c]++; });
+    const index = new Array(COLS).fill(0);
+    spawned.forEach(gem => {
+      const { r, c } = gem;
+      index[c]++;
+      const node = createGemEl(gem);
+      node.style.transition = 'none';
+      node.style.transform = `translate(${c * 100}%, ${(r - perCol[c]) * 100}%)`;
+      dom.tiles.appendChild(node);
+      void node.offsetWidth;
+      const dur = 320 + index[c] * 45;
+      node.style.transition = `transform ${dur}ms cubic-bezier(.25,.82,.34,1.05)`;
+      node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+      setTimeout(() => {
+        if (node.isConnected) node.style.transition = '';
+      }, dur + 80);
+    });
 
     await sleep(390 + Math.min(maxDist, 7) * 16);
   }
@@ -1694,7 +1493,8 @@
       state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
       checkEnd, upgradeGem, applyPos, beginLevel, showHint,
       findSquares, findCorners, analyzePatterns,
-      findLineGroups, hasAnyMatch, expandSpecials
+      findLineGroups, hasAnyMatch,
+      expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys)
     };
   }
 
