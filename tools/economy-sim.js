@@ -12,29 +12,18 @@
 const path = require('path');
 const Economy = require(path.join(__dirname, '..', 'js', 'economy.js'));
 
-/* Данные уровней повторяют LEVELS из js/game.js. */
-const LEVELS = [
-  {
-    name: 'Тропа Ягуара',
-    time: 120,
-    goals: [{ color: 0, need: 12 }, { color: 2, need: 12 }]
-  },
-  {
-    name: 'Храм Пернатого Змея',
-    time: 130,
-    goals: [{ color: 1, need: 14 }, { color: 3, need: 14 }, { color: 5, need: 9 }]
-  },
-  {
-    name: 'Пещера Лунного Света',
-    time: 140,
-    goals: [{ color: 4, need: 18 }, { color: 2, need: 16 }]
-  },
-  {
-    name: 'Золотое Солнце',
-    time: 155,
-    goals: [{ color: 0, need: 18 }, { color: 1, need: 18 }, { color: 4, need: 14 }]
-  }
-];
+const Campaign = require(path.join(__dirname, '..', 'js', 'campaign', 'campaign.js'));
+
+/* Уровни кампании на сложности «Обычно» (с таймером): время — econTime,
+ * цели — только цветные (лианы не дают очков за цвет). */
+const LEVELS = Campaign.allLevelIds().map(id => {
+  const r = Campaign.resolve(id, 'normal');
+  return {
+    name: r.id + ' ' + r.name,
+    time: r.econTime,
+    goals: r.goals.filter(g => g.type === 'color').map(g => ({ color: g.color, need: g.need }))
+  };
+});
 
 const PROFILES = {
   fast: {
@@ -406,7 +395,7 @@ function main() {
     const diff = ((fast.total - slow.total) / slow.total) * 100;
     summary.push({ level: level.name, diff: diff, fast: fast, slow: slow });
 
-    const name = (index + 1) + '. ' + level.name;
+    const name = level.name;
     console.log(
       pad(name, 28) +
       padStart(fmtTime(level.time), 7) +
