@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Сокровища Солнца — симулятор экономики.
+/* Хранитель Солнца — симулятор экономики.
  *
  * Запуск:  node tools/economy-sim.js
  *
@@ -370,7 +370,7 @@ function main() {
   const divider = '─'.repeat(101);
 
   console.log('');
-  console.log('Сокровища Солнца — симуляция экономики');
+  console.log('Хранитель Солнца — симуляция экономики');
   console.log('Формула и константы: js/economy.js');
   console.log(divider);
   console.log(

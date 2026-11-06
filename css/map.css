@@ -1,0 +1,380 @@
+/* Карта пути: выбор сложности, список земель, мозаика осколков, кнопки уровней.
+   Размеры рассчитаны на крупный режим: текст кнопок не мельче 20px,
+   цели нажатия не меньше 56px, кнопки уровней не меньше 64px.
+   Классы tier-stone / tier-silver / tier-gold различаются не только цветом,
+   но и рамкой: тонкая сплошная, двойная, толстая сплошная с сиянием. */
+
+.stone-btn.map-open-btn {
+  width: min(360px, 100%);
+  min-height: 64px;
+  margin-top: 12px;
+  padding: 10px 20px;
+  font-size: 20px;
+  letter-spacing: .08em;
+}
+
+.overlay.map-screen {
+  place-items: start center;
+  padding: 16px;
+}
+
+.map-card {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 4px 0 28px;
+}
+
+/* ---------- Шапка ---------- */
+.map-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.map-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: .06em;
+  text-align: center;
+  color: var(--gold-bright);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .6);
+}
+
+.stone-btn.map-back {
+  justify-self: start;
+  min-height: 56px;
+  padding: 10px 18px;
+  font-size: 20px;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+
+.map-back svg { width: 26px; height: 26px; fill: currentColor; }
+
+.map-stars-total {
+  justify-self: end;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 12px;
+  font-size: 22px;
+  color: #efe3c4;
+  background: rgba(8, 18, 12, .75);
+  border: 2px solid rgba(236, 208, 138, .45);
+}
+
+.map-stars-total b {
+  font-family: var(--display);
+  font-size: 28px;
+  color: var(--gold-bright);
+}
+
+/* ---------- Сложность ---------- */
+.map-diff { margin-bottom: 18px; }
+
+.map-diff-title {
+  margin-bottom: 8px;
+  text-align: center;
+  font-size: 20px;
+  letter-spacing: .04em;
+  color: #e9dcbc;
+}
+
+.map-modes {
+  margin: 0 auto;
+  width: min(100%, 760px);
+}
+
+/* ---------- Список земель ---------- */
+.map-lands {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.land-card {
+  border-radius: 16px;
+  background: rgba(10, 22, 15, .82);
+  border: 2px solid rgba(236, 208, 138, .3);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  overflow: hidden;
+}
+
+.land-card.selected {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 3px rgba(255, 233, 168, .25), 0 10px 26px rgba(0, 0, 0, .55);
+}
+
+.land-head {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  color: #efe3c4;
+  background:
+    linear-gradient(180deg, rgba(255, 240, 200, .08), rgba(0, 0, 0, .25)),
+    var(--stone-tex) center / cover,
+    var(--stone-4);
+  border: 0;
+  cursor: pointer;
+}
+
+button.land-head:hover { filter: brightness(1.12); }
+
+.land-card.selected .land-head {
+  color: var(--ink);
+  background: linear-gradient(180deg, #ffe7a3 0%, #e9be5c 48%, #b9832c 100%);
+}
+
+.land-name {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.land-count {
+  font-size: 20px;
+  white-space: nowrap;
+}
+
+/* Земли, которых ещё нет: тёмные, без нажатия */
+.land-card.soon {
+  border-color: rgba(120, 112, 92, .35);
+  box-shadow: none;
+}
+
+.land-card.soon .land-head {
+  cursor: default;
+  color: #b4a98c;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .7)), var(--stone-tex) center / cover, #14110c;
+}
+
+.land-soon {
+  font-size: 20px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  color: #d6c9a6;
+  border: 2px dashed rgba(214, 201, 166, .6);
+}
+
+/* ---------- Развёрнутая земля ---------- */
+.land-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 18px 20px 22px;
+}
+
+@media (min-width: 820px) {
+  .land-body { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+
+.levels-title {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 22px;
+  color: var(--gold-bright);
+}
+
+/* ---------- Мозаика 5×4 ---------- */
+.mosaic {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 3px;
+  width: 100%;
+  aspect-ratio: 1586 / 992;
+  padding: 3px;
+  border-radius: 10px;
+  background: #050a07;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+}
+
+.mosaic-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  box-sizing: border-box;
+}
+
+.mosaic-cell.empty {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, .5)),
+    var(--stone-tex) center / cover,
+    #3a3326;
+  border: 2px solid #5c5340;
+}
+
+.mosaic-cell.tier-stone { border: 3px solid #8d887c; }
+.mosaic-cell.tier-silver { border: 6px double #e6edf2; }
+.mosaic-cell.tier-gold {
+  border: 4px solid #ffd45a;
+  box-shadow: inset 0 0 0 2px #7a5200, 0 0 8px rgba(255, 212, 90, .8);
+  z-index: 1;
+}
+
+.mosaic-num {
+  position: absolute;
+  left: 4px;
+  bottom: 2px;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000, 0 0 6px #000;
+}
+
+.mosaic-cell.empty .mosaic-num { color: #e2d8bd; }
+
+.mosaic-legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 20px;
+  color: #efe3c4;
+}
+
+.mosaic-legend li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.legend-swatch {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 30px;
+  box-sizing: border-box;
+  background: #5b6b5f;
+}
+
+.legend-swatch.tier-stone { border: 3px solid #8d887c; }
+.legend-swatch.tier-silver { border: 6px double #e6edf2; }
+.legend-swatch.tier-gold {
+  border: 4px solid #ffd45a;
+  box-shadow: inset 0 0 0 2px #7a5200, 0 0 8px rgba(255, 212, 90, .8);
+}
+.legend-swatch.empty { background: #3a3326; border: 2px solid #5c5340; }
+
+/* ---------- Кнопки уровней ---------- */
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.level-btn {
+  position: relative;
+  min-width: 64px;
+  min-height: 76px;
+  padding: 6px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 12px;
+  color: #f3dc9f;
+  background:
+    linear-gradient(180deg, rgba(255, 245, 205, .14), transparent 50%),
+    linear-gradient(170deg, #5c523f 0%, #3a3326 60%, #262117 100%);
+  border: 2px solid #b49354;
+  box-shadow: inset 0 0 0 1px rgba(20, 15, 7, .8), 0 4px 10px rgba(0, 0, 0, .35);
+  cursor: pointer;
+  transition: transform .12s ease, filter .15s ease;
+}
+
+.level-btn:hover { filter: brightness(1.18); }
+.level-btn:active { transform: translateY(2px); }
+
+.lv-num {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lv-stars {
+  font-family: Arial, 'Segoe UI Symbol', sans-serif;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: #ffd45a;
+}
+
+/* Следующий уровень, который стоит пройти */
+.level-btn.current {
+  color: var(--ink);
+  background: linear-gradient(180deg, #ffe7a3 0%, #e9be5c 48%, #b9832c 100%);
+  border-color: #fff4c4;
+  box-shadow: 0 0 0 4px rgba(255, 233, 168, .55), 0 6px 14px rgba(0, 0, 0, .5);
+}
+
+.level-btn.current .lv-stars { color: #6a450f; }
+
+.level-btn.locked {
+  cursor: not-allowed;
+  color: #9a917c;
+  background: linear-gradient(170deg, #2a251d, #17140f);
+  border-color: #5a523f;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.level-btn.locked:hover { filter: none; }
+.level-btn.locked:active { transform: none; }
+
+.lv-lock {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  color: #b0a68e;
+}
+
+.level-note {
+  min-height: 28px;
+  margin: 10px 0 0;
+  font-size: 20px;
+  color: #ffd9a0;
+  opacity: 0;
+}
+
+.level-note.show { opacity: 1; }
+
+/* ---------- Телефон ---------- */
+@media (max-width: 560px) {
+  .overlay.map-screen { padding: 10px; }
+
+  .map-head { grid-template-columns: 1fr; justify-items: center; gap: 10px; }
+  .stone-btn.map-back, .map-stars-total { justify-self: center; }
+  .map-head .map-title { order: -1; }
+
+  .land-head { padding: 10px 14px; flex-wrap: wrap; gap: 4px 12px; }
+  .land-name { font-size: 21px; }
+  .land-body { padding: 14px 12px 18px; gap: 16px; }
+
+  /* 5 кнопок по 64px в строку не помещаются — 4 в ряд */
+  .level-grid { grid-template-columns: repeat(4, 1fr); }
+  .level-btn { min-height: 80px; }
+
+  .mosaic-num { font-size: 14px; }
+  .mosaic-cell.tier-silver { border-width: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .level-btn { transition: none; }
+}

@@ -1,4 +1,4 @@
-/* Сокровища Солнца — игра «три в ряд» */
+/* Хранитель Солнца — игра «три в ряд» */
 (() => {
   'use strict';
 
@@ -9,6 +9,7 @@
   const DIAL_C = 345.575;
   /* Сюда кладётся копия нечитаемого нового ключа до первой записи */
   const BROKEN_KEY = 'sun-keeper-save-broken';
+  const BACKUP_KEY = 'sun-keeper-save-backup';
   const FRAGMENT_NAMES = {
     stone: 'Каменный осколок',
     silver: 'Серебряный осколок',
@@ -1500,7 +1501,7 @@
     }
   }
 
-  /* Карта появится в Task 8 (Game.showMap); пока её нет — стартовый экран. */
+  /* Карту подключает js/screens/map.js (Game.showMap); без неё — стартовый экран. */
   function toMap() {
     const res = state.lastResult;
     if (res && res.landComplete) {
@@ -1568,15 +1569,34 @@
     setHint(hintMessages.default);
   }
 
-  /* После импорта кода: сохранение заменяется целиком и сразу пишется. */
+  /* После импорта кода: сохранение заменяется целиком и сразу пишется.
+     Аргумент проходит через ту же чистку, что и импорт кода (Progress);
+     прежняя запись перед заменой копируется в sun-keeper-save-backup. */
   function replaceSave(save) {
     if (!save || typeof save !== 'object' || !save.levels || typeof save.levels !== 'object') return false;
-    state.save = JSON.parse(JSON.stringify(save));
-    if (Campaign.DIFFICULTIES.indexOf(state.save.difficulty) < 0) state.save.difficulty = 'calm';
+    let clean;
+    try {
+      const r = Progress.importCode(Progress.exportCode(save));
+      if (!r.ok) return false;
+      clean = r.save;
+    } catch (e) {
+      return false;
+    }
+    const storage = getStorage();
+    try {
+      const prev = Progress.readRaw(storage);
+      if (prev !== null) storage.setItem(BACKUP_KEY, prev);
+    } catch (e) { /* копия не удалась — замена всё равно нужна */ }
+    state.save = clean;
     state.difficulty = state.save.difficulty;
     const ok = saveProgress();
+    if (state.atHome) {
+      applyLevel(Progress.currentLevelId(state.save, Campaign), state.difficulty);
+    }
     updateDifficultyUI();
     updateStartUI();
+    // Открытая карта перерисовывается по этому событию
+    window.dispatchEvent(new CustomEvent('sun:save-replaced'));
     return ok;
   }
 
@@ -1807,7 +1827,7 @@
 
   /* ---------- Внешний интерфейс для экранов карты и сцен ----------
      Хуки onBeforeLevel / onLandComplete можно заменить присваиванием:
-     игра вызывает их через Game.*, а не по ссылке. Карта (Task 8)
+     игра вызывает их через Game.*, а не по ссылке. Карта
      подключается как Game.showMap. */
   const Game = {
     startLevel,
@@ -1816,8 +1836,12 @@
     getDifficulty: () => state.difficulty,
     replaceSave,
     showHome,
+    // Для экранов поверх игры (карта): оверлеи и флаг «поверх поля»
+    openOverlay,
+    closeAllOverlays,
     // Перед запуском уровня (пролог, вступление земли). Можно вернуть Promise.
     onBeforeLevel() {},
+    // Карта пути подключается в js/screens/map.js как Game.showMap.
     // Пройден последний уровень земли: по умолчанию — на карту или в меню.
     onLandComplete() {
       if (typeof Game.showMap === 'function') Game.showMap();
