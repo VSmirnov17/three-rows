@@ -154,42 +154,62 @@ button:focus-visible {
   pointer-events: none;
 }
 
+/* Десктоп: поле — главный герой. Рамка занимает всю высоту экрана
+   (минус ~96px на подсказку и поля), а счёт, уровень и меню уходят
+   в боковые колонки. .topbar, .top-right и .game «растворяются»
+   (display: contents), и их дети раскладываются прямо по сетке оболочки:
+
+     brand  | board | menu
+     score  | board | level
+     left   | board | right                                         */
 .game-shell {
+  --side: clamp(228px, 15vw, 290px);
+  --gap: clamp(14px, 1.4vw, 26px);
+  --pad-x: clamp(12px, 1.4vw, 26px);
+  --frame: min(calc(100dvh - 96px), calc(100vw - 2 * var(--side) - 2 * var(--gap) - 2 * var(--pad-x)), 1040px);
   position: relative;
-  width: min(1240px, 100%);
+  width: 100%;
   margin: 0 auto;
-  padding: 14px clamp(10px, 2vw, 26px) 12px;
-  display: flex;
-  flex-direction: column;
+  padding: 10px var(--pad-x);
+  display: grid;
+  grid-template-columns: var(--side) var(--frame) var(--side);
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    "brand board menu"
+    "score board level"
+    "left  board right";
+  column-gap: var(--gap);
+  row-gap: 12px;
   justify-content: center;
+  align-content: center;
   min-height: 100dvh;
 }
 
-.topbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
+.topbar, .top-right, .game { display: contents; }
 
-.brand { min-width: 0; }
+.brand { grid-area: brand; min-width: 0; align-self: center; }
+.score-plaque { grid-area: score; }
+.level-plaque { grid-area: level; }
+.menu-btn { grid-area: menu; }
+.left-panel { grid-area: left; }
+.board-area { grid-area: board; }
+.right-panel { grid-area: right; }
 
 .brand-kicker {
   display: block;
   font-family: var(--display);
-  font-size: 10px;
-  letter-spacing: .34em;
+  font-size: 14px;
+  letter-spacing: .22em;
   text-transform: uppercase;
-  color: #c9b17a;
-  opacity: .85;
+  color: #d6c08a;
+  opacity: .9;
   white-space: nowrap;
 }
 
 .brand-title {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   font-family: var(--display);
-  font-size: clamp(18px, 2vw, 27px);
+  font-size: min(28px, calc(var(--side) * .088));
   font-weight: 700;
   letter-spacing: .04em;
   line-height: 1;
@@ -236,26 +256,27 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 260px;
-  padding: 5px 34px 7px;
+  min-width: 0;
+  padding: 8px 22px 10px;
 }
 
 .plaque-label {
   font-family: var(--display);
-  font-size: 9px;
-  letter-spacing: .42em;
+  font-size: 14px;
+  letter-spacing: .2em;
   text-transform: uppercase;
-  color: #c7ae78;
-  opacity: .9;
+  color: #dcc48e;
   line-height: 1.4;
 }
 
 .score-value {
   font-family: var(--display);
-  font-size: clamp(22px, 2.6vw, 34px);
+  /* 36–40px; на узкой колонке (228px) шестизначный счёт всё ещё в одну строку */
+  font-size: min(40px, calc(var(--side) * .16));
   font-weight: 700;
   letter-spacing: .05em;
   line-height: 1;
+  white-space: nowrap;
   color: #ffe19a;
   text-shadow: 0 0 16px rgba(255, 198, 80, .45), 0 2px 2px #3a2000;
   font-variant-numeric: tabular-nums;
@@ -268,37 +289,35 @@ button:focus-visible {
   100% { transform: scale(1); }
 }
 
-.top-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .level-plaque {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 5px 20px 6px;
-  min-width: 108px;
+  justify-content: center;
+  padding: 8px 20px 10px;
 }
 
 .level-value {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
   letter-spacing: .08em;
   color: #f2d992;
 }
 
-.mobile-menu { display: none; }
+/* Одна подписанная кнопка «Меню» (#menuBtn) на всех экранах;
+   иконочная #menuBtnMobile остаётся в разметке ради обработчика. */
+.stone-btn.mobile-menu { display: none; }
 
 /* ---------- Кнопки ---------- */
 .gold-btn {
   position: relative;
-  padding: 13px 34px;
-  border-radius: 10px;
+  min-height: 56px;
+  padding: 14px 34px;
+  border-radius: 12px;
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -317,13 +336,14 @@ button:focus-visible {
 
 .gold-btn:hover { filter: brightness(1.07); }
 .gold-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #6a450f, 0 6px 14px rgba(0, 0, 0, .4); }
-.gold-btn.big { padding: 16px 58px; font-size: 18px; }
+.gold-btn.big { min-height: 64px; padding: 18px 64px; font-size: 22px; }
 
 .continue-btn {
-  width: min(300px, 100%);
-  margin-top: 11px;
-  padding: 11px 20px;
-  font-size: 12px;
+  width: min(320px, 100%);
+  min-height: 56px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  font-size: 17px;
   letter-spacing: .1em;
 }
 
@@ -352,18 +372,22 @@ button:focus-visible {
 
 .menu-btn {
   width: 100%;
-  padding: 10px 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  align-self: center;
   background:
     linear-gradient(180deg, rgba(220, 255, 250, .28), transparent 48%),
     linear-gradient(170deg, #2b8b8f 0%, #14606b 52%, #093c47 100%);
   border-color: #d6bd7c;
-  color: #ffe8a8;
-  font-size: 13px;
-  letter-spacing: .2em;
+  color: #ffeab0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgba(4, 34, 38, .8), 0 4px 12px rgba(0, 0, 0, .4);
 }
 
-.menu-btn svg { width: 17px; height: 17px; opacity: .9; }
+.menu-btn svg { width: 22px; height: 22px; opacity: .95; flex: 0 0 auto; }
 
 .icon-btn {
   position: relative;
@@ -378,41 +402,56 @@ button:focus-visible {
 .icon-btn.wide { width: 100%; border-radius: 8px; }
 .icon-btn:disabled { opacity: .45; cursor: default; filter: grayscale(.4); }
 
+/* Кнопки-инструменты с подписью: на десктопе — широкие плитки «иконка + слово» */
+.tool-btn {
+  width: 100%;
+  height: 60px;
+  padding: 0 16px;
+  justify-content: flex-start;
+  gap: 14px;
+  border-radius: 12px;
+}
+
+.tool-btn svg { width: 28px; height: 28px; flex: 0 0 auto; color: #ffd97c; }
+
+.tool-label {
+  font-family: var(--ui);
+  font-size: 18px;
+  letter-spacing: .03em;
+  text-transform: none;
+  color: #fbe7b4;
+  white-space: nowrap;
+}
+
 .btn-badge {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
+  right: 12px;
+  top: 50%;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 13px;
+  transform: translateY(-50%);
   background: #3a1c0b;
   border: 1px solid #d9b96f;
   color: #ffe1a0;
   font-family: var(--display);
-  font-size: 9px;
-  line-height: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 24px;
   text-align: center;
 }
 
 .btn-badge:empty { display: none; }
 
 /* ---------- Раскладка ---------- */
-.game {
-  display: grid;
-  grid-template-columns: 216px minmax(0, 1fr) 216px;
-  gap: clamp(10px, 1.6vw, 20px);
-  align-items: start;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-
 .left-panel {
   display: flex;
   flex-direction: column;
-  gap: clamp(7px, 1.1vh, 11px);
+  gap: 12px;
   align-items: stretch;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ---------- Циферблат ---------- */
@@ -420,7 +459,7 @@ button:focus-visible {
 
 .dial {
   position: relative;
-  width: min(100%, 172px);
+  width: min(100%, 184px);
   aspect-ratio: 1;
   border-radius: 50%;
   padding: 9px;
@@ -496,7 +535,7 @@ button:focus-visible {
 
 .dial-center {
   position: absolute;
-  inset: 25%;
+  inset: 16%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -508,7 +547,7 @@ button:focus-visible {
 
 .time-value {
   font-family: var(--display);
-  font-size: clamp(22px, 2.4vw, 30px);
+  font-size: 44px;
   font-weight: 700;
   color: #eaf7c4;
   text-shadow: 0 0 12px rgba(159, 231, 108, .45);
@@ -531,17 +570,17 @@ button:focus-visible {
 @keyframes timeTense { to { transform: scale(1.045); } }
 
 .time-label {
-  margin-top: 3px;
-  font-size: 8px;
-  letter-spacing: .3em;
+  margin-top: 4px;
+  font-size: 14px;
+  letter-spacing: .04em;
   text-transform: uppercase;
-  color: #a8bb8e;
+  color: #c6d8a8;
 }
 
 /* ---------- Карточка целей ---------- */
 .goal-card {
   position: relative;
-  padding: 9px 11px 11px;
+  padding: 10px 11px 11px;
   border-radius: 10px;
   background:
     linear-gradient(180deg, rgba(255, 245, 210, .08), rgba(0, 0, 0, .12) 45%, rgba(0, 0, 0, .34)),
@@ -555,12 +594,13 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
   font-family: var(--display);
-  font-size: 9px;
-  letter-spacing: .28em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .22em;
   text-transform: uppercase;
-  color: #d9bd80;
+  color: #e6cb8c;
 }
 
 .card-title::before, .card-title::after {
@@ -575,19 +615,35 @@ button:focus-visible {
 .goal-chip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border-radius: 7px;
-  background: rgba(0, 0, 0, .24);
-  border: 1px solid rgba(207, 177, 112, .18);
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .3);
+  border: 1px solid rgba(207, 177, 112, .22);
   transition: background .2s, border-color .2s;
 }
 
-.goal-chip .mini-gem { width: 27px; height: 27px; flex: 0 0 auto; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
-.goal-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.goal-name { font-size: 10px; color: #cdbd97; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.goal-count { font-family: var(--display); font-size: 12px; color: #ffe2a0; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
-.goal-check { width: 16px; height: 16px; color: #8fe07a; opacity: 0; transform: scale(.4); transition: .25s; }
+.goal-chip .mini-gem { width: 40px; height: 40px; flex: 0 0 auto; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.goal-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.12; }
+.goal-name { font-size: 16px; color: #e3d4ae; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-count { font-family: var(--display); font-size: 22px; font-weight: 700; color: #ffe2a0; letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Галочка выполненной цели — значком на углу камня, не отнимая ширину у текста */
+.goal-chip { position: relative; }
+.goal-check {
+  position: absolute;
+  left: 34px;
+  bottom: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 50%;
+  background: #14351c;
+  box-shadow: 0 0 0 1px rgba(143, 224, 122, .75);
+  color: #8fe07a;
+  opacity: 0;
+  transform: scale(.4);
+  transition: .25s;
+}
 .goal-check svg { width: 100%; height: 100%; }
 
 .goal-chip.done { border-color: rgba(143, 224, 122, .45); background: rgba(56, 110, 58, .26); }
@@ -598,28 +654,37 @@ button:focus-visible {
 @keyframes goalPop { 40% { transform: scale(1.04); background: rgba(255, 220, 130, .18); } }
 
 /* ---------- Шаман ---------- */
+/* Десктоп: шаман занимает остаток колонки под целями и масштабируется
+   по высоте (контейнер-запрос); если места меньше ~110px — прячется,
+   а счётчик камней остаётся. */
 .shaman-wrap {
   position: relative;
   display: flex;
   justify-content: center;
   align-items: flex-end;
+  flex: 1 1 0;
   min-height: 0;
-  max-height: 202px;
-  overflow: hidden;
-  margin-top: -4px;
+  container: shaman / size;
 }
 
-.shaman-art { width: 100%; max-width: 148px; filter: drop-shadow(0 18px 22px rgba(0, 0, 0, .55)); }
+.shaman-art {
+  width: min(100%, 220px, 70cqh);
+  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, .55));
+}
 .shaman-art svg, .shaman-art img { display: block; width: 100%; height: auto; }
+
+@container shaman (max-height: 110px) {
+  .shaman-art { display: none; }
+}
 
 .relic-plaque {
   position: absolute;
-  right: -4px;
-  bottom: 8px;
+  right: 0;
+  bottom: 6px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px 4px 6px;
+  gap: 7px;
+  padding: 5px 12px 5px 8px;
   border-radius: 8px;
   background:
     linear-gradient(170deg, rgba(255, 245, 210, .12), rgba(0, 0, 0, .28)),
@@ -629,40 +694,40 @@ button:focus-visible {
   box-shadow: 0 4px 10px rgba(0, 0, 0, .5), inset 0 0 0 1px rgba(20, 15, 7, .7);
 }
 
-.relic-icon { width: 17px; height: 17px; color: #ffd36c; filter: drop-shadow(0 0 5px rgba(255, 190, 60, .5)); }
+.relic-icon { width: 24px; height: 24px; color: #ffd36c; filter: drop-shadow(0 0 5px rgba(255, 190, 60, .5)); }
 .relic-meta { display: flex; flex-direction: column; line-height: 1; }
-.relic-meta b { font-family: var(--display); font-size: 14px; color: #ffe4a4; }
-.relic-meta span { font-size: 7px; letter-spacing: .16em; text-transform: uppercase; color: #b7a47a; margin-top: 2px; }
+.relic-meta b { font-family: var(--display); font-size: 20px; color: #ffe4a4; }
+.relic-meta span { font-size: 14px; letter-spacing: .06em; color: #cdb98c; margin-top: 2px; }
 
-.tool-row { display: flex; justify-content: center; gap: 8px; margin-top: auto; }
+.tool-row { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: auto; }
 
-/* ---------- Правая шкала ---------- */
+/* ---------- Правая колонка: шкала комбо и кнопки ---------- */
 .right-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding-top: 4px;
+  gap: 10px;
   width: 100%;
+  min-height: 0;
 }
 
 .combo-title {
   font-family: var(--display);
-  font-size: 9px;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: .22em;
   text-transform: uppercase;
-  color: #d8bd83;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  margin-bottom: 2px;
+  color: #e6cb8c;
 }
 
 .ladder {
   position: relative;
-  width: 54px;
-  height: min(52vh, 430px);
-  border-radius: 26px;
-  padding: 12px 4px;
+  width: 78px;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 460px;
+  border-radius: 30px;
+  padding: 14px 6px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -702,18 +767,19 @@ button:focus-visible {
 .rung {
   position: relative;
   z-index: 2;
-  width: 40px;
-  height: 17px;
+  width: 62px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #2a2418;
-  border: 1px solid #6b5730;
+  border: 1px solid #7a6439;
   font-family: var(--display);
-  font-size: 9px;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: .04em;
-  color: #8d7a51;
+  color: #b49c68;
   transition: .2s;
 }
 
@@ -727,12 +793,12 @@ button:focus-visible {
 .ladder-top { display: none; }
 
 .combo-hint {
-  font-size: 8px;
-  line-height: 1.35;
-  letter-spacing: .14em;
+  font-size: 14px;
+  line-height: 1.3;
+  letter-spacing: .08em;
   text-transform: uppercase;
   text-align: center;
-  color: #9c895f;
+  color: #c4b088;
 }
 
 .combo-badge {
@@ -764,16 +830,21 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   width: 100%;
   min-width: 0;
 }
 
+/* Ширина рамки задаётся одной переменной --frame (см. .game-shell).
+   Внутренний край рисунка рамки — 3.7% (47 из 1280 px): поле начинается
+   чуть раньше, его кромка уходит под рамку, и поле занимает ~93% рамки.
+   (Раньше padding: 3.6cqw считался от ширины окна — рамка на самом деле
+   не была контейнером — и на 1920px съедала 20% ширины.) */
 .board-frame {
   position: relative;
-  width: min(100%, 72vh, 700px);
-  container-type: inline-size;
-  padding: 22px;
-  padding: 3.6cqw;
+  width: var(--frame);
+  max-width: 100%;
+  padding: calc(var(--frame) * .034);
   transition: transform .15s;
 }
 
@@ -846,12 +917,12 @@ button:focus-visible {
 
 .tiles {
   position: absolute;
-  inset: 3.2%;
+  inset: 2%;
 }
 
 .fx-layer {
   position: absolute;
-  inset: 3.2%;
+  inset: 2%;
   pointer-events: none;
   overflow: hidden;
   z-index: 8;
@@ -867,14 +938,17 @@ button:focus-visible {
   z-index: 2;
   cursor: grab;
   transition: transform .235s cubic-bezier(.24, .82, .32, 1.02);
-  will-change: transform;
 }
 
 .gem:active { cursor: grabbing; }
 
+/* Спрайты камней нарезаны крупно (tools/cut_tiles.py --area 0.74): видимый
+   камень — 86–92% клетки. Поэтому увеличения при наведении и выборе
+   скромные, а выбор и подсказка дополнительно отмечены статичной рамкой
+   клетки — её видно сразу, без ожидания кадра анимации. */
 .gem-inner {
   position: absolute;
-  inset: 3.5%;
+  inset: 1.5%;
   display: grid;
   place-items: center;
   transition: transform .14s ease, filter .2s ease;
@@ -888,18 +962,44 @@ button:focus-visible {
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .45));
 }
 
-.gem:hover .gem-inner { transform: scale(1.06); }
+@media (hover: hover) {
+  .gem:hover .gem-inner { transform: scale(1.04); }
+}
+
+.gem::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 18%;
+  pointer-events: none;
+  opacity: 0;
+}
 
 .gem.selected { z-index: 6; }
+.gem.selected::after {
+  opacity: 1;
+  border: 4px solid #ffe9a0;
+  background: radial-gradient(circle, transparent 55%, rgba(255, 220, 120, .22));
+  box-shadow: 0 0 0 2px rgba(60, 34, 0, .85), 0 0 18px 4px rgba(255, 214, 110, .75), inset 0 0 14px rgba(255, 230, 150, .55);
+}
 .gem.selected .gem-inner {
-  transform: scale(1.13);
-  filter: drop-shadow(0 0 12px rgba(255, 233, 150, .95));
+  transform: scale(1.07);
+  filter: drop-shadow(0 0 12px rgba(255, 233, 150, .95)) brightness(1.08);
   animation: selectedBob .75s ease-in-out infinite alternate;
 }
 
 @keyframes selectedBob {
-  from { transform: scale(1.08) translateY(0); }
-  to { transform: scale(1.14) translateY(-3%); }
+  from { transform: scale(1.04) translateY(0); }
+  to { transform: scale(1.08) translateY(-2%); }
+}
+
+/* Подсказка: светлая пунктирная рамка, отличная от золотой рамки выбора */
+.gem.hint::after {
+  opacity: 1;
+  inset: 3%;
+  border: 3px dashed rgba(236, 255, 214, .95);
+  box-shadow: 0 0 0 2px rgba(10, 40, 20, .7), 0 0 16px 3px rgba(190, 255, 170, .6);
 }
 
 .gem.hint .gem-inner {
@@ -907,8 +1007,8 @@ button:focus-visible {
 }
 
 @keyframes hintPulse {
-  0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 240, 180, .3)); transform: scale(1); }
-  50% { filter: drop-shadow(0 0 14px rgba(255, 240, 140, 1)); transform: scale(1.12); }
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 240, 180, .5)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 14px rgba(255, 240, 140, 1)); transform: scale(1.07); }
 }
 
 .gem.clearing { z-index: 5; pointer-events: none; }
@@ -1230,23 +1330,32 @@ button:focus-visible {
 
 /* ---------- Нижняя подсказка ---------- */
 .hint-bar {
-  margin-top: clamp(7px, 1.2vh, 12px);
-  min-height: 30px;
-  padding: 6px 18px;
-  border-radius: 20px;
-  font-size: 12px;
-  letter-spacing: .06em;
+  margin-top: 8px;
+  min-height: 42px;
+  padding: 8px 24px;
+  border-radius: 22px;
+  font-size: 19px;
+  line-height: 1.25;
+  letter-spacing: .02em;
   text-align: center;
-  color: #d4c39a;
-  background: rgba(10, 24, 17, .55);
-  border: 1px solid rgba(203, 174, 110, .18);
+  text-wrap: balance;
+  color: #f4e7c3;
+  background: rgba(6, 18, 12, .8);
+  border: 1px solid rgba(214, 184, 118, .4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
   backdrop-filter: blur(4px);
   max-width: 100%;
+  /* Не больше двух строк, чтобы длинное название уровня не сдвигало поле */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   transition: color .2s, border-color .2s;
 }
 
-.hint-bar.good { color: #b8ef9a; border-color: rgba(140, 220, 100, .35); }
-.hint-bar.bad { color: #ffab8a; border-color: rgba(255, 120, 80, .35); }
+.hint-bar.good { color: #c6f5aa; border-color: rgba(140, 220, 100, .55); }
+.hint-bar.bad { color: #ffbc9e; border-color: rgba(255, 120, 80, .55); }
 
 .toast {
   position: absolute;
@@ -1254,13 +1363,13 @@ button:focus-visible {
   left: 50%;
   transform: translate(-50%, -12px);
   z-index: 20;
-  padding: 7px 20px;
-  border-radius: 22px;
+  padding: 10px 24px;
+  border-radius: 24px;
   background: linear-gradient(180deg, rgba(58, 47, 27, .96), rgba(27, 21, 12, .96));
   border: 1px solid #d9b96f;
   color: #ffe8ae;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 18px;
   letter-spacing: .07em;
   box-shadow: 0 8px 22px rgba(0, 0, 0, .5), 0 0 18px rgba(255, 205, 100, .25);
   opacity: 0;
@@ -1348,44 +1457,48 @@ button:focus-visible {
 .start-title span { font-size: 1.23em; letter-spacing: .08em; }
 
 .start-sub {
-  margin: 12px 0 22px;
-  font-size: 13px;
-  letter-spacing: .2em;
+  margin: 12px 0 24px;
+  font-size: 17px;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  color: #c5b184;
+  color: #dcc796;
 }
 
 .start-links {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin-top: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
 }
 
+/* «Как играть» и «Звук» — настоящие кнопки с крупной зоной нажатия */
 .link-btn {
-  padding: 4px 2px;
+  min-height: 54px;
+  padding: 10px 22px;
+  border-radius: 12px;
   font-family: var(--ui);
-  font-size: 12px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: #b9a87f;
-  border-bottom: 1px solid transparent;
-  transition: color .2s, border-color .2s;
+  font-size: 17px;
+  letter-spacing: .06em;
+  color: #f0dfb4;
+  background: rgba(8, 20, 14, .6);
+  border: 1px solid rgba(214, 184, 118, .55);
+  transition: color .2s, border-color .2s, background .2s;
 }
 
-.link-btn:hover { color: #ffe1a0; border-color: rgba(255, 225, 160, .4); }
-.dot { color: #6e6047; }
+.link-btn:hover { color: #ffe9b4; border-color: rgba(255, 225, 160, .85); background: rgba(30, 40, 26, .7); }
+.dot { display: none; }
 
 .best-line {
-  margin-top: 18px;
-  font-size: 11px;
-  letter-spacing: .18em;
+  margin-top: 20px;
+  font-size: 16px;
+  letter-spacing: .12em;
   text-transform: uppercase;
-  color: #8f8062;
+  color: #c3b08a;
 }
 
-.best-line b { color: #e8cd8f; font-family: var(--display); font-size: 13px; letter-spacing: .06em; }
+.best-line b { color: #f2d897; font-family: var(--display); font-size: 20px; letter-spacing: .06em; }
 
 .modal-card {
   position: relative;
@@ -1430,10 +1543,11 @@ button:focus-visible {
 
 .modal-sub {
   margin: 0 0 20px;
-  font-size: 12px;
-  letter-spacing: .14em;
+  font-size: 16px;
+  line-height: 1.35;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  color: #ac9a73;
+  color: #cfbc92;
 }
 
 .rules {
@@ -1449,9 +1563,9 @@ button:focus-visible {
 .rules li { display: flex; gap: 13px; align-items: flex-start; }
 
 .rules .rule-icon {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
   border-radius: 9px;
@@ -1460,15 +1574,15 @@ button:focus-visible {
   color: #ffd97c;
 }
 
-.rule-icon svg { width: 31px; height: 31px; }
-.rule-icon .rule-gem { width: 31px; height: 31px; object-fit: contain; }
-.rules b { display: block; font-size: 14px; color: #f3dfae; letter-spacing: .04em; margin-bottom: 2px; }
-.rules span { display: block; font-size: 12px; line-height: 1.45; color: #b7a987; }
-.rules-note { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #9d8c68; margin: 16px 0 22px; }
+.rule-icon svg { width: 36px; height: 36px; }
+.rule-icon .rule-gem { width: 40px; height: 40px; object-fit: contain; }
+.rules b { display: block; font-size: 18px; color: #f6e3b4; letter-spacing: .02em; margin-bottom: 3px; }
+.rules span { display: block; font-size: 16px; line-height: 1.45; color: #d6c8a6; }
+.rules-note { font-size: 15px; line-height: 1.4; letter-spacing: .06em; text-transform: uppercase; color: #c9b68e; margin: 16px 0 22px; }
 
-.pause-buttons, .end-actions { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.stone-btn.wide { width: 100%; max-width: 300px; padding: 13px; font-size: 12px; }
-.pause-card .gold-btn { min-width: 300px; }
+.pause-buttons, .end-actions { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.stone-btn.wide { width: 100%; max-width: 340px; min-height: 56px; padding: 13px; font-size: 17px; letter-spacing: .08em; border-radius: 12px; }
+.pause-card .gold-btn, .end-actions .gold-btn { min-width: min(340px, 100%); }
 
 .end-card { width: min(460px, 100%); }
 .end-emblem { width: 92px; margin: -10px auto 8px; filter: drop-shadow(0 8px 24px rgba(0, 0, 0, .5)); }
@@ -1489,8 +1603,8 @@ button:focus-visible {
   border: 1px solid rgba(207, 177, 112, .18);
 }
 
-.end-stats span { display: block; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #a99a77; margin-bottom: 3px; }
-.end-stats b { font-family: var(--display); font-size: 19px; color: #ffe4a4; letter-spacing: .03em; }
+.end-stats span { display: block; font-size: 15px; line-height: 1.2; letter-spacing: .02em; color: #d2c29c; margin-bottom: 4px; }
+.end-stats b { font-family: var(--display); font-size: 24px; color: #ffe4a4; letter-spacing: .03em; }
 
 .cd-overlay {
   position: fixed;
@@ -1540,148 +1654,279 @@ button:focus-visible {
   100% { opacity: 0; transform: scale(.85); }
 }
 
-/* ---------- Адаптивность ---------- */
-@media (max-height: 720px) and (min-width: 761px) {
-  .game-shell { justify-content: flex-start; }
-}
+/* ---------- Адаптивность ----------
+   Десктоп (по умолчанию выше): сетка «колонка | поле | колонка», рамка поля
+   = высота окна − 96px. Телефон (≤900px): шапка «счёт · уровень · меню»,
+   под ней таймер и цели, поле от края до края, внизу панель кнопок
+   с подписями. Минимальные размеры текста: десктоп 14px, телефон 13px. */
 
-@media (max-height: 960px) and (min-width: 861px) {
-  .dial { width: min(100%, 162px); }
-  .shaman-wrap { max-height: 188px; }
-  .shaman-art { max-width: 138px; }
-  .tool-row { margin-top: 0; }
-}
-
-@media (max-height: 840px) and (min-width: 861px) {
-  .shaman-wrap { display: none; }
-  .combo-title { display: none; }
-  .ladder { margin-top: 0; }
-}
-
-@media (max-height: 780px) and (min-width: 861px) {
-  .game-shell { padding-top: 8px; }
+/* Невысокий ноутбук: компактнее циферблат, без подзаголовка */
+@media (max-height: 820px) and (min-width: 901px) {
+  .dial { width: min(100%, 160px); }
   .brand-kicker { display: none; }
 }
 
-@media (max-width: 1080px) {
-  .game { grid-template-columns: 196px minmax(0, 1fr) 196px; gap: 12px; }
-  .brand-kicker { display: none; }
-  .score-plaque { min-width: 210px; }
+@media (max-height: 740px) and (min-width: 901px) {
+  .game-shell { row-gap: 10px; }
+  .left-panel { gap: 10px; }
+  .goal-chip .mini-gem { width: 34px; height: 34px; }
+  .combo-hint { display: none; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1080px) and (min-width: 901px) {
+  .game-shell { --side: 212px; }
+  .brand-kicker { display: none; }
+}
+
+@media (max-width: 900px) and (orientation: portrait), (max-width: 900px) and (min-height: 501px) {
   body { overflow-y: auto; }
   .game-shell {
-    max-width: 620px;
-    padding: max(14px, env(safe-area-inset-top)) 8px calc(88px + env(safe-area-inset-bottom));
-    min-height: 100dvh;
+    --pad-x: 6px;
+    --bar-h: 80px;
+    /* Поле — во всю ширину, но не выше свободной области: сверху шапка
+       и таймер с целями (~230px), снизу подсказка (до двух строк) и
+       фиксированная панель кнопок (~90px). */
+    --frame: min(100%, max(260px, calc(100dvh - 372px - env(safe-area-inset-top) - env(safe-area-inset-bottom))));
+    display: flex;
+    flex-direction: column;
     justify-content: flex-start;
+    max-width: 620px;
+    padding: max(8px, env(safe-area-inset-top)) var(--pad-x) calc(var(--bar-h) + 8px + env(safe-area-inset-bottom));
   }
-  .topbar { grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 10px; align-items: stretch; }
-  .brand { display: none; }
-  .top-right { gap: 6px; }
-  .mobile-menu { display: inline-flex; width: 40px; height: 40px; }
-  .mobile-menu svg { width: 20px; height: 20px; }
-  .score-plaque { min-width: 0; padding: 4px 16px 5px; }
-  .score-value { font-size: 24px; }
-  .level-plaque { padding: 3px 10px 4px; min-width: 78px; }
-  .level-value { font-size: 12px; }
 
-  .game { display: flex; flex-direction: column; gap: 10px; }
+  /* Шапка: счёт · уровень · меню в одну строку */
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: stretch;
+  }
+  .brand { display: none; }
+  .score-plaque, .level-plaque, .menu-btn { grid-area: auto; }
+  .score-plaque, .level-plaque { min-height: 52px; padding: 4px 14px 5px; }
+  .plaque-label { font-size: 14px; letter-spacing: .06em; line-height: 1.25; }
+  .score-value { font-size: 24px; }
+  .level-value { font-size: 20px; }
+  .menu-btn {
+    width: auto;
+    min-height: 52px;
+    padding: 0 12px;
+    gap: 6px;
+    font-size: 16px;
+    letter-spacing: .06em;
+  }
+  .menu-btn svg { width: 20px; height: 20px; }
+
+  .game { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Таймер и цели (шаман — третьей колонкой, см. css/shaman.css) */
   .left-panel {
     order: 0;
     width: 100%;
     display: grid;
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 6px;
     align-items: stretch;
   }
-  .menu-btn { display: none; }
   .dial-wrap { grid-column: 1; align-items: center; }
-  .dial { width: 96px; padding: 6px; }
+  .dial { width: 104px; padding: 6px; }
   .dial-svg { inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
-  .time-value { font-size: 20px; }
-  .time-label { font-size: 6px; letter-spacing: .18em; }
+  .dial-center { inset: 14%; }
+  .time-value { font-size: 30px; }
+  .time-label { margin-top: 2px; font-size: 13px; letter-spacing: .02em; text-transform: none; }
   .goal-card {
     grid-column: 2;
     margin: 0;
-    padding: 7px 9px 8px;
+    padding: 6px 8px 7px;
     display: flex;
     flex-direction: column;
     justify-content: center;
   }
-  .card-title { margin-bottom: 5px; font-size: 8px; }
-  .goal-list { flex-direction: column; gap: 5px; }
-  .goal-chip { flex: 0 0 auto; min-width: 0; gap: 7px; padding: 4px 6px; }
-  .goal-chip .mini-gem { width: 22px; height: 22px; }
-  .goal-name { display: block; font-size: 9px; }
-  .goal-count { font-size: 11px; margin-left: auto; }
-  .goal-check { width: 14px; height: 14px; }
+  .card-title { margin-bottom: 4px; font-size: 13px; letter-spacing: .18em; }
+  .goal-list { gap: 4px; }
+  .goal-chip { min-width: 0; gap: 8px; padding: 3px 6px; }
+  .goal-chip .mini-gem { width: 30px; height: 30px; }
+  .goal-meta { line-height: 1.1; }
+  .goal-name { font-size: 13px; }
+  .goal-count { font-size: 18px; }
+  .goal-check { left: 25px; bottom: 1px; width: 17px; height: 17px; padding: 2px; }
 
+  /* Нижняя панель: три кнопки с подписями под иконками */
+  .right-panel { display: contents; }
+  .combo-title, .ladder, .combo-hint { display: none; }
   .tool-row {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(14px + env(safe-area-inset-bottom));
+    bottom: 0;
     z-index: 20;
     flex-direction: row;
     justify-content: center;
-    gap: 22px;
+    gap: 10px;
+    width: auto;
     margin: 0;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(3, 10, 6, 0), rgba(3, 10, 6, .82) 38%);
     pointer-events: none;
   }
-  .tool-row .icon-btn {
-    width: 52px;
-    height: 52px;
+  .tool-btn {
+    flex: 0 1 112px;
+    width: auto;
+    height: 64px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-radius: 14px;
     pointer-events: auto;
     box-shadow: 0 10px 26px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 235, 180, .25);
   }
-  .tool-row .icon-btn svg { width: 24px; height: 24px; }
-
-  .shaman-wrap {
-    position: fixed;
-    left: 50%;
-    bottom: calc(94px + env(safe-area-inset-bottom));
-    transform: translateX(-50%);
-    width: 126px;
-    max-height: none;
-    margin: 0;
-    overflow: visible;
-    z-index: 4;
-    display: none;
-    pointer-events: none;
+  .tool-btn svg { width: 26px; height: 26px; }
+  .tool-label { font-size: 14px; }
+  .btn-badge {
+    top: 4px;
+    right: 6px;
+    min-width: 26px;
+    height: 22px;
+    transform: none;
+    font-size: 14px;
+    line-height: 20px;
   }
-  .shaman-wrap .shaman-art { max-width: 126px; }
 
-  .right-panel { display: none; }
-  .board-area { order: 1; }
-  .board-frame { width: min(100%, 96vw); }
-  .combo-badge { display: block; top: 6px; right: 6px; }
-  .hint-bar { margin-top: 8px; font-size: 10px; padding: 5px 12px; min-height: 26px; }
-  .toast { font-size: 11px; padding: 6px 14px; }
+  /* Поле от края до края: тонкая рамка через border-image того же рисунка */
+  .board-area { order: 1; width: auto; margin-inline: calc(-1 * var(--pad-x)); }
+  .board-frame { width: var(--frame); padding: 3px; margin-inline: auto; }
+  .board-frame::after {
+    background: none;
+    border: 8px solid transparent;
+    border-image: url("assets/ui/board-frame.webp") 80 / 8px stretch;
+  }
+  .board { border-radius: 4px; border-width: 1px; }
+  .tiles, .fx-layer { inset: 0; }
+  .gem-inner { inset: 1%; }
+  .gem.selected::after { border-width: 3px; }
+  .combo-badge { display: block; top: 8px; right: 8px; }
+  .hint-bar {
+    margin-top: 6px;
+    min-height: 36px;
+    padding: 6px 12px;
+    max-width: calc(100% - 12px);
+    border-radius: 16px;
+    font-size: 15px;
+  }
+  .toast { font-size: 15px; padding: 8px 16px; }
 
-  .start-card { padding: 8px 10px 18px; }
-  .start-title { font-size: clamp(32px, 11vw, 46px); }
-  .start-sub { font-size: 10px; letter-spacing: .12em; margin: 10px 0 18px; }
+  /* Оверлеи */
+  .overlay { padding: 12px; }
+  .start-card { padding: 8px 6px 18px; }
+  .start-title { font-size: clamp(34px, 11vw, 48px); }
+  .start-sub { font-size: 15px; letter-spacing: .08em; margin: 10px 0 18px; }
   .start-emblem { width: 118px; }
-  .gold-btn.big { padding: 14px 44px; font-size: 16px; }
-  .modal-card { padding: 22px 18px 20px; }
-  .rules li { gap: 9px; }
-  .rules .rule-icon { flex-basis: 36px; width: 36px; height: 36px; }
-  .rules .rule-icon svg { width: 25px; height: 25px; }
-  .rules b { font-size: 12px; }
-  .rules span { font-size: 11px; }
-  .end-stats b { font-size: 16px; }
-  .pause-card .gold-btn, .stone-btn.wide { min-width: 0; width: 100%; max-width: none; }
+  .gold-btn { padding: 14px 14px; font-size: 17px; letter-spacing: .06em; }
+  .gold-btn.big { min-height: 60px; padding: 16px 44px; font-size: 20px; letter-spacing: .14em; }
+  .link-btn { min-height: 52px; font-size: 16px; padding: 10px 18px; }
+  .modal-card { padding: 22px 16px 20px; }
+  .modal-sub { font-size: 15px; }
+  .rules li { gap: 10px; }
+  .rules .rule-icon { flex-basis: 44px; width: 44px; height: 44px; }
+  .rules .rule-icon svg { width: 30px; height: 30px; }
+  .rules .rule-icon .rule-gem { width: 34px; height: 34px; }
+  .rules b { font-size: 17px; }
+  .rules span { font-size: 15px; }
+  .end-stats { gap: 6px; }
+  .end-stats > div { padding: 8px 4px; }
+  .end-stats b { font-size: 21px; }
+  .pause-card .gold-btn, .end-actions .gold-btn, .stone-btn.wide { min-width: 0; width: 100%; max-width: none; }
 }
 
-@media (min-width: 361px) and (max-width: 500px) and (min-height: 930px) {
-  .shaman-wrap { display: flex; }
+/* Узкий или невысокий телефон: шаман убран (css/shaman.css), освободившуюся
+   ширину отдаём целям — имя и счёт в одну строку, цели становятся ниже. */
+@media (max-width: 379px), (max-width: 900px) and (max-height: 759px) {
+  .goal-list { gap: 3px; }
+  .goal-chip { gap: 6px; padding: 2px 5px; }
+  .goal-chip .mini-gem { width: 26px; height: 26px; }
+  .goal-check { left: 20px; }
+  .goal-meta { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 4px; }
+  .hint-bar { padding: 4px 10px; min-height: 32px; }
 }
 
-@media (max-width: 420px) {
-  .goal-meta { min-width: 22px; }
-  .goal-check { display: none; }
-  .goal-chip { justify-content: center; }
+/* Телефон боком и другие низкие широкие окна: вертикальная раскладка не
+   влезает (панель кнопок легла бы на поле), поэтому — та же сетка, что на
+   десктопе, только плотнее: без заголовка, шкалы комбо и шамана; комбо
+   показывает значок на поле. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .game-shell {
+    --side: clamp(196px, 23vw, 228px);
+    --gap: 10px;
+    --pad-x: max(8px, env(safe-area-inset-left), env(safe-area-inset-right));
+    --frame: min(calc(100dvh - 70px), calc(100vw - 2 * var(--side) - 2 * var(--gap) - 2 * var(--pad-x)));
+    padding-block: 8px;
+    row-gap: 8px;
+    grid-template-areas:
+      "score board menu"
+      "left  board level"
+      "left  board right";
+  }
+  .brand, .shaman-wrap, .combo-title, .ladder, .combo-hint { display: none; }
+  .score-plaque, .level-plaque { padding: 4px 12px 5px; }
+  .plaque-label { font-size: 14px; letter-spacing: .06em; line-height: 1.25; }
+  .score-value { font-size: 24px; }
+  .level-value { font-size: 20px; }
+  .menu-btn { min-height: 48px; font-size: 16px; }
+  .left-panel { gap: 8px; }
+  .dial { width: 96px; padding: 6px; }
+  .dial-svg { inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
+  .dial-center { inset: 14%; }
+  .time-value { font-size: 28px; }
+  .time-label { margin-top: 2px; font-size: 13px; letter-spacing: .02em; text-transform: none; }
+  .goal-card { padding: 6px 8px 7px; }
+  .card-title { margin-bottom: 4px; font-size: 13px; }
+  .goal-meta { flex-direction: column; align-items: stretch; gap: 0; }
+  .goal-name { font-size: 13px; }
+  .goal-count { font-size: 18px; }
+  .goal-check { left: 20px; bottom: 1px; width: 16px; height: 16px; padding: 2px; }
+  .right-panel { justify-content: flex-end; }
+  .tool-row { gap: 6px; }
+  .tool-btn { height: 48px; padding: 0 12px; gap: 10px; }
+  .tool-btn svg { width: 22px; height: 22px; }
+  .tool-label { font-size: 15px; }
+  .btn-badge { right: 8px; font-size: 13px; }
+  .board-frame { padding: 3px; }
+  .board-frame::after {
+    background: none;
+    border: 8px solid transparent;
+    border-image: url("assets/ui/board-frame.webp") 80 / 8px stretch;
+  }
+  .tiles, .fx-layer { inset: 0; }
+  .gem-inner { inset: 1%; }
+  .gem.selected::after { border-width: 3px; }
+  .combo-badge { display: block; top: 8px; right: 8px; }
+  .hint-bar { margin-top: 6px; font-size: 15px; padding: 4px 12px; min-height: 30px; }
+  .toast { font-size: 15px; }
 }
 
+@media (max-width: 370px) {
+  .tool-label { font-size: 13px; }
+  .score-plaque, .level-plaque { padding-inline: 12px; }
+}
+
+
+/* ---------- Доступность ---------- */
+body { touch-action: manipulation; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Подсказка видна только в кадрах пульсации — без анимации даём статичное свечение */
+  .gem.hint .gem-inner {
+    animation: none !important;
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 12px rgba(255, 240, 140, 1));
+  }
+}

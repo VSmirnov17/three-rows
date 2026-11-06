@@ -2,13 +2,18 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1a12">
 <title>Сокровища Солнца — три в ряд</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Marcellus&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="css/specials.css">
+<link rel="stylesheet" href="css/themes.css">
+<link rel="stylesheet" href="css/shaman.css">
+<link rel="stylesheet" href="css/screens.css">
+<link rel="stylesheet" href="css/mode.css">
 </head>
 <body>
 <svg id="svg-defs" aria-hidden="true" focusable="false"></svg>
@@ -40,6 +45,10 @@
           <span class="plaque-label">Уровень</span>
           <span id="levelValue" class="level-value">1 / 4</span>
         </div>
+        <button id="menuBtn" class="stone-btn menu-btn">
+          <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#icon-menu"></use></svg>
+          <span>Меню</span>
+        </button>
         <button id="menuBtnMobile" class="stone-btn icon-btn mobile-menu" aria-label="Меню">
           <svg viewBox="0 0 100 100"><use href="#icon-menu"></use></svg>
         </button>
@@ -48,11 +57,6 @@
 
     <main class="game">
       <aside class="left-panel">
-        <button id="menuBtn" class="stone-btn menu-btn">
-          <svg viewBox="0 0 100 100"><use href="#icon-menu"></use></svg>
-          <span>Меню</span>
-        </button>
-
         <div class="dial-wrap">
           <div class="dial">
             <svg viewBox="0 0 130 130" class="dial-svg" aria-hidden="true">
@@ -87,19 +91,6 @@
             <div class="relic-meta"><b id="relicValue">0</b><span>камней</span></div>
           </div>
         </div>
-
-        <div class="tool-row">
-          <button id="hintBtn" class="stone-btn icon-btn" aria-label="Подсказка" title="Подсказка">
-            <svg viewBox="0 0 100 100"><use href="#icon-star"></use></svg>
-          </button>
-          <button id="shuffleBtn" class="stone-btn icon-btn" aria-label="Перемешать" title="Перемешать">
-            <svg viewBox="0 0 100 100"><use href="#icon-shuffle"></use></svg>
-            <span id="shuffleCd" class="btn-badge"></span>
-          </button>
-          <button id="soundBtn" class="stone-btn icon-btn" aria-label="Звук и музыка" title="Звук и музыка">
-            <svg viewBox="0 0 100 100"><use id="soundIcon" href="#icon-sound"></use></svg>
-          </button>
-        </div>
       </aside>
 
       <section class="board-area">
@@ -111,8 +102,8 @@
           </div>
         </div>
         <div class="combo-badge" id="comboBadge">×2</div>
-        <div id="toast" class="toast"></div>
-        <div class="hint-bar" id="hintBar">Соединяй камни в ряд из трёх и более</div>
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <div class="hint-bar" id="hintBar" aria-live="polite">Соединяй камни в ряд из трёх и более</div>
       </section>
 
       <aside class="right-panel">
@@ -132,6 +123,24 @@
           </div>
         </div>
         <div class="combo-hint">серия<br>совпадений</div>
+
+        <!-- Кнопки с подписями: на десктопе — столбик под шкалой комбо,
+             на телефоне — нижняя панель (position: fixed). -->
+        <div class="tool-row">
+          <button id="hintBtn" class="stone-btn icon-btn tool-btn" aria-label="Подсказка" title="Подсказка">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#icon-star"></use></svg>
+            <span class="tool-label">Подсказка</span>
+          </button>
+          <button id="shuffleBtn" class="stone-btn icon-btn tool-btn" aria-label="Перемешать" title="Перемешать">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#icon-shuffle"></use></svg>
+            <span class="tool-label">Перемешать</span>
+            <span id="shuffleCd" class="btn-badge"></span>
+          </button>
+          <button id="soundBtn" class="stone-btn icon-btn tool-btn" aria-label="Звук и музыка" title="Звук и музыка">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><use id="soundIcon" href="#icon-sound"></use></svg>
+            <span class="tool-label">Звук</span>
+          </button>
+        </div>
       </aside>
     </main>
   </div>
@@ -144,6 +153,14 @@
       </div>
       <h1 class="start-title">Сокровища<br><span>Солнца</span></h1>
       <p class="start-sub">Три в ряд · Тайны древних ацтеков</p>
+      <div class="mode-switch" role="group" aria-label="Режим игры">
+        <button type="button" class="mode-btn active" data-mode-btn="relaxed" aria-pressed="true">
+          <b>Спокойно</b><small>без таймера</small>
+        </button>
+        <button type="button" class="mode-btn" data-mode-btn="timed" aria-pressed="false">
+          <b>На время</b><small>с отсчётом</small>
+        </button>
+      </div>
       <button id="playBtn" class="gold-btn big">
         <span>Играть</span>
       </button>
@@ -232,7 +249,11 @@
 <script src="js/art-extra.js"></script>
 <script src="js/sfx-samples.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/sfx-sa3.js"></script>
 <script src="js/economy.js"></script>
 <script src="js/game.js"></script>
+<script src="js/visuals.js"></script>
+<script src="js/visuals-shaman.js"></script>
+<script src="js/visuals-screens.js"></script>
 </body>
 </html>

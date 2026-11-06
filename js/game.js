@@ -85,6 +85,7 @@
     paused: false,
     ended: false,
     timeUp: false,
+    relaxed: true,
     overlay: true,
     levelIndex: 0,
     levelStartScore: 0,
@@ -147,9 +148,7 @@
   const hintMessages = {
     default: 'Соединяй камни в ряд из трёх и более',
     swap: 'Меняй местами соседние камни',
-    bad: 'Так нельзя — нужен ряд из трёх',
-    combo: 'Каскад! Множитель растёт',
-    special: 'Особый камень создан!'
+    bad: 'Так нельзя — нужен ряд из трёх'
   };
 
   function setHint(text, tone) {
@@ -249,7 +248,28 @@
     });
   }
 
+  /* ---------- Контракт для визуальных слоёв ----------
+     Игра только выставляет атрибуты на <body> и шлёт события «sun:*» —
+     всё оформление (темы уровней, шаман, эффекты) живёт в css/*.css и
+     js/visuals.js и сюда не заходит.
+       body[data-level]   0..3            номер уровня
+       body[data-combo]   1..8            текущий множитель
+       body[data-urgency] "" | tense | urgent
+       body[data-outcome] "" | win | lose
+       событие sun:special {type, r, c}   создан спецкамень
+       событие sun:blast   {type}         сработал спецкамень
+       событие sun:match   {chain, mult}  очередной каскад */
+  function setBodyState(name, value) {
+    const v = String(value);
+    if (document.body.dataset[name] !== v) document.body.dataset[name] = v;
+  }
+
+  function emitVisual(name, detail) {
+    window.dispatchEvent(new CustomEvent('sun:' + name, { detail }));
+  }
+
   function setCombo(mult) {
+    setBodyState('combo', mult);
     state.comboMult = mult;
     SFX.setEnergy(mult);
     const active = mult > 1;
@@ -291,9 +311,37 @@
         const data = JSON.parse(raw);
         state.best = Number(data.best) || 0;
         state.unlocked = Number(data.unlocked) || 0;
+        if (typeof data.relaxed === 'boolean') state.relaxed = data.relaxed;
       }
     } catch (e) { /* ignore */ }
+    updateModeUI();
     updateStartUI();
+  }
+
+  /* ---------- Режим игры ----------
+     «Спокойно» (по умолчанию): таймер стоит, проиграть нельзя, уровень идёт,
+     пока не собраны цели. «На время» — прежние правила с отсчётом. */
+  function setMode(relaxed) {
+    state.relaxed = !!relaxed;
+    updateModeUI();
+    saveProgress();
+    updateTimerUI();
+  }
+
+  function updateModeUI() {
+    setBodyState('mode', state.relaxed ? 'relaxed' : 'timed');
+    document.querySelectorAll('[data-mode-btn]').forEach(btn => {
+      const on = (btn.dataset.modeBtn === 'relaxed') === state.relaxed;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+    const label = document.querySelector('.time-label');
+    if (label) label.textContent = state.relaxed ? 'Спокойно' : 'Время';
+  }
+
+  /* В спокойном режиме темп очков постоянный — как на середине уровня */
+  function econTimeLeft() {
+    return state.relaxed ? state.totalTime * 0.5 : state.timeLeft;
   }
 
   function updateStartUI() {
@@ -309,7 +357,7 @@
 
   function saveProgress() {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ best: state.best, unlocked: state.unlocked }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ best: state.best, unlocked: state.unlocked, relaxed: state.relaxed }));
     } catch (e) { /* ignore */ }
   }
 
@@ -317,6 +365,16 @@
   let lastTickShown = -1;
 
   function updateTimerUI() {
+    if (state.relaxed) {
+      if (dom.time.textContent !== '∞') dom.time.textContent = '∞';
+      dom.dial.style.strokeDashoffset = '0';
+      dom.dial.classList.remove('tense', 'urgent');
+      dom.time.classList.remove('tense', 'urgent');
+      setBodyState('urgency', '');
+      SFX.setUrgency(0);
+      lastTickShown = -1;
+      return;
+    }
     const left = Math.max(0, state.timeLeft);
     const text = fmtTime(left);
     if (dom.time.textContent !== text) dom.time.textContent = text;
@@ -326,6 +384,7 @@
     const urgent = left <= 20;
     const tense = left <= 45 && !urgent;
     const active = state.running && !state.paused && !state.ended && !state.overlay;
+    setBodyState('urgency', active ? (urgent ? 'urgent' : tense ? 'tense' : '') : '');
     dom.dial.classList.toggle('tense', tense);
     dom.dial.classList.toggle('urgent', urgent);
     dom.time.classList.toggle('tense', tense);
@@ -368,6 +427,8 @@
 
   function applyLevel(index) {
     state.levelIndex = clamp(index, 0, LEVELS.length - 1);
+    setBodyState('level', state.levelIndex);
+    setBodyState('outcome', '');
     const level = currentLevel();
     state.goals = level.goals.map(g => ({ color: g.color, need: g.need, got: 0 }));
     state.timeLeft = level.time;
@@ -541,7 +602,7 @@
   /* ---------- Квадрат 2×2 ----------
      Один блок может быть найден до четырёх раз (с любого угла), поэтому
      его клетки помечаем в seen. Если из области 2×3 собираются два
-     квадрата, findSquare вернёт только первый — на блок создаётся РОВНО
+     квадрата, берётся только первый — на блок создаётся РОВНО
      один камень-взрыв, без дублей. Квадрат, который является частью
      длинной линии, тоже считается: для квадрата нужны две строки. */
   function squaresTouch(a, b) {
@@ -599,10 +660,6 @@
     return blocks;
   }
 
-  function findSquare() {
-    return findSquares()[0] || null;
-  }
-
   /* ---------- Уголок и T ----------
      Пересечение горизонтальной и вертикальной серий одного цвета.
      Уголок из 5 (3 + 3 с общей клеткой) даёт объединение ровно из 5
@@ -641,10 +698,6 @@
       }
     }
     return found;
-  }
-
-  function findCorner(groups) {
-    return findCorners(groups)[0] || null;
   }
 
   /* ---------- Общий разбор совпадений ----------
@@ -893,6 +946,7 @@
 
   let blastShakeTimer = null;
   function blastFx(trigger) {
+    emitVisual('blast', { type: trigger.type });
     const isSun = trigger.type === 'sun';
     const isBomb = trigger.type === 'bomb';
     const isTotem = trigger.type === 'totem';
@@ -974,6 +1028,7 @@
       );
     }
     SFX.special();
+    emitVisual('special', { type, r: gem.r, c: gem.c });
   }
 
   /* ---------- Перемешивание ---------- */
@@ -1115,6 +1170,7 @@
       state.chain = chain;
       const mult = Math.min(8, chain + 1);
       setCombo(mult);
+      emitVisual('match', { chain, mult });
 
       const matched = new Set();
       groups.forEach(group => group.cells.forEach(cell => matched.add(keyOf(cell.r, cell.c))));
@@ -1245,7 +1301,7 @@
         chain: chain,
         creates: creates,
         triggers: triggers,
-        timeLeft: state.timeLeft,
+        timeLeft: econTimeLeft(),
         totalTime: state.totalTime
       });
 
@@ -1375,7 +1431,7 @@
       winLevel();
       return;
     }
-    if (state.timeUp || state.timeLeft <= 0) {
+    if (!state.relaxed && (state.timeUp || state.timeLeft <= 0)) {
       loseLevel();
     }
   }
@@ -1393,12 +1449,12 @@
     const breakdown = Economy.formatBreakdown({
       base: state.econBase,
       clearScore: state.econClear,
-      timeBonus: Economy.levelBonus({
+      timeBonus: state.relaxed ? 0 : Economy.levelBonus({
         timeLeft: state.timeLeft,
         totalTime: state.totalTime,
         levelIndex: state.levelIndex
       }),
-      timeLeft: state.timeLeft,
+      timeLeft: econTimeLeft(),
       totalTime: state.totalTime,
       levelIndex: state.levelIndex
     });
@@ -1409,6 +1465,7 @@
     saveProgress();
     updateStartUI();
     SFX.win();
+    setBodyState('outcome', 'win');
     setHint('Уровень пройден!', 'good');
     setTimeout(() => showEndScreen(true, bonus, breakdown), 500);
   }
@@ -1426,6 +1483,7 @@
     saveProgress();
     updateStartUI();
     SFX.lose();
+    setBodyState('outcome', 'lose');
     setHint('Время вышло', 'bad');
     setTimeout(() => showEndScreen(false, 0), 350);
   }
@@ -1445,12 +1503,13 @@
       : 'Цели не достигнуты — попробуй ещё раз';
     dom.endCard.classList.toggle('lost', !win);
     dom.endTitle.textContent = win ? (last ? 'Солнце у тебя!' : 'Уровень пройден!') : 'Время вышло';
-    dom.endSub.textContent = win
+    /* Темп и ранг скорости имеют смысл только в игре на время */
+    dom.endSub.textContent = win && !state.relaxed
       ? sub + ' · средний темп ' + bd.paceLabel + ' · ' + bd.starsLabel + ' ' + bd.rank
       : sub;
     dom.endScore.textContent = fmtNum(state.score);
     dom.endBonus.textContent = '+' + fmtNum(bonus);
-    dom.endTime.textContent = fmtTime(state.timeLeft);
+    dom.endTime.textContent = state.relaxed ? '∞' : fmtTime(state.timeLeft);
     dom.nextBtn.style.display = win && !last ? '' : 'none';
     dom.retryBtn.style.display = win ? 'none' : '';
     openOverlay('endScreen');
@@ -1664,6 +1723,12 @@
   /* ---------- События ---------- */
   function attachEvents() {
     $('playBtn').addEventListener('click', () => startNewRun(0));
+    document.querySelectorAll('[data-mode-btn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        SFX.click();
+        setMode(btn.dataset.modeBtn === 'relaxed');
+      });
+    });
     dom.continueBtn.addEventListener('click', () => startNewRun(state.unlocked));
     $('howBtn').addEventListener('click', () => {
       SFX.click();
@@ -1714,14 +1779,11 @@
       if (document.hidden && state.running && !state.paused) pauseGame();
     });
     window.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        if (state.running) pauseGame();
-        else if (state.paused) resumeGame();
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        if (state.paused) resumeGame();
+        else if (state.running) pauseGame();
       }
       if (e.key === 'h' || e.key === 'H') showHint(true);
-    });
-    window.addEventListener('resize', () => {
-      // проценты пересчитываются автоматически; ничего не нужно
     });
   }
 
@@ -1733,7 +1795,7 @@
     lastFrame = t;
 
     if (state.running && !state.paused && !state.overlay && !state.ended) {
-      state.timeLeft = Math.max(0, state.timeLeft - dt);
+      if (!state.relaxed) state.timeLeft = Math.max(0, state.timeLeft - dt);
 
       const cdBefore = state.shuffleCd;
       state.shuffleCd = Math.max(0, state.shuffleCd - dt);
@@ -1742,7 +1804,7 @@
 
       updateTimerUI();
 
-      if (state.timeLeft <= 0) {
+      if (!state.relaxed && state.timeLeft <= 0) {
         state.timeUp = true;
         if (!state.busy) checkEnd();
       }
@@ -1774,13 +1836,16 @@
     requestAnimationFrame(loop);
   }
 
-  /* ---------- Отладка (для тестов) ---------- */
-  window.__SUN = {
-    state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
-    checkEnd, upgradeGem, applyPos, beginLevel, showHint,
-    findSquare, findSquares, findCorner, findCorners, analyzePatterns,
-    findLineGroups, hasAnyMatch, expandSpecials
-  };
+  /* ---------- Отладка (для тестов) ----------
+     Хук доступен только при открытии с ?debug в адресе. */
+  if (new URLSearchParams(location.search).has('debug')) {
+    window.__SUN = {
+      state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
+      checkEnd, upgradeGem, applyPos, beginLevel, showHint,
+      findSquares, findCorners, analyzePatterns,
+      findLineGroups, hasAnyMatch, expandSpecials
+    };
+  }
 
   init();
 })();

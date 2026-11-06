@@ -1,0 +1,63 @@
+/* Переключатель режима на стартовом экране: «Спокойно» / «На время».
+   Крупные кнопки-плитки: активная — золотая, вторая — каменная. */
+
+.mode-switch {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 4px auto 20px;
+  width: min(100%, 420px);
+}
+
+.mode-btn {
+  flex: 1 1 0;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #e9dcbc;
+  background:
+    linear-gradient(180deg, rgba(255, 240, 200, .08), rgba(0, 0, 0, .25)),
+    var(--stone-tex) center / cover,
+    var(--stone-4);
+  border: 2px solid rgba(236, 208, 138, .35);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 235, 180, .15);
+  transition: transform .12s ease, border-color .2s ease;
+}
+
+.mode-btn b {
+  font-family: var(--display);
+  font-size: 19px;
+  letter-spacing: .04em;
+}
+
+.mode-btn small {
+  font-size: 15px;
+  opacity: .85;
+}
+
+.mode-btn:active { transform: scale(.97); }
+
+.mode-btn.active {
+  color: var(--ink);
+  background: linear-gradient(180deg, #ffe7a3 0%, #e9be5c 48%, #b9832c 100%);
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 3px rgba(255, 233, 168, .35), 0 8px 20px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .6);
+}
+
+.mode-btn.active small { opacity: .9; }
+
+@media (max-width: 420px) {
+  .mode-switch { gap: 8px; margin-bottom: 16px; }
+  .mode-btn { min-height: 60px; padding: 8px 10px; }
+  .mode-btn b { font-size: 17px; }
+  .mode-btn small { font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-btn { transition: none; }
+}

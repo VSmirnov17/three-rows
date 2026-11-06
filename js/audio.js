@@ -169,8 +169,9 @@
 
     loadSamples() {
       if (this.samplesLoading || this.samples || !this.ctx) return;
-      const data = window.SFX_SAMPLES;
-      if (!data) return;
+      /* Старые синтезированные сэмплы + новые от Stable Audio 3 (js/sfx-sa3.js) */
+      const data = Object.assign({}, window.SFX_SAMPLES, window.SFX_SA3_SAMPLES);
+      if (!Object.keys(data).length) return;
       this.samplesLoading = true;
       const names = Object.keys(data);
       Promise.all(names.map(name => {
@@ -806,6 +807,7 @@
     /* ---------- Игровые эффекты ---------- */
 
     click() {
+      if (this.playSample('uiClick', { rate: 0.97 + Math.random() * 0.06, gain: 0.7 })) return;
       this.tone(660, 0.08, { type: 'triangle', gain: 0.1 });
     },
 
@@ -869,7 +871,7 @@
       if (this.muted) return;
       this.ensure();
       if (!this.ctx) return;
-      const { line = 0, sun = 0, chain = 1, pan = 0 } = opts;
+      const { line = 0, sun = 0, bomb = 0, chain = 1, pan = 0 } = opts;
       const power = clamp(0.85 + (line + sun) * 0.28 + (chain - 1) * 0.1, 0.85, 1.9);
       const t = this.ctx.currentTime + 0.01;
       const gainScale = clamp(0.82 + power * 0.1, 0.82, 1.05);
@@ -911,6 +913,15 @@
             pan: -pan * 0.6
           });
         }
+      }
+
+      if (bomb > 0) {
+        played = this.playSample('blastBomb', {
+          rate: 0.97 + Math.random() * 0.06,
+          gain: gainScale * (line + sun > 0 ? 0.7 : 1),
+          wet: 0.05,
+          pan
+        }) || played;
       }
 
       if (played) {
@@ -971,11 +982,13 @@
     },
 
     hint() {
+      if (this.playSample('hintChime', { rate: 0.97 + Math.random() * 0.06, gain: 0.7, wet: 0.06 })) return;
       this.tone(880, 0.15, { type: 'sine', gain: 0.06 });
       this.tone(1174, 0.2, { type: 'sine', gain: 0.05, delay: 0.1 });
     },
 
     win() {
+      if (this.playSample('victory', { rate: 0.97 + Math.random() * 0.06, gain: 0.9, wet: 0.08 })) return;
       [523, 659, 784, 1046, 1318].forEach((f, i) => {
         this.tone(f, 0.6, { type: 'triangle', gain: 0.1, delay: i * 0.12, wet: 0.4 });
       });
@@ -983,14 +996,11 @@
     },
 
     lose() {
+      if (this.playSample('defeat', { rate: 0.97 + Math.random() * 0.06, gain: 0.9, wet: 0.08 })) return;
       [392, 330, 262, 196].forEach((f, i) => {
         this.tone(f, 0.5, { type: 'sine', gain: 0.1, delay: i * 0.15, wet: 0.35 });
       });
       this.noiseHit({ dur: 0.9, gain: 0.06, type: 'lowpass', f0: 800, f1: 90, send: 0.5 });
-    },
-
-    tick() {
-      this.tone(1200, 0.05, { type: 'square', gain: 0.035 });
     }
   };
 

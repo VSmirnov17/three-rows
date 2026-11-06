@@ -1,0 +1,77 @@
+/* Спецкамни: оверлеи и анимации молнии, солнца, бомбы и тотема.
+   Контракт с игрой описан в js/game.js (setBodyState / emitVisual).
+   Правила: анимируем только transform и opacity; всё, что видно лишь внутри
+   keyframes, имеет статичный запасной вид (см. prefers-reduced-motion ниже). */
+
+/* Оверлей — прозрачная рамка из Blender (blender/specials.py) поверх цветного
+   камня: центр пустой, поэтому цвет камня читается и на 45 px. */
+/* Камни нарезаны крупнее (≈92% кадра вместо ≈82%) — оверлей растёт следом
+   (126% вместо 120%), чтобы кольцо по-прежнему ложилось на кромку камня. */
+.special-overlay {
+  position: absolute;
+  inset: -13%;
+  width: 126%;
+  height: 126%;
+  display: block;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 1;
+  transform: none;
+  will-change: transform, opacity;
+}
+
+/* Оверлей выступает за клетку — спецкамень поверх соседей, но под выбранным (6) */
+.gem.special-line, .gem.special-sun, .gem.special-bomb, .gem.special-totem { z-index: 3; }
+
+/* Маленький SVG-значок больше не нужен: тип читается по силуэту оверлея */
+.gem-inner .special-icon { display: none; }
+
+/* Молния — короткие электрические вспышки */
+.gem.special-line .special-overlay { animation: specialFlicker 2.4s steps(1, end) infinite; }
+
+@keyframes specialFlicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: .72; }
+  11% { opacity: 1; }
+  46% { opacity: .82; }
+  48% { opacity: 1; }
+  71% { opacity: .68; }
+  74% { opacity: 1; }
+}
+
+/* Солнце — мягкая пульсация короны */
+.gem.special-sun .special-overlay { animation: specialPulse 2.2s ease-in-out infinite; }
+
+@keyframes specialPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* Бомба — тлеющий фитиль */
+.gem.special-bomb .special-overlay { animation: specialEmber 1.3s ease-in-out infinite; }
+
+@keyframes specialEmber {
+  0%, 100% { opacity: 1; }
+  30% { opacity: .84; }
+  55% { opacity: .96; }
+  75% { opacity: .8; }
+}
+
+/* Тотем — плавное покачивание */
+.gem.special-totem .special-overlay { animation: specialBob 2.6s ease-in-out infinite; }
+
+@keyframes specialBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gem.special-line .special-overlay,
+  .gem.special-sun .special-overlay,
+  .gem.special-bomb .special-overlay,
+  .gem.special-totem .special-overlay {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

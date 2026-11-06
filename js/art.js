@@ -122,19 +122,14 @@
     return `<img class="${cls || 'gem-svg'}" src="assets/gems/gem-${color}.png" alt="" draggable="false">`;
   }
 
-  // Иконки спецкамней: тип не должен сводиться к 'line' по умолчанию
-  const SPECIAL_ICON = {
-    line: 'icon-bolt',
-    sun: 'icon-star',
-    bomb: 'icon-burst',
-    totem: 'icon-totem'
-  };
+  // Оверлеи спецкамней (blender/specials.py): рамка поверх цветного камня.
+  // Тип не должен сводиться к 'line' по умолчанию — неизвестный тип без оверлея.
+  const SPECIAL_TYPES = ['line', 'sun', 'bomb', 'totem'];
 
   function gemInner(color, special) {
     let extra = '';
-    if (special) {
-      const icon = SPECIAL_ICON[special] || 'icon-star';
-      extra = `<span class="special-icon"><svg viewBox="0 0 100 100"><use href="#${icon}"></use></svg></span>`;
+    if (special && SPECIAL_TYPES.includes(special)) {
+      extra = `<img class="special-overlay" src="assets/gems/special-${special}.png" alt="" draggable="false">`;
     }
     return `<div class="gem-inner">${gemSvg(color)}${extra}</div>`;
   }
