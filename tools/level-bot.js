@@ -24,7 +24,10 @@ const Campaign = require('../js/campaign/campaign.js');
 const Economy = require('../js/economy.js');
 
 const MAX_MOVES = 150;
-const SECONDS_PER_MOVE = 4;
+/* Часы очков для «Обычно»/«Испытания» и размер таймеров: ~7 с на ход обычного
+   игрока. Проверка проходимости — по быстрому игроку, 4 с на ход (из ТЗ). */
+const SECONDS_PER_MOVE = 7;
+const FAST_SECONDS_PER_MOVE = 4;
 const COLORS = 6;
 const HUMAN_TOP = 3;
 /* Пороги звёзд берутся с запасом от краёв коридоров (s2: p30-p50, s3: p75-p90):
@@ -149,6 +152,9 @@ function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime) {
     });
   });
 
+  if (offset !== res.removed.length) {
+    throw new Error('runMove: removed (' + res.removed.length + ') не совпадает с суммой clear (' + offset + ') — ядро поля изменилось');
+  }
   return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain } };
 }
 
@@ -193,6 +199,9 @@ function playLevel(resolved, seed, opts) {
   const base = (Math.imul(seed >>> 0, 2654435761) ^ hashString(resolved.id)) >>> 0;
   const rng = mulberry32(base);
   const pickRng = mulberry32(base ^ 0x9E3779B9);
+  /* Оценка кандидатов идёт на отдельном потоке сидов: игрок не видит, какие
+     камни досыплются, поэтому бот не должен выбирать ход по реальным досыпкам. */
+  const evalRng = mulberry32(base ^ 0x85EBCA6B);
   let idCounter = 0;
   const nextId = () => ++idCounter;
 
@@ -212,10 +221,11 @@ function playLevel(resolved, seed, opts) {
 
     const timeLefts = models.map(m => (m === 'calm' ? total * 0.5 : Math.max(0, total - moves * SECONDS_PER_MOVE)));
     const turnSeed = Math.floor(rng() * 4294967296);
+    const evalSeed = Math.floor(evalRng() * 4294967296);
 
     const cands = [];
     legalMoves(grid).forEach((mv, order) => {
-      const r = runMove(cloneGrid(grid), mv.a, mv.b, turnSeed, progress, timeLefts.slice(0, 1), total);
+      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total);
       if (r) cands.push({ mv, order, progress: r.progress, score: r.score });
     });
     if (!cands.length) break;
@@ -305,16 +315,16 @@ function evaluate(id, data) {
     const winRate = wins.length / greedy.length;
     const inTime = resolved.timer == null
       ? winRate
-      : share(greedy, r => r.won && r.moves * SECONDS_PER_MOVE <= resolved.timer);
+      : share(greedy, r => r.won && r.moves * FAST_SECONDS_PER_MOVE <= resolved.timer);
 
     if (diff === 'calm' && winRate < 1) {
       violations.push(id + ' calm: выигрыш ' + pct(winRate) + ' < 100% за ' + MAX_MOVES + ' ходов');
     }
     if (diff === 'normal' && inTime < 0.9) {
-      violations.push(id + ' normal: уложились в ' + resolved.timer + ' с (4 с/ход) ' + pct(inTime) + ' < 90%');
+      violations.push(id + ' normal: уложились в ' + resolved.timer + ' с (' + FAST_SECONDS_PER_MOVE + ' с/ход) ' + pct(inTime) + ' < 90%');
     }
     if (diff === 'challenge' && inTime < 0.6) {
-      violations.push(id + ' challenge: уложились в ' + resolved.timer + ' с (4 с/ход) ' + pct(inTime) + ' < 60%');
+      violations.push(id + ' challenge: уложились в ' + resolved.timer + ' с (' + FAST_SECONDS_PER_MOVE + ' с/ход) ' + pct(inTime) + ' < 60%');
     }
 
     const scores = human.filter(r => r.won).map(r => r.score);
@@ -427,7 +437,7 @@ function analyzeAll(ids, seeds, offset, starSeeds, jobs) {
         results[msg.index] = msg.data;
         if (++done === ids.length) { workers.forEach(x => x.terminate()); resolve(results); } else feed(w);
       });
-      w.on('error', reject);
+      w.on('error', err => { workers.forEach(x => x.terminate()); reject(err); });
       feed(w);
     }
   });
@@ -435,17 +445,29 @@ function analyzeAll(ids, seeds, offset, starSeeds, jobs) {
 
 function parseArgs(argv) {
   const args = { mode: null, lands: '1-2', seeds: 20, offset: 0, starSeeds: 500, jobs: Math.max(1, Math.min(8, require('node:os').cpus().length - 1)), js: false };
+  const num = (name, raw, min) => {
+    const v = Number(raw);
+    if (raw === undefined || !Number.isInteger(v) || v < min) {
+      throw new Error(name + ' ожидает целое число >= ' + min + ', получено ' + raw);
+    }
+    return v;
+  };
+  const val = (name, raw) => {
+    if (raw === undefined || raw.startsWith('--')) throw new Error(name + ' ожидает значение');
+    return raw;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--check') args.mode = 'check';
     else if (a === '--suggest') args.mode = 'suggest';
     else if (a === '--js') args.js = true;
-    else if (a === '--lands') args.lands = argv[++i];
-    else if (a === '--seeds') args.seeds = Number(argv[++i]);
-    else if (a === '--seed-offset') args.offset = Number(argv[++i]);
-    else if (a === '--star-seeds') args.starSeeds = Number(argv[++i]);
-    else if (a === '--jobs') args.jobs = Number(argv[++i]);
-    else if (a === '--level') args.level = argv[++i];
+    else if (a === '--lands') args.lands = val(a, argv[++i]);
+    else if (a === '--seeds') args.seeds = num(a, argv[++i], 1);
+    else if (a === '--seed-offset') args.offset = num(a, argv[++i], 0);
+    else if (a === '--star-seeds') args.starSeeds = num(a, argv[++i], 1);
+    else if (a === '--jobs') args.jobs = num(a, argv[++i], 1);
+    else if (a === '--level') args.level = val(a, argv[++i]);
+    else throw new Error('неизвестный аргумент ' + a);
   }
   return args;
 }
@@ -456,7 +478,9 @@ async function main(argv) {
     console.log('Использование: node tools/level-bot.js --check|--suggest [--lands 1-2] [--seeds 20] [--seed-offset 0] [--star-seeds 500] [--jobs N] [--level 1-01] [--js]');
     return 0;
   }
+  if (args.level && !Campaign.level(args.level)) throw new Error('неизвестный уровень ' + args.level);
   const ids = args.level ? [args.level] : levelIds(args.lands);
+  if (!ids.length) throw new Error('нет уровней для --lands ' + args.lands);
   const datas = await analyzeAll(ids, args.seeds, args.offset, args.starSeeds, args.jobs);
   const rows = ids.map((id, i) => evaluate(id, datas[i]));
 
@@ -509,6 +533,8 @@ async function main(argv) {
 
 module.exports = {
   playLevel,
+  runMove,
+  parseArgs,
   percentile,
   mulberry32,
   suggestStars,
@@ -516,7 +542,8 @@ module.exports = {
   evaluate,
   levelIds,
   MAX_MOVES,
-  SECONDS_PER_MOVE
+  SECONDS_PER_MOVE,
+  FAST_SECONDS_PER_MOVE
 };
 
 const wt = require('node:worker_threads');
@@ -526,5 +553,8 @@ if (!wt.isMainThread && wt.parentPort) {
     wt.parentPort.postMessage({ index: msg.index, data: analyzeLevel(msg.id, msg.seeds, msg.offset, msg.starSeeds) });
   });
 } else if (require.main === module) {
-  main(process.argv.slice(2)).then(code => { process.exitCode = code; });
+  main(process.argv.slice(2)).then(
+    code => { process.exitCode = code; },
+    err => { console.error('Ошибка: ' + (err && err.message ? err.message : err)); process.exitCode = 1; }
+  );
 }
