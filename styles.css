@@ -355,6 +355,32 @@ button:focus-visible {
   letter-spacing: .08em;
 }
 
+/* Золотая «Продолжить» (есть прогресс): первая и самая крупная */
+.gold-btn.continue-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: min(380px, 100%);
+  min-height: 76px;
+  margin: 0 auto;
+  padding: 10px 24px;
+  gap: 2px;
+  font-size: 24px;
+  letter-spacing: .1em;
+}
+.gold-btn.continue-btn small {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.stone-btn.continue-btn.restart-btn { min-height: 60px; font-size: 20px; }
+@media (max-width: 480px) {
+  .gold-btn.continue-btn { padding: 10px 10px; }
+  .gold-btn.continue-btn small { font-size: 17px; white-space: nowrap; }
+}
+
 /* Под «Продолжить» — какая земля и какой уровень */
 .continue-btn small {
   display: block;

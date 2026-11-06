@@ -34,6 +34,7 @@
   function open() {
     refreshExport();
     importField.value = '';
+    resetConfirm();
     setNote(copyNote, '');
     setNote(loadNote, '');
     Game.openOverlay('transferScreen');
@@ -70,8 +71,40 @@
     showManualHint();
   }
 
+  /* Загрузка заменяет весь прогресс, поэтому нужно второе нажатие на ту же
+     кнопку: первое меняет подпись на «Да, заменить прогресс» на несколько
+     секунд, второе — импортирует. Системные диалоги не используются. */
+  const LOAD_LABEL = 'Загрузить';
+  const CONFIRM_LABEL = 'Да, заменить прогресс';
+  const CONFIRM_MS = 6000;
+  let confirmTimer = 0;
+  let confirming = false;
+
+  function resetConfirm() {
+    clearTimeout(confirmTimer);
+    confirmTimer = 0;
+    confirming = false;
+    loadBtn.textContent = LOAD_LABEL;
+  }
+
   function load() {
     if (window.SFX) window.SFX.click();
+    if (!confirming) {
+      const check = Progress.importCode(importField.value);
+      if (!check.ok) {
+        setNote(loadNote, check.error, 'error');
+        return;
+      }
+      confirming = true;
+      loadBtn.textContent = CONFIRM_LABEL;
+      setNote(loadNote, 'Нажмите ещё раз, чтобы заменить текущий прогресс.', 'hint');
+      confirmTimer = setTimeout(() => {
+        resetConfirm();
+        setNote(loadNote, '');
+      }, CONFIRM_MS);
+      return;
+    }
+    resetConfirm();
     const result = Progress.importCode(importField.value);
     if (!result.ok) {
       setNote(loadNote, result.error, 'error');
@@ -97,5 +130,8 @@
   copyBtn.addEventListener('click', copy);
   loadBtn.addEventListener('click', load);
   exportField.addEventListener('focus', () => exportField.select());
-  importField.addEventListener('input', () => setNote(loadNote, ''));
+  importField.addEventListener('input', () => {
+    resetConfirm();
+    setNote(loadNote, '');
+  });
 })();

@@ -123,8 +123,13 @@
         if (!Array.isArray(lv.goals) || lv.goals.length === 0) {
           errors.push(tag + ': нет целей');
         } else {
+          const goalColors = new Set();
           lv.goals.forEach(g => {
             if (g.type === 'color') {
+              /* Игра засчитывает камень в каждую цель его цвета, бот — в одну:
+                 две цели одного цвета разошли бы симулятор и игру */
+              if (goalColors.has(g.color)) errors.push(tag + ': две цели одного цвета ' + g.color);
+              goalColors.add(g.color);
               if (!Number.isInteger(g.color) || g.color < 0 || g.color >= COLORS) {
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }

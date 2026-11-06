@@ -27,14 +27,29 @@
     return !!(save && Array.isArray(save.seenScenes) && save.seenScenes.indexOf(sceneId) >= 0);
   }
 
+  /* Последний уровень земли пройден (на любой сложности)? */
+  function landDone(save, land) {
+    if (!land || !land.levels || land.levels.length === 0) return false;
+    const last = land.levels[land.levels.length - 1].id;
+    const e = save && save.levels && save.levels[last];
+    if (!e || typeof e !== 'object') return false;
+    return ['calm', 'normal', 'challenge'].some(d => e[d] && e[d].stars >= 1);
+  }
+
   /* Какие сцены показать перед стартом уровня (по порядку): пролог, если он
-     ещё не показан, и вступление земли этого уровня, если оно не показано —
-     независимо от результатов. Игрок со старым сохранением видит их один раз. */
+     ещё не показан; финал предыдущей земли, если она пройдена, а финал не
+     показан (игрок мог уйти с экрана итогов иначе, чем «Дальше»); вступление
+     земли этого уровня, если оно не показано. Старое сохранение видит их
+     один раз. */
   function nextScenes(save, levelId, campaign) {
     const out = [];
     const land = campaign && campaign.landOf ? campaign.landOf(levelId) : null;
     if (!land) return out;
     if (!hasSeen(save, PROLOGUE_ID)) out.push(PROLOGUE_ID);
+    const prev = campaign.lands().find(l => l.id === land.id - 1);
+    if (prev && landDone(save, prev) && !hasSeen(save, prev.id + '-outro')) {
+      out.push(prev.id + '-outro');
+    }
     const introId = land.id + '-intro';
     if (!hasSeen(save, introId)) out.push(introId);
     return out;
@@ -135,16 +150,22 @@
     return land && land.scenes ? land.scenes[m[2]] : null;
   }
 
-  /* «История» на карте: пролог (для первой земли), вступление и, если
-     земля пройдена, финал. Показываются независимо от «уже видел». */
+  /* Какие сцены показывает «История» для земли: пролог (для первой земли),
+     вступление и финал — если земля пройдена (последний уровень сдан) или
+     финал уже видели. Чистая функция, проверяется в Node. */
+  function replayIds(save, landId, campaign) {
+    const ids = [];
+    if (landId === 1) ids.push(PROLOGUE_ID);
+    ids.push(landId + '-intro');
+    const land = campaign.lands().find(l => l.id === landId);
+    if (hasSeen(save, landId + '-outro') || landDone(save, land)) ids.push(landId + '-outro');
+    return ids;
+  }
+
+  /* «История» на карте: сцены показываются независимо от «уже видел». */
   function replayLand(landId) {
-    const items = [];
-    if (landId === 1) items.push({ id: PROLOGUE_ID, lines: sceneLines(PROLOGUE_ID) });
-    items.push({ id: landId + '-intro', lines: sceneLines(landId + '-intro') });
-    if (hasSeen(window.Game.getSave(), landId + '-outro')) {
-      items.push({ id: landId + '-outro', lines: sceneLines(landId + '-outro') });
-    }
-    return playList(items, true);
+    const ids = replayIds(window.Game.getSave(), landId, window.Campaign);
+    return playList(ids.map(id => ({ id, lines: sceneLines(id) })), true);
   }
 
   function install() {
@@ -193,5 +214,5 @@
     };
   }
 
-  return { PROLOGUE_ID, nextScenes, play, replayLand, sceneLines, install };
+  return { PROLOGUE_ID, nextScenes, landDone, replayIds, play, replayLand, sceneLines, install };
 });

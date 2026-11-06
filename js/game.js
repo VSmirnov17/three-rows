@@ -10,6 +10,7 @@
   /* Сюда кладётся копия нечитаемого нового ключа до первой записи */
   const BROKEN_KEY = 'sun-keeper-save-broken';
   const BACKUP_KEY = 'sun-keeper-save-backup';
+  const BACKUP_PREV_KEY = 'sun-keeper-save-backup-prev';
   const FRAGMENT_NAMES = {
     stone: 'Каменный осколок',
     silver: 'Серебряный осколок',
@@ -60,6 +61,7 @@
     nextBtn: $('nextBtn'),
     retryBtn: $('retryBtn'),
     continueBtn: $('continueBtn'),
+    playBtn: $('playBtn'),
     bestScore: $('bestScore')
   };
 
@@ -399,17 +401,30 @@
     return (land ? land.name + ' · ' : '') + 'уровень ' + levelNumber(id);
   }
 
+  /* Есть прогресс — первая и самая крупная золотая кнопка «Продолжить»,
+     под ней вторая «Начать с начала» (просто запускает 1-01, прогресс не
+     стирает). Нет прогресса — одна золотая «Играть». */
   function updateStartUI() {
     dom.bestScore.textContent = fmtNum(state.save.best);
-    if (dom.continueBtn) {
-      const canContinue = Progress.starsTotal(state.save) > 0;
-      dom.continueBtn.style.display = canContinue ? '' : 'none';
+    const canContinue = Progress.starsTotal(state.save) > 0;
+    const play = dom.playBtn;
+    const cont = dom.continueBtn;
+    if (play) {
+      play.className = canContinue ? 'stone-btn continue-btn restart-btn' : 'gold-btn big';
+      play.firstElementChild.textContent = canContinue ? 'Начать с начала' : 'Играть';
+    }
+    if (cont) {
+      cont.style.display = canContinue ? '' : 'none';
       if (canContinue) {
         const id = Progress.currentLevelId(state.save, Campaign);
-        dom.continueBtn.textContent = 'Продолжить';
+        cont.className = 'gold-btn big continue-btn';
+        cont.textContent = '';
+        const label = document.createElement('span');
+        label.textContent = 'Продолжить';
         const sub = document.createElement('small');
         sub.textContent = levelTitle(id);
-        dom.continueBtn.appendChild(sub);
+        cont.appendChild(label);
+        cont.appendChild(sub);
       }
     }
   }
@@ -1516,11 +1531,20 @@
   function nextLevel() {
     SFX.click();
     const res = state.lastResult;
+    const next = Campaign.nextLevelId(state.levelId);
     if (res && res.landComplete) {
-      finishLand(res.landComplete);
+      /* Финал земли ещё не видели — показываем его (и вступление следующей),
+         потом карта. Повторное прохождение последнего уровня, когда финал
+         уже видели, ведёт сразу в следующую землю, если она открыта. */
+      const outroSeen = (state.save.seenScenes || []).indexOf(res.landComplete + '-outro') >= 0;
+      if (outroSeen && next && Progress.isUnlocked(state.save, next, Campaign)) {
+        state.lastResult = null;
+        startLevel(next);
+      } else {
+        finishLand(res.landComplete);
+      }
       return;
     }
-    const next = Campaign.nextLevelId(state.levelId);
     if (next) startLevel(next);
     else toMap();
   }
@@ -1570,8 +1594,11 @@
   }
 
   /* После импорта кода: сохранение заменяется целиком и сразу пишется.
-     Аргумент проходит через ту же чистку, что и импорт кода (Progress);
-     прежняя запись перед заменой копируется в sun-keeper-save-backup. */
+     Аргумент проходит через ту же чистку, что и импорт кода (Progress).
+     Сначала пишется новая запись, и только если запись удалась, меняется
+     состояние сессии: при сбое прежний прогресс остаётся и в памяти, и на
+     диске. Прежняя запись перед заменой копируется в sun-keeper-save-backup;
+     предыдущая копия уезжает в sun-keeper-save-backup-prev (хранятся две). */
   function replaceSave(save) {
     if (!save || typeof save !== 'object' || !save.levels || typeof save.levels !== 'object') return false;
     let clean;
@@ -1583,16 +1610,20 @@
       return false;
     }
     const storage = getStorage();
+    const prev = Progress.readRaw(storage);
     /* Прежняя запись есть, а копию сделать не вышло — не затираем её */
-    try {
-      const prev = Progress.readRaw(storage);
-      if (prev !== null) storage.setItem(BACKUP_KEY, prev);
-    } catch (e) {
-      return false;
+    if (prev !== null) {
+      try {
+        const oldBackup = storage.getItem(BACKUP_KEY);
+        if (oldBackup !== null && oldBackup !== undefined) storage.setItem(BACKUP_PREV_KEY, oldBackup);
+        storage.setItem(BACKUP_KEY, prev);
+      } catch (e) {
+        return false;
+      }
     }
+    if (!Progress.persist(storage, clean)) return false;
     state.save = clean;
     state.difficulty = state.save.difficulty;
-    const ok = saveProgress();
     if (state.atHome) {
       applyLevel(Progress.currentLevelId(state.save, Campaign), state.difficulty);
     }
@@ -1600,7 +1631,7 @@
     updateStartUI();
     // Открытая карта перерисовывается по этому событию
     window.dispatchEvent(new CustomEvent('sun:save-replaced'));
-    return ok;
+    return true;
   }
 
   /* Сцена показана (или пропущена) — запоминаем в сохранении. */

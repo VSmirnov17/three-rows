@@ -123,6 +123,15 @@
   font-size: 22px;
 }
 
+.transfer-warn {
+  margin: 14px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #ffd98a;
+  text-align: center;
+}
+
 .transfer-note {
   min-height: 1.5em;
   margin: 8px 0 0;

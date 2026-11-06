@@ -30,6 +30,16 @@ test('validate() находит ошибки данных', () => {
   assert.deepEqual(Campaign.validate(), []);
 });
 
+test('validate() запрещает две цели одного цвета в уровне', () => {
+  const lvl = Campaign.lands()[0].levels[0];
+  const saved = lvl.goals;
+  lvl.goals = [{ type: 'color', color: 1, need: 5 }, { type: 'color', color: 1, need: 7 }];
+  const errors = Campaign.validate();
+  lvl.goals = saved;
+  assert.ok(errors.some(e => e.indexOf('одного цвета') >= 0), errors.join('; '));
+  assert.deepEqual(Campaign.validate(), []);
+});
+
 test('resolve calm: timer null, econTime = level.time', () => {
   const lvl = Campaign.level('1-01');
   const r = Campaign.resolve('1-01', 'calm');
