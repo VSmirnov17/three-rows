@@ -105,14 +105,38 @@ test('пустое хранилище -> empty()', () => {
   assert.deepEqual(Progress.load(null), Progress.empty());
 });
 
-test('битый JSON в новом ключе -> empty(), storage не перезаписан', () => {
-  const st = stubStorage({
-    [Progress.KEY]: '{"version":2,"lev',
-    [Progress.OLD_KEY]: JSON.stringify({ unlocked: 4 })
-  });
+test('битый JSON в новом ключе + нет старого -> empty(), storage не перезаписан', () => {
+  const st = stubStorage({ [Progress.KEY]: '{"version":2,"lev' });
   assert.deepEqual(Progress.load(st), Progress.empty());
   assert.equal(st.writes.length, 0);
   assert.equal(st.data[Progress.KEY], '{"version":2,"lev');
+});
+
+test('битый новый ключ + валидный старый -> миграция старого, storage не тронут', () => {
+  const oldRaw = JSON.stringify({ best: 500, unlocked: 3, relaxed: false });
+  for (const bad of ['{"version":2,"lev', '{"version":1}', '[]', 'null']) {
+    const st = stubStorage({ [Progress.KEY]: bad, [Progress.OLD_KEY]: oldRaw });
+    const s = Progress.load(st);
+    assert.equal(Progress.currentLevelId(s, Campaign), '1-04', bad);
+    assert.equal(s.difficulty, 'normal', bad);
+    assert.equal(s.best, 500, bad);
+    assert.equal(st.writes.length, 0, bad);
+    assert.equal(st.data[Progress.KEY], bad);
+    assert.equal(st.data[Progress.OLD_KEY], oldRaw);
+  }
+});
+
+test('битый новый ключ + битый старый -> empty()', () => {
+  const st = stubStorage({ [Progress.KEY]: '{', [Progress.OLD_KEY]: 'тоже не json' });
+  assert.deepEqual(Progress.load(st), Progress.empty());
+  assert.equal(st.writes.length, 0);
+});
+
+test('readRaw: сырая строка нового ключа, null если нет или хранилище бросает', () => {
+  assert.equal(Progress.readRaw(stubStorage({ [Progress.KEY]: '{"битый' })), '{"битый');
+  assert.equal(Progress.readRaw(stubStorage({})), null);
+  assert.equal(Progress.readRaw(throwingStorage), null);
+  assert.equal(Progress.readRaw(null), null);
 });
 
 test('битый JSON в старом ключе -> empty(), без записи', () => {
@@ -121,7 +145,7 @@ test('битый JSON в старом ключе -> empty(), без записи
   assert.equal(st.writes.length, 0);
 });
 
-test('новый ключ с чужой структурой -> empty()', () => {
+test('новый ключ с чужой структурой (старого нет) -> empty()', () => {
   for (const raw of ['null', '7', '[]', '{}', '{"version":1}', '{"version":2}', '{"version":2,"levels":[]}']) {
     const st = stubStorage({ [Progress.KEY]: raw });
     assert.deepEqual(Progress.load(st), Progress.empty(), raw);

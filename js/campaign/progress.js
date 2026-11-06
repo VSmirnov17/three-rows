@@ -131,18 +131,36 @@
     try {
       const raw = storage.getItem(KEY);
       if (raw !== null && raw !== undefined) {
-        const obj = JSON.parse(raw);
-        return isLoadable(obj) ? normalize(obj) : empty();
+        try {
+          const obj = JSON.parse(raw);
+          if (isLoadable(obj)) return normalize(obj);
+        } catch (e) {
+          /* новый ключ испорчен — пробуем старое сохранение */
+        }
       }
       const oldRaw = storage.getItem(OLD_KEY);
       if (oldRaw !== null && oldRaw !== undefined) {
-        const ids = levelIds || getCampaign().allLevelIds();
-        return migrateV1(JSON.parse(oldRaw), ids);
+        const old = JSON.parse(oldRaw);
+        if (isObject(old)) {
+          const ids = levelIds || getCampaign().allLevelIds();
+          return migrateV1(old, ids);
+        }
       }
     } catch (e) {
       /* битые данные или недоступное хранилище — начинаем с нуля, не перезаписывая */
     }
     return empty();
+  }
+
+  /* Сырая строка нового ключа (null, если её нет или хранилище недоступно):
+   * игра может сохранить копию нечитаемого значения до первой записи. */
+  function readRaw(storage) {
+    try {
+      const raw = storage.getItem(KEY);
+      return raw === undefined ? null : raw;
+    } catch (e) {
+      return null;
+    }
   }
 
   function persist(storage, save) {
@@ -288,6 +306,7 @@
     OLD_KEY,
     empty,
     load,
+    readRaw,
     migrateV1,
     persist,
     record,
