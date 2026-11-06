@@ -26,6 +26,23 @@ const throwingStorage = {
 
 const ERR = 'Код не подходит. Проверьте, что он скопирован целиком.';
 
+/* Код переноса из произвольного JSON — тот же формат, что у exportCode
+ * (HS2- + base64 + '.' + FNV-1a), но без нормализации. */
+function rawCode(obj) {
+  const b64 = Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < b64.length; i++) {
+    h ^= b64.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return 'HS2-' + b64 + '.' + ('00000000' + h.toString(16)).slice(-8);
+}
+
+function decodeCode(code) {
+  const b64 = code.slice(4, code.lastIndexOf('.'));
+  return JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+}
+
 test('ключи сохранения', () => {
   assert.equal(Progress.KEY, 'sun-keeper-save');
   assert.equal(Progress.OLD_KEY, 'sun-treasures-save');
@@ -330,8 +347,8 @@ test('importCode: корректная сумма, но чужая структ�
     [1, 2], 'строка', 5, null
   ];
   for (const obj of bad) {
-    // exportCode не валидирует: кодирует что дали, сумма корректна
-    const code = Progress.exportCode(obj);
+    // код с корректной суммой собираем вручную: exportCode нормализует вход
+    const code = rawCode(obj);
     assert.deepEqual(Progress.importCode(code), { ok: false, error: ERR }, JSON.stringify(obj));
   }
 });
@@ -358,4 +375,73 @@ test('кодирование работает и без Buffer (путь бра�
   assert.equal(withoutBuffer, withBuffer);
   assert.equal(back.ok, true);
   assert.deepEqual(back.save, s);
+});
+
+test('миграция: числа в строках читаются как у старой игры (Number + обрезка)', () => {
+  const a = Progress.migrateV1({ unlocked: '4', best: '9000', relaxed: false }, IDS);
+  assert.deepEqual(Object.keys(a.levels), ['1-01', '1-02', '1-03', '1-04']);
+  assert.equal(a.levels['1-04'].normal.stars, 1);
+  assert.equal(a.best, 9000);
+  assert.equal(a.difficulty, 'normal');
+
+  assert.equal(Object.keys(Progress.migrateV1({ unlocked: '4.7' }, IDS).levels).length, 4);
+  assert.equal(Object.keys(Progress.migrateV1({ unlocked: ' 3 ' }, IDS).levels).length, 3);
+  assert.deepEqual(Progress.migrateV1({ unlocked: '-3', best: '-10' }, IDS), Progress.empty());
+  assert.deepEqual(Progress.migrateV1({ unlocked: 'abc', best: 'abc' }, IDS), Progress.empty());
+  assert.equal(Object.keys(Progress.migrateV1({ unlocked: '99' }, IDS).levels).length, IDS.length);
+  assert.equal(Progress.migrateV1({ best: '123.5' }, IDS).best, 123.5);
+
+  const st = stubStorage({ [Progress.OLD_KEY]: '{"best":"9000","unlocked":"4","relaxed":false}' });
+  const s = Progress.load(st);
+  assert.equal(Progress.currentLevelId(s, Campaign), '1-05');
+  assert.equal(s.best, 9000);
+  assert.equal(st.writes.length, 0);
+});
+
+test('importCode: невидимые символы U+200B–U+200D и U+FEFF внутри и вокруг кода', () => {
+  const s = Progress.record(Progress.empty(), '1-03', 'challenge', 321, 3).save;
+  const code = Progress.exportCode(s);
+  const mid = Math.floor(code.length / 2);
+  const dirty = '\uFEFF' + code.slice(0, 5) + '\u200B' + code.slice(5, mid) + '\u200C\u200D' +
+    code.slice(mid) + '\u200B\n';
+  const r = Progress.importCode(dirty);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.save, s);
+});
+
+test('exportCode: кодирует нормализованную копию и не меняет вход', () => {
+  const s = Progress.record(Progress.empty(), '1-02', 'normal', 50, 2).save;
+  s.junk = { secret: 1 };
+  s.levels['1-02'].normal.extra = 'x';
+  s.levels['мусор'] = { calm: { stars: 3, best: 1 } };
+  s.seenScenes = ['prologue', 'prologue', 7];
+  const before = JSON.stringify(s);
+  const code = Progress.exportCode(s);
+  assert.equal(JSON.stringify(s), before);
+
+  const decoded = decodeCode(code);
+  assert.equal(decoded.junk, undefined);
+  assert.equal(decoded.levels['мусор'], undefined);
+  assert.deepEqual(decoded.levels['1-02'], { normal: { stars: 2, best: 50 } });
+  assert.deepEqual(decoded.seenScenes, ['prologue']);
+  assert.deepEqual(Progress.importCode(code), { ok: true, save: decoded });
+
+  // мусор на входе не роняет экспорт
+  for (const junk of [null, undefined, 5, 'str', {}, { levels: [] }]) {
+    assert.deepEqual(decodeCode(Progress.exportCode(junk)), Progress.empty(), String(junk));
+  }
+});
+
+test('isUsableRaw: true только для строки, которую load возьмёт из нового ключа', () => {
+  assert.equal(Progress.isUsableRaw(JSON.stringify(Progress.empty())), true);
+  const withJunk = Object.assign(Progress.empty(), { difficulty: 'hard', levels: { '1-01': 5 } });
+  assert.equal(Progress.isUsableRaw(JSON.stringify(withJunk)), true);
+  for (const bad of [null, undefined, '', '{bad', 'null', '[]', '{"version":1,"levels":{}}',
+    '{"version":2}', '{"version":2,"levels":[]}', 42]) {
+    assert.equal(Progress.isUsableRaw(bad), false, String(bad));
+  }
+  // согласовано с load(): битый новый ключ -> берётся старое сохранение
+  const st = stubStorage({ [Progress.KEY]: '{bad', [Progress.OLD_KEY]: '{"unlocked":2}' });
+  assert.equal(Progress.isUsableRaw(Progress.readRaw(st)), false);
+  assert.equal(Object.keys(Progress.load(st).levels).length, 2);
 });

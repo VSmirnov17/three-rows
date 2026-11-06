@@ -69,16 +69,18 @@
 
   /* Чистая копия: оставляет только годные поля, остальное отбрасывает.
    * Идемпотентна для корректного сохранения (round-trip не меняет его). */
-  function normalize(obj) {
+  function normalize(input) {
+    const obj = isObject(input) ? input : {};
+    const levels = isObject(obj.levels) ? obj.levels : {};
     const out = empty();
     if (DIFFICULTIES.indexOf(obj.difficulty) >= 0) out.difficulty = obj.difficulty;
     out.best = num(obj.best);
 
-    Object.keys(obj.levels).forEach(id => {
-      if (!LEVEL_ID.test(id) || !isObject(obj.levels[id])) return;
+    Object.keys(levels).forEach(id => {
+      if (!LEVEL_ID.test(id) || !isObject(levels[id])) return;
       const entry = {};
       DIFFICULTIES.forEach(d => {
-        const r = obj.levels[id][d];
+        const r = levels[id][d];
         if (!isObject(r)) return;
         const stars = Math.floor(num(r.stars));
         if (stars < 1) return;
@@ -109,34 +111,52 @@
   /* Загрузка, миграция, запись                                       */
   /* ---------------------------------------------------------------- */
 
+  /* Старая игра читала поля как Number(x) || 0, поэтому числа в строках
+   * ('4', '9000') тоже были рабочими — переносим их так же. */
   function migrateV1(old, levelIds) {
     const save = empty();
     const o = isObject(old) ? old : {};
     const relaxed = typeof o.relaxed === 'boolean' ? o.relaxed : true;
     const diff = relaxed ? 'calm' : 'normal';
     const ids = Array.isArray(levelIds) ? levelIds : [];
-    const unlocked = typeof o.unlocked === 'number' && isFinite(o.unlocked)
-      ? Math.max(0, Math.min(ids.length, Math.floor(o.unlocked)))
+    const unlockedNum = Number(o.unlocked);
+    const unlocked = isFinite(unlockedNum)
+      ? Math.max(0, Math.min(ids.length, Math.floor(unlockedNum)))
       : 0;
 
     save.difficulty = diff;
-    save.best = num(o.best);
+    save.best = num(Number(o.best));
     for (let i = 0; i < unlocked; i++) {
       save.levels[ids[i]] = { [diff]: { stars: 1, best: 0 } };
     }
     return save;
   }
 
+  /* Разбирает строку нового ключа: сохранение или null, если она не годится. */
+  function parseRaw(raw) {
+    if (typeof raw !== 'string') return null;
+    try {
+      const obj = JSON.parse(raw);
+      return isLoadable(obj) ? normalize(obj) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /* true, если load() возьмёт эту строку нового ключа (а не старое
+   * сохранение и не empty()). Игра так узнаёт, что ключ испорчен, и
+   * успевает сохранить его копию до первой записи. */
+  function isUsableRaw(raw) {
+    return parseRaw(raw) !== null;
+  }
+
   function load(storage, levelIds) {
     try {
       const raw = storage.getItem(KEY);
       if (raw !== null && raw !== undefined) {
-        try {
-          const obj = JSON.parse(raw);
-          if (isLoadable(obj)) return normalize(obj);
-        } catch (e) {
-          /* новый ключ испорчен — пробуем старое сохранение */
-        }
+        const parsed = parseRaw(raw);
+        if (parsed) return parsed;
+        /* новый ключ испорчен — пробуем старое сохранение */
       }
       const oldRaw = storage.getItem(OLD_KEY);
       if (oldRaw !== null && oldRaw !== undefined) {
@@ -275,8 +295,9 @@
     return decodeURIComponent(escape(atob(b64)));
   }
 
+  /* В код идёт чистая копия: без посторонних полей, вход не меняется. */
   function exportCode(save) {
-    const b64 = toBase64(String(JSON.stringify(save)));
+    const b64 = toBase64(JSON.stringify(normalize(save)));
     return CODE_PREFIX + b64 + '.' + checksum(b64);
   }
 
@@ -284,7 +305,9 @@
     const fail = { ok: false, error: IMPORT_ERROR };
     try {
       if (typeof code !== 'string') return fail;
-      const text = code.replace(/\s+/g, '');
+      /* \s уже включает U+FEFF; невидимые U+200B–U+200D добавляем явно —
+       * они приходят при копировании из мессенджеров. */
+      const text = code.replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
       if (text.length > CODE_MAX_LENGTH) return fail;
       if (text.slice(0, CODE_PREFIX.length).toUpperCase() !== CODE_PREFIX) return fail;
       const dot = text.lastIndexOf('.');
@@ -307,6 +330,7 @@
     empty,
     load,
     readRaw,
+    isUsableRaw,
     migrateV1,
     persist,
     record,
