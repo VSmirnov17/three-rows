@@ -5,7 +5,9 @@
  * Подключается как <script src="js/core/board.js"></script> перед js/game.js,
  * а также требуется из Node (тесты, бот).
  *
- * Камень: { id, color, special, lineDir, r, c, el }. Поле el ядро не трогает.
+ * Камень: { id, color, special, lineDir, locked, r, c, el }. Поле el ядро не
+ * трогает. locked — камень «в лианах»: не двигается (ни обменом, ни падением),
+ * а совпадение или взрыв рядом лишь срывает лиану, камень остаётся на месте.
  */
 (function (factory) {
   'use strict';
@@ -19,6 +21,8 @@
 
   const ROWS = 8;
   const COLS = 8;
+  const DEFAULT_COLORS = 6;
+  let fallbackId = 0;
 
   const keyOf = (r, c) => r + ',' + c;
 
@@ -195,8 +199,18 @@
     return findCorners(grid, groups).length > 0;
   }
 
+  /* Можно ли менять камни местами: оба на месте и ни один не в лианах.
+     (Соседство клеток проверяет вызывающий.) */
+  function canSwap(grid, a, b) {
+    const ga = a && gemAt(grid, a.r, a.c);
+    const gb = b && gemAt(grid, b.r, b.c);
+    if (!ga || !gb) return false;
+    return !ga.locked && !gb.locked;
+  }
+
   /* Первый ход-обмен соседних камней, после которого есть совпадение.
-     Камни меняются местами на время проверки и возвращаются назад. */
+     Камни меняются местами на время проверки и возвращаются назад.
+     Камни в лианах не двигаются, ходы с ними не предлагаются. */
   function findMove(grid) {
     const dirs = [[0, 1], [1, 0]];
     for (let r = 0; r < ROWS; r++) {
@@ -207,7 +221,7 @@
           if (r2 >= ROWS || c2 >= COLS) continue;
           const a = grid[r][c];
           const b = grid[r2][c2];
-          if (!a || !b) continue;
+          if (!a || !b || a.locked || b.locked) continue;
           grid[r][c] = b;
           grid[r2][c2] = a;
           const found = hasAnyMatch(grid);
@@ -228,10 +242,10 @@
      baseKeys — клетки совпадения ('r,c'). Спецкамни среди них (и среди
      вновь задетых) срабатывают цепочкой. protectedKeys — клетки, где
      только что созданы новые спецкамни: они не очищаются.
-     Возвращает { clear, triggers, unlocks }. unlocks — клетки, камни в
-     которых только «отпирают» (лианы, механика земли 2); сейчас всегда пуст.
-     Когда появятся запертые камни: запертый камень из clear надо переносить
-     в unlocks (и убирать из clear), а не удалять. */
+     Возвращает { clear, triggers, unlocks }. unlocks — клетки камней в
+     лианах, которые задело совпадением или взрывом: лиана срывается, а
+     камень остаётся на месте (его нет в clear). Камень в лианах сам не
+     срабатывает, даже если он спецкамень. */
   function expandSpecials(grid, baseKeys, protectedKeys) {
     const clear = new Set(baseKeys);
     const unlocks = new Set();
@@ -240,7 +254,7 @@
     baseKeys.forEach(k => {
       const p = parseKey(k);
       const gem = gemAt(grid, p.r, p.c);
-      if (gem && gem.special) queue.push({ r: p.r, c: p.c });
+      if (gem && gem.special && !gem.locked) queue.push({ r: p.r, c: p.c });
     });
     const seen = new Set();
 
@@ -250,7 +264,7 @@
       if (seen.has(k)) continue;
       seen.add(k);
       const gem = gemAt(grid, r, c);
-      if (!gem || !gem.special) continue;
+      if (!gem || !gem.special || gem.locked) continue;
       triggers.push({ r, c, type: gem.special, color: gem.color, lineDir: gem.lineDir });
 
       const extra = [];
@@ -291,6 +305,15 @@
     protectedKeys.forEach(k => {
       if (clear.has(k)) clear.delete(k);
     });
+    // Камень в лианах не удаляется: из clear он переходит в unlocks.
+    Array.from(clear).forEach(k => {
+      const p = parseKey(k);
+      const gem = gemAt(grid, p.r, p.c);
+      if (gem && gem.locked) {
+        clear.delete(k);
+        unlocks.add(k);
+      }
+    });
     return { clear, triggers, unlocks };
   }
 
@@ -327,7 +350,7 @@
     const pickCreate = (cells, fallback) => {
       const usable = cells.filter(cell => {
         const g = gemAt(grid, cell.r, cell.c);
-        return g && !g.special && !reserved.has(keyOf(cell.r, cell.c));
+        return g && !g.special && !g.locked && !reserved.has(keyOf(cell.r, cell.c));
       });
       if (!usable.length) return null;
       const swapped = usable.find(cell =>
@@ -393,11 +416,13 @@
     return { matched, creates, clear, triggers, unlocks };
   }
 
-  /* Применяет план к сетке: убирает clear, делает из creates спецкамни.
-     Возвращает убранные камни (их el игра убирает сама). Камни в unlocks
-     остаются на месте — их отпирание добавится вместе с лианами. */
+  /* Применяет план к сетке: убирает clear, делает из creates спецкамни,
+     срывает лианы с камней из unlocks (они остаются на месте).
+     Возвращает { removed, unlocked }: убранные камни (их el игра убирает
+     сама) и камни, с которых сорвана лиана. */
   function applyCascade(grid, plan) {
     const removed = [];
+    const unlocked = [];
     plan.clear.forEach(k => {
       const p = parseKey(k);
       const gem = gemAt(grid, p.r, p.c);
@@ -411,23 +436,38 @@
       gem.special = cr.type;
       gem.lineDir = cr.type === 'line' ? cr.dir : null;
     });
-    return { removed };
+    (plan.unlocks || []).forEach(k => {
+      const p = parseKey(k);
+      const gem = gemAt(grid, p.r, p.c);
+      if (!gem || !gem.locked) return;
+      gem.locked = false;
+      unlocked.push(gem);
+    });
+    return { removed, unlocked };
   }
 
   /* ---------- Обрушение ----------
      Камни в каждом столбце падают вниз, сверху досыпаются новые через
      spawn(r, c) -> gem (ядро DOM не создаёт). Меняет grid и r/c камней.
      moves — упавшие камни, spawned — новые (по столбцам, снизу вверх).
-     Для запертых клеток (лианы) цикл по столбцу потребуется разбить на
-     отрезки между неподвижными клетками. */
+     Камни в лианах неподвижны; остальные «проходят сквозь» них: свободные
+     клетки столбца (без закреплённых) заполняются снизу вверх подряд,
+     минуя закреплённые камни. */
   function collapse(grid, spawn) {
     const moves = [];
     const spawned = [];
     for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
+      // Свободные клетки снизу вверх; закреплённые камни не в счёт.
+      const free = [];
       for (let r = ROWS - 1; r >= 0; r--) {
         const gem = grid[r][c];
-        if (!gem) continue;
+        if (!gem || !gem.locked) free.push(r);
+      }
+      let k = 0;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        const gem = grid[r][c];
+        if (!gem || gem.locked) continue;
+        const write = free[k++];
         if (r !== write) {
           grid[write][c] = gem;
           grid[r][c] = null;
@@ -435,9 +475,9 @@
           gem.c = c;
           moves.push({ gem, fromR: r, toR: write });
         }
-        write--;
       }
-      for (let r = write; r >= 0; r--) {
+      for (; k < free.length; k++) {
+        const r = free[k];
         const gem = spawn(r, c);
         gem.r = r;
         gem.c = c;
@@ -451,11 +491,13 @@
   /* ---------- Новое поле ----------
      Без начальных совпадений (серии и квадраты 2×2) и с ходом, до 50
      попыток. level.colors — число цветов (по умолчанию 6); rng() в [0,1);
-     nextId() выдаёт свежие id камней. */
+     nextId() выдаёт свежие id камней. level.vines — [[r, c], …]: эти камни
+     в лианах (locked); в совпадениях и ходах они участвуют как обычные. */
   function generateGrid(level, rng, nextId) {
     const colors = (level && level.colors) || DEFAULT_COLORS;
     const random = rng || Math.random;
     const newId = nextId || (() => ++fallbackId);
+    const vineKeys = new Set(((level && level.vines) || []).map(v => keyOf(v[0], v[1])));
     let grid;
     let attempts = 0;
     do {
@@ -488,7 +530,10 @@
           // При очень малом числе цветов запретить может всё — берём любой.
           const pool = options.length ? options : Array.from({ length: colors }, (_, i) => i);
           const color = pool[Math.floor(random() * pool.length)];
-          grid[r][c] = { id: newId(), color, special: null, lineDir: null, r, c, el: null };
+          grid[r][c] = {
+            id: newId(), color, special: null, lineDir: null,
+            locked: vineKeys.has(keyOf(r, c)), r, c, el: null
+          };
         }
       }
       attempts++;
@@ -496,8 +541,73 @@
     return grid;
   }
 
-  const DEFAULT_COLORS = 6;
-  let fallbackId = 0;
+  /* ---------- Перемешивание ----------
+     Перемешивает на месте только камни не в лианах: меняются клетки камней
+     (спецкамни остаются при своих камнях, лианы стоят где стояли). Доска
+     после перемешивания без совпадений и с ходом. До 100 попыток; если не
+     вышло — незакреплённым камням заново подбираются цвета.
+     opts.colors — сколько цветов в игре (для запасного пути; по умолчанию
+     наибольший цвет на доске + 1, не меньше 3). Возвращает ту же grid. */
+  function shuffle(grid, rng, opts) {
+    const random = rng || Math.random;
+    const cells = [];
+    const gems = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const gem = grid[r][c];
+        if (gem && !gem.locked) {
+          cells.push({ r, c });
+          gems.push(gem);
+        }
+      }
+    }
+    if (gems.length < 2) return grid;
+
+    const place = order => {
+      cells.forEach((pos, i) => {
+        const gem = order[i];
+        grid[pos.r][pos.c] = gem;
+        gem.r = pos.r;
+        gem.c = pos.c;
+      });
+    };
+    const good = () => !hasAnyMatch(grid) && hasMove(grid);
+
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const order = gems.slice();
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        const t = order[i];
+        order[i] = order[j];
+        order[j] = t;
+      }
+      place(order);
+      if (good()) return grid;
+    }
+
+    // Запасной путь: те же камни на своих местах, но цвета подбираются заново.
+    let colors = (opts && opts.colors) || 0;
+    if (!colors) {
+      grid.forEach(row => row.forEach(g => { if (g && g.color + 1 > colors) colors = g.color + 1; }));
+      colors = Math.max(colors, 3);
+    }
+    place(gems);
+    for (let attempt = 0; attempt < 100; attempt++) {
+      cells.forEach(pos => { grid[pos.r][pos.c].color = -1; });
+      cells.forEach(pos => {
+        const gem = grid[pos.r][pos.c];
+        const options = [];
+        for (let color = 0; color < colors; color++) {
+          gem.color = color;
+          if (!hasAnyMatch(grid)) options.push(color);
+        }
+        const pool = options.length ? options : Array.from({ length: colors }, (_, i) => i);
+        gem.color = pool[Math.floor(random() * pool.length)];
+      });
+      if (good()) break;
+    }
+    return grid;
+  }
 
   /* ---------- Полный ход (для бота) ----------
      Обмен a<->b, затем все каскады и обрушение до успокоения. Меняет grid.
@@ -509,7 +619,7 @@
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
     const ga = gemAt(grid, a.r, a.c);
     const gb = gemAt(grid, b.r, b.c);
-    if (!ga || !gb) return null;
+    if (!ga || !gb || !canSwap(grid, a, b)) return null;
 
     const colors = (opts && opts.colors) || DEFAULT_COLORS;
     const random = rng || Math.random;
@@ -536,6 +646,7 @@
       color: Math.floor(random() * colors),
       special: null,
       lineDir: null,
+      locked: false,
       r,
       c,
       el: null
@@ -563,6 +674,7 @@
     findCorners,
     analyzePatterns,
     hasAnyMatch,
+    canSwap,
     findMove,
     hasMove,
     expandSpecials,
@@ -570,6 +682,7 @@
     applyCascade,
     collapse,
     generateGrid,
+    shuffle,
     simulateMove
   };
 });

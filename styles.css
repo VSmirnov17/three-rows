@@ -1019,6 +1019,37 @@ button:focus-visible {
   100% { transform: scale(.05) rotate(35deg); opacity: 0; filter: brightness(2.4); }
 }
 
+/* ---------- Камни в лианах ----------
+   Временный вид (финальный арт — в фазе 2): крупные зелёные плетения с
+   тёмной обводкой поверх камня. Закреплённый камень выше падающих по
+   слоям: камни сверху «проходят сквозь» него, а не заслоняют его. */
+.gem.is-locked { z-index: 3; cursor: not-allowed; }
+.gem.is-locked .gem-inner { filter: saturate(.7) brightness(.8); }
+
+.vine-overlay {
+  position: absolute;
+  inset: -1%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.vine-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .6));
+}
+
+/* Срыв лианы: плетения раздуваются, темнеют и пропадают */
+.gem.vine-snap .vine-overlay {
+  animation: vineSnap .3s ease-in forwards;
+}
+
+@keyframes vineSnap {
+  0% { transform: scale(1); opacity: 1; filter: brightness(1.5); }
+  100% { transform: scale(1.5) rotate(14deg); opacity: 0; filter: brightness(.7); }
+}
+
 .gem.special-line .gem-inner,
 .gem.special-sun .gem-inner,
 .gem.special-bomb .gem-inner,

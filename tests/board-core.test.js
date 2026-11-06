@@ -328,6 +328,8 @@ test('collapse: камни падают вниз, сверху досыпают�
   assert.equal(grid[3][0], top);
   assert.equal(grid[4][0], second);
   assert.equal(spawned.filter(g => g.c === 0).length, 3);
+  // Новые камни приходят по столбцу снизу вверх: игра на это опирается при анимации
+  assert.deepEqual(spawned.filter(g => g.c === 0).map(g => g.r), [2, 1, 0]);
   assert.equal(spawned.filter(g => g.c === 3).length, 1);
   assert.ok(moves.every(m => m.toR > m.fromR));
 });
@@ -404,4 +406,199 @@ test('simulateMove: много ходов подряд не ломают пол�
     assert.equal(Board.hasAnyMatch(grid), false);
     grid.forEach(row => row.forEach(g => assert.ok(g)));
   }
+});
+
+/* ---------- Task 3: камни в лианах ---------- */
+
+const LOCK = { locked: true };
+
+test('canSwap: камень в лианах не меняется местами', () => {
+  const grid = gridFrom(CHECKER, { '2,2': LOCK });
+  assert.equal(Board.canSwap(grid, { r: 2, c: 2 }, { r: 2, c: 3 }), false);
+  assert.equal(Board.canSwap(grid, { r: 2, c: 3 }, { r: 2, c: 2 }), false);
+  assert.equal(Board.canSwap(grid, { r: 2, c: 3 }, { r: 2, c: 4 }), true);
+  const holey = gridFrom(withRows({ 3: '01......' }));
+  assert.equal(Board.canSwap(holey, { r: 3, c: 1 }, { r: 3, c: 2 }), false, 'пустая клетка');
+});
+
+test('findMove и simulateMove не двигают камни в лианах', () => {
+  // Оба хода в этой доске затрагивают камень (3,2); без лиан ход есть.
+  const rows = withRows({ 2: '..0.....', 3: '0050....' });
+  assert.ok(Board.findMove(gridFrom(rows)));
+  const grid = gridFrom(rows, { '3,2': LOCK });
+  assert.equal(Board.findMove(grid), null);
+  assert.equal(Board.hasMove(grid), false);
+  const before = grid.map(row => row.slice());
+  assert.equal(Board.simulateMove(grid, { r: 2, c: 2 }, { r: 3, c: 2 }, seeded(1), counter()), null);
+  assert.deepEqual(grid, before);
+  assert.equal(grid[3][2].locked, true);
+});
+
+test('лиана срывается рядом, камень остаётся', () => {
+  const grid = gridFrom(withRows({ 3: '000.....' }), { '3,1': LOCK });
+  const vine = grid[3][1];
+  const plan = Board.planCascade(grid, null);
+  assert.ok(plan.unlocks.has('3,1'));
+  assert.ok(!plan.clear.has('3,1'));
+  assert.ok(plan.clear.has('3,0') && plan.clear.has('3,2'));
+  const res = Board.applyCascade(grid, plan);
+  assert.equal(grid[3][1], vine);
+  assert.equal(vine.locked, false);
+  assert.equal(grid[3][0], null);
+  assert.equal(grid[3][2], null);
+  assert.equal(res.removed.length, 2);
+  assert.deepEqual(res.unlocked, [vine]);
+});
+
+test('тройка из одних закреплённых камней только срывает лианы, потом собирается', () => {
+  const grid = gridFrom(withRows({ 3: '000.....' }), { '3,0': LOCK, '3,1': LOCK, '3,2': LOCK });
+  const plan = Board.planCascade(grid, null);
+  assert.equal(plan.clear.size, 0);
+  assert.equal(plan.unlocks.size, 3);
+  assert.equal(Board.applyCascade(grid, plan).removed.length, 0);
+  const plan2 = Board.planCascade(grid, null);
+  assert.equal(plan2.clear.size, 3);
+  assert.equal(plan2.unlocks.size, 0);
+});
+
+test('бомба срывает лиану, а не уничтожает камень', () => {
+  const grid = gridFrom(CHECKER, {
+    '3,3': { special: 'bomb' },
+    '3,4': LOCK,
+    '2,2': LOCK
+  });
+  const vineA = grid[3][4];
+  const vineB = grid[2][2];
+  const res = Board.expandSpecials(grid, new Set(['3,3']), new Set());
+  assert.deepEqual([...res.unlocks].sort(), ['2,2', '3,4']);
+  assert.equal(res.clear.size, 7);
+  assert.ok(!res.clear.has('3,4') && !res.clear.has('2,2'));
+  const plan = { matched: new Set(['3,3']), creates: [], clear: res.clear, triggers: res.triggers, unlocks: res.unlocks };
+  const { removed } = Board.applyCascade(grid, plan);
+  assert.equal(grid[3][4], vineA);
+  assert.equal(grid[2][2], vineB);
+  assert.equal(vineA.locked, false);
+  assert.equal(vineB.locked, false);
+  assert.ok(!removed.includes(vineA) && !removed.includes(vineB));
+});
+
+test('линия и солнце тоже срывают лианы', () => {
+  const line = gridFrom(CHECKER, { '4,0': { special: 'line', lineDir: 'row' }, '4,5': LOCK });
+  const l = Board.expandSpecials(line, new Set(['4,0']), new Set());
+  assert.ok(l.unlocks.has('4,5') && !l.clear.has('4,5'));
+  const sun = gridFrom(CHECKER, { '0,0': { special: 'sun' }, '2,2': LOCK });
+  const s = Board.expandSpecials(sun, new Set(['0,0']), new Set());
+  assert.ok(s.unlocks.has('2,2') && !s.clear.has('2,2'));
+});
+
+test('закреплённый спецкамень не срабатывает, а только освобождается', () => {
+  const grid = gridFrom(withRows({ 5: '000.....' }), { '5,0': { special: 'line', lineDir: 'row', locked: true } });
+  const plan = Board.planCascade(grid, null);
+  assert.equal(plan.triggers.length, 0);
+  assert.ok(plan.unlocks.has('5,0'));
+  assert.ok(!plan.clear.has('5,0'));
+});
+
+test('камень в лианах не считается собранным и не становится местом спецкамня', () => {
+  const grid = gridFrom(withRows({ 3: '0000....' }), { '3,1': LOCK });
+  const vine = grid[3][1];
+  const plan = Board.planCascade(grid, { r: 3, c: 1 });
+  assert.equal(plan.creates.length, 1);
+  assert.ok(!(plan.creates[0].r === 3 && plan.creates[0].c === 1));
+  const { removed } = Board.applyCascade(grid, plan);
+  assert.ok(!removed.includes(vine));
+  assert.equal(removed.length, 2, 'из четырёх: один в лианах, один стал спецкамнем');
+  assert.equal(grid[3][1], vine);
+  assert.equal(vine.special, null);
+});
+
+test('collapse: закреплённый камень не падает, камни выше проходят сквозь него', () => {
+  const grid = gridFrom(CHECKER, { '5,0': LOCK });
+  const pinned = grid[5][0];
+  const top = grid[0][0];
+  const above = grid[4][0];
+  grid[6][0] = null;
+  grid[7][0] = null;
+  grid[2][0] = null;
+  let id = 500;
+  const spawn = (r, c) => ({ id: ++id, color: 2, special: null, lineDir: null, r, c, el: null });
+  const { moves, spawned } = Board.collapse(grid, spawn);
+  assert.equal(grid[5][0], pinned);
+  assert.equal(pinned.r, 5);
+  assert.ok(!moves.some(m => m.gem === pinned));
+  // Незакреплённые: (4,0) -> 7, (3,0) -> 6, (1,0) -> 4, (0,0) -> 3
+  assert.equal(grid[7][0], above);
+  assert.equal(above.r, 7);
+  assert.equal(grid[3][0], top);
+  assert.equal(moves.find(m => m.gem === top).toR, 3);
+  // Досыпка в оставшиеся свободные клетки снизу вверх
+  assert.deepEqual(spawned.filter(g => g.c === 0).map(g => g.r), [2, 1, 0]);
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      assert.ok(grid[r][c]);
+      assert.equal(grid[r][c].r, r);
+    }
+  }
+  assert.ok(moves.every(m => m.toR > m.fromR));
+});
+
+test('generateGrid: level.vines закрепляет камни, совпадений нет, ход есть', () => {
+  const vines = [[0, 0], [3, 3], [7, 7], [4, 1]];
+  for (let seed = 1; seed <= 20; seed++) {
+    const grid = Board.generateGrid({ colors: 5, vines }, seeded(seed), counter());
+    assert.equal(Board.hasAnyMatch(grid), false);
+    assert.equal(Board.hasMove(grid), true);
+    grid.forEach((row, r) => row.forEach((g, c) => {
+      assert.equal(g.locked, vines.some(v => v[0] === r && v[1] === c));
+    }));
+  }
+  const plain = Board.generateGrid({ colors: 5 }, seeded(3), counter());
+  assert.ok(plain.every(row => row.every(g => g.locked === false)));
+});
+
+function lockedSnapshot(grid) {
+  const out = [];
+  grid.forEach((row, r) => row.forEach((g, c) => { if (g && g.locked) out.push([r, c, g.id, g.color]); }));
+  return out;
+}
+
+test('shuffle не двигает камни в лианах и завершается на доске без ходов', () => {
+  const vines = [[1, 1], [1, 2], [4, 4], [6, 0], [3, 7]];
+  for (let seed = 1; seed <= 15; seed++) {
+    const grid = Board.generateGrid({ colors: 5, vines }, seeded(seed), counter());
+    const before = lockedSnapshot(grid);
+    const ids = grid.flat().map(g => g.id).sort((a, b) => a - b);
+    const out = Board.shuffle(grid, seeded(seed + 100), { colors: 5 });
+    assert.equal(out, grid);
+    assert.deepEqual(lockedSnapshot(out), before);
+    assert.equal(Board.hasAnyMatch(out), false);
+    assert.equal(Board.hasMove(out), true);
+    assert.deepEqual(out.flat().map(g => g.id).sort((a, b) => a - b), ids, 'те же камни');
+    out.forEach((row, r) => row.forEach((g, c) => { assert.equal(g.r, r); assert.equal(g.c, c); }));
+  }
+});
+
+test('shuffle: спецкамни остаются со своими камнями', () => {
+  const grid = Board.generateGrid({ colors: 5, vines: [[2, 2]] }, seeded(5), counter());
+  const bomb = grid[0][0];
+  const line = grid[7][7];
+  bomb.special = 'bomb';
+  line.special = 'line';
+  line.lineDir = 'col';
+  Board.shuffle(grid, seeded(6), { colors: 5 });
+  assert.equal(bomb.special, 'bomb');
+  assert.equal(line.special, 'line');
+  assert.equal(line.lineDir, 'col');
+  assert.ok(grid.flat().includes(bomb) && grid.flat().includes(line));
+});
+
+test('shuffle: если перестановки не помогают, перекрашивает незакреплённые камни', () => {
+  // Все камни одного цвета: никакая перестановка не уберёт совпадения.
+  const grid = gridFrom(Array(8).fill('00000000'), { '3,3': LOCK, '0,5': LOCK });
+  const before = lockedSnapshot(grid);
+  const out = Board.shuffle(grid, seeded(11), { colors: 5 });
+  assert.deepEqual(lockedSnapshot(out), before);
+  assert.equal(Board.hasAnyMatch(out), false);
+  assert.equal(Board.hasMove(out), true);
+  out.forEach(row => row.forEach(g => assert.ok(g.color >= 0 && g.color < 5)));
 });

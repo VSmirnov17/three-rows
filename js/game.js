@@ -148,7 +148,8 @@
   const hintMessages = {
     default: 'Соединяй камни в ряд из трёх и более',
     swap: 'Меняй местами соседние камни',
-    bad: 'Так нельзя — нужен ряд из трёх'
+    bad: 'Так нельзя — нужен ряд из трёх',
+    vines: 'Камень в лианах не сдвинуть — собери ряд рядом с ним'
   };
 
   function setHint(text, tone) {
@@ -457,7 +458,46 @@
 
   function makeGem(color, r, c) {
     state.gemSeq += 1;
-    return { id: state.gemSeq, color, special: null, lineDir: null, r, c, el: null };
+    return { id: state.gemSeq, color, special: null, lineDir: null, locked: false, r, c, el: null };
+  }
+
+  /* Лианы поверх камня (временный вид; финальный арт — в фазе 2). Крупные
+     толстые плетения с тёмной обводкой: видно сразу и без подсказок. */
+  const VINE_SVG =
+    '<svg class="vine-svg" viewBox="0 0 100 100" aria-hidden="true">' +
+    '<g fill="none" stroke-linecap="round">' +
+    '<path d="M3 12 C28 40 54 28 97 84" stroke="#0b2a0d" stroke-width="15"/>' +
+    '<path d="M97 12 C72 40 46 30 3 86" stroke="#0b2a0d" stroke-width="15"/>' +
+    '<path d="M3 50 C30 66 68 36 97 52" stroke="#0b2a0d" stroke-width="15"/>' +
+    '<path d="M3 12 C28 40 54 28 97 84" stroke="#4fc23a" stroke-width="9"/>' +
+    '<path d="M97 12 C72 40 46 30 3 86" stroke="#4fc23a" stroke-width="9"/>' +
+    '<path d="M3 50 C30 66 68 36 97 52" stroke="#4fc23a" stroke-width="9"/>' +
+    '<path d="M3 12 C28 40 54 28 97 84" stroke="#a9ee84" stroke-width="2.6"/>' +
+    '<path d="M97 12 C72 40 46 30 3 86" stroke="#a9ee84" stroke-width="2.6"/>' +
+    '<path d="M3 50 C30 66 68 36 97 52" stroke="#a9ee84" stroke-width="2.6"/>' +
+    '</g>' +
+    '<g fill="#3aa52b" stroke="#0b2a0d" stroke-width="2.4">' +
+    '<ellipse cx="22" cy="20" rx="9" ry="5" transform="rotate(-35 22 20)"/>' +
+    '<ellipse cx="80" cy="22" rx="9" ry="5" transform="rotate(35 80 22)"/>' +
+    '<ellipse cx="20" cy="78" rx="9" ry="5" transform="rotate(35 20 78)"/>' +
+    '<ellipse cx="80" cy="76" rx="9" ry="5" transform="rotate(-35 80 76)"/>' +
+    '<ellipse cx="50" cy="40" rx="8" ry="4.6" transform="rotate(-20 50 40)"/>' +
+    '</g></svg>';
+
+  /* Включает/выключает лианы на камне: класс и оверлей. */
+  function setGemLocked(gem, locked) {
+    gem.locked = !!locked;
+    if (!gem.el) return;
+    gem.el.classList.remove('vine-snap');
+    gem.el.classList.toggle('is-locked', gem.locked);
+    const old = gem.el.querySelector('.vine-overlay');
+    if (old) old.remove();
+    if (gem.locked) {
+      const overlay = document.createElement('div');
+      overlay.className = 'vine-overlay';
+      overlay.innerHTML = VINE_SVG;
+      gem.el.appendChild(overlay);
+    }
   }
 
   function createGemEl(gem) {
@@ -468,7 +508,34 @@
     node.dataset.c = String(gem.c);
     node.innerHTML = ART.gemInner(gem.color, gem.special);
     gem.el = node;
+    setGemLocked(gem, gem.locked);
     return node;
+  }
+
+  /* Мягкий отказ для камня в лианах: небольшое покачивание, без звука
+     ошибки и без красного. Повторные нажатия подряд не накладываются. */
+  let lastRefuseAt = 0;
+  function refuseLocked(gems) {
+    const t = Date.now();
+    if (t - lastRefuseAt < 380) return;
+    lastRefuseAt = t;
+    gems.forEach(gem => {
+      if (!gem || !gem.el) return;
+      gem.el.querySelectorAll('.gem-inner, .vine-overlay').forEach(part => {
+        if (!part.animate) return;
+        part.animate(
+          [
+            { transform: 'translateX(0)' },
+            { transform: 'translateX(-5%) rotate(-3deg)' },
+            { transform: 'translateX(5%) rotate(3deg)' },
+            { transform: 'translateX(-3%) rotate(-1.5deg)' },
+            { transform: 'translateX(0)' }
+          ],
+          { duration: 360, easing: 'ease-in-out' }
+        );
+      });
+    });
+    flashHint(hintMessages.vines, undefined, 2800);
   }
 
   function applyPos(gem) {
@@ -590,6 +657,10 @@
     clearSelection();
     const gem = gemAt(cell.r, cell.c);
     if (!gem) return;
+    if (gem.locked) {
+      refuseLocked([gem]);
+      return;
+    }
     state.selected = { r: cell.r, c: cell.c };
     gem.el.classList.add('selected');
     SFX.click();
@@ -602,6 +673,14 @@
     const ga = gemAt(a.r, a.c);
     const gb = gemAt(b.r, b.c);
     if (!ga || !gb) return;
+
+    // Камень в лианах не двигается: мягкий отказ, ход не тратится.
+    if (!Board.canSwap(state.grid, a, b)) {
+      clearSelection();
+      state.lastAction = now();
+      refuseLocked([ga, gb].filter(g => g.locked));
+      return;
+    }
 
     state.busy = true;
     state.lastAction = now();
@@ -855,15 +934,44 @@
     clearSelection();
     clearHints();
     showToast(auto ? 'Ходов нет — перемешиваем камни' : 'Камни перемешаны', 1700);
-    Array.from(dom.tiles.children).forEach(node => {
+    // Перемешиваются только камни не в лианах; закреплённые стоят на месте.
+    const movable = [];
+    state.grid.forEach(row => row.forEach(gem => {
+      if (gem && !gem.locked && gem.el) movable.push(gem);
+    }));
+    movable.forEach(gem => {
+      const node = gem.el;
       node.style.transition = 'transform .28s ease, opacity .28s ease';
       node.style.opacity = '0';
       node.style.transform += ' scale(.4) rotate(20deg)';
     });
     await sleep(300);
-    generateGridData();
-    spawnBoard();
-    await sleep(900);
+    const colorBefore = new Map(movable.map(gem => [gem, gem.color]));
+    Board.shuffle(state.grid, Math.random, { colors: TYPES });
+    movable.forEach(gem => {
+      const node = gem.el;
+      if (colorBefore.get(gem) !== gem.color) node.innerHTML = ART.gemInner(gem.color, gem.special);
+      node.style.transition = 'none';
+      applyPos(gem);
+    });
+    void dom.tiles.offsetWidth;
+    movable.forEach(gem => {
+      const node = gem.el;
+      node.style.transition = 'opacity .35s ease';
+      node.style.opacity = '1';
+      const inner = node.querySelector('.gem-inner');
+      if (inner && inner.animate) {
+        inner.animate(
+          [{ transform: 'scale(.3) rotate(-20deg)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
+          { duration: 420, easing: 'cubic-bezier(.2,.8,.3,1.2)' }
+        );
+      }
+    });
+    await sleep(480);
+    movable.forEach(gem => {
+      gem.el.style.transition = '';
+      gem.el.style.opacity = '';
+    });
     if (!force) state.busy = false;
     state.lastAction = now();
     flashHint('Новая комбинация готова', 'good');
@@ -918,6 +1026,9 @@
       const plan = Board.planCascade(state.grid, state.swapCell);
       if (!plan) break;
       const { creates, clear, triggers } = plan;
+      // Камни в лианах из clear уже исключены ядром: их лиана срывается, а
+      // сами они не считаются собранными (цели цвета, очки, clearedTotal).
+      const unlockArr = Array.from(plan.unlocks || []).map(parseKey);
 
       chain++;
       maxChain = Math.max(maxChain, chain);
@@ -973,11 +1084,13 @@
       let sr = 0;
       let sc = 0;
       cellsArr.forEach(p => { sr += p.r; sc += p.c; });
-      spawnScoreFloat(
-        sr / cellsArr.length,
-        sc / cellsArr.length,
-        '+' + fmtNum(gained) + (mult > 1 ? ' ×' + mult : '') + ' · темп ' + econ.paceLabel
-      );
+      if (cellsArr.length) {
+        spawnScoreFloat(
+          sr / cellsArr.length,
+          sc / cellsArr.length,
+          '+' + fmtNum(gained) + (mult > 1 ? ' ×' + mult : '') + ' · темп ' + econ.paceLabel
+        );
+      }
 
       if (!triggers.length && (clear.size >= 6 || chain >= 3)) {
         const strength = Math.min(1, (clear.size - 5) / 10 + (chain - 2) * 0.12);
@@ -1007,6 +1120,15 @@
         spawnParticles(p.r, p.c, GEM_COLORS[gem.color]);
       });
 
+      // Срыв лиан: лиана вспыхивает и рвётся, камень остаётся на месте.
+      unlockArr.forEach(p => {
+        const gem = gemAt(p.r, p.c);
+        if (!gem || !gem.el) return;
+        gem.el.classList.add('vine-snap');
+        spawnBurst(p.r, p.c, '#6fe04a', 7);
+        emitVisual('unlock', { r: p.r, c: p.c });
+      });
+
       if (creates.length) {
         // Показываем самый приоритетный из созданных спецкамней
         const rank = { totem: 0, sun: 1, bomb: 2, line: 3 };
@@ -1016,10 +1138,11 @@
 
       await sleep(310);
 
-      const { removed } = Board.applyCascade(state.grid, plan);
+      const { removed, unlocked } = Board.applyCascade(state.grid, plan);
       removed.forEach(gem => {
         if (gem.el) gem.el.remove();
       });
+      unlocked.forEach(gem => setGemLocked(gem, false));
 
       creates.forEach(cr => {
         const gem = gemAt(cr.r, cr.c);
@@ -1494,7 +1617,15 @@
       checkEnd, upgradeGem, applyPos, beginLevel, showHint,
       findSquares, findCorners, analyzePatterns,
       findLineGroups, hasAnyMatch,
-      expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys)
+      expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys),
+      reshuffleBoard,
+      // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)
+      setVines(cells) {
+        const want = new Set((cells || []).map(([r, c]) => r + ',' + c));
+        state.grid.forEach((row, r) => row.forEach((gem, c) => {
+          if (gem) setGemLocked(gem, want.has(r + ',' + c));
+        }));
+      }
     };
   }
 
