@@ -507,10 +507,15 @@ body[data-combo="8"] .combo-badge::after {
 .end-stars-text {
   margin: 0 0 6px;
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: .04em;
-  color: #ffe4a4;
+  color: #fff3cf;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .85), 0 0 10px rgba(0, 0, 0, .7);
+  padding: 6px 18px;
+  border-radius: 12px;
+  background: rgba(20, 14, 6, .72);
+  border: 1px solid rgba(236, 208, 138, .45);
 }
 
 /* Осколок Солнечного Камня: цвет по материалу */

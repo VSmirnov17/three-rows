@@ -24,7 +24,7 @@
   color: #e9dcbc;
   background:
     linear-gradient(180deg, rgba(255, 240, 200, .08), rgba(0, 0, 0, .25)),
-    var(--stone-tex) center / cover,
+    url("../assets/ui/stone.webp") center / cover,
     var(--stone-4);
   border: 2px solid rgba(236, 208, 138, .35);
   box-shadow: 0 6px 16px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 235, 180, .15);
