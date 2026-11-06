@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b1a12">
+<title>Сокровища Солнца — три в ряд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Marcellus&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg id="svg-defs" aria-hidden="true" focusable="false"></svg>
+
+<div id="app" class="app">
+  <div class="jungle" aria-hidden="true">
+    <div class="light-shaft shaft-a"></div>
+    <div class="light-shaft shaft-b"></div>
+    <div class="light-shaft shaft-c"></div>
+    <div id="leaves" class="leaves"></div>
+    <div id="fireflies" class="fireflies"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <div class="game-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-kicker">Тайны ацтеков</span>
+        <h1 class="brand-title">Сокровища Солнца</h1>
+      </div>
+
+      <div class="score-plaque plaque">
+        <span class="plaque-label">Счёт</span>
+        <span id="scoreValue" class="score-value">0</span>
+      </div>
+
+      <div class="top-right">
+        <div class="level-plaque plaque">
+          <span class="plaque-label">Уровень</span>
+          <span id="levelValue" class="level-value">1 / 4</span>
+        </div>
+        <button id="menuBtnMobile" class="stone-btn icon-btn mobile-menu" aria-label="Меню">
+          <svg viewBox="0 0 100 100"><use href="#icon-menu"></use></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="game">
+      <aside class="left-panel">
+        <button id="menuBtn" class="stone-btn menu-btn">
+          <svg viewBox="0 0 100 100"><use href="#icon-menu"></use></svg>
+          <span>Меню</span>
+        </button>
+
+        <div class="dial-wrap">
+          <div class="dial">
+            <svg viewBox="0 0 130 130" class="dial-svg" aria-hidden="true">
+              <defs>
+                <linearGradient id="dialGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#f6df92"/>
+                  <stop offset=".55" stop-color="#9ce36b"/>
+                  <stop offset="1" stop-color="#2f9b58"/>
+                </linearGradient>
+              </defs>
+              <circle class="dial-track" cx="65" cy="65" r="55"></circle>
+              <circle id="dialProgress" class="dial-progress" cx="65" cy="65" r="55"></circle>
+              <circle class="dial-ring" cx="65" cy="65" r="45"></circle>
+              <g class="dial-ticks" id="dialTicks"></g>
+            </svg>
+            <div class="dial-center">
+              <span id="timeValue" class="time-value">2:00</span>
+              <span class="time-label">время</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="goal-card">
+          <div class="card-title"><span>Цели</span></div>
+          <div id="goalList" class="goal-list"></div>
+        </div>
+
+        <div class="shaman-wrap">
+          <div id="shamanArt" class="shaman-art"></div>
+          <div class="relic-plaque">
+            <svg class="relic-icon" viewBox="0 0 100 100"><use href="#icon-sun"></use></svg>
+            <div class="relic-meta"><b id="relicValue">0</b><span>камней</span></div>
+          </div>
+        </div>
+
+        <div class="tool-row">
+          <button id="hintBtn" class="stone-btn icon-btn" aria-label="Подсказка" title="Подсказка">
+            <svg viewBox="0 0 100 100"><use href="#icon-star"></use></svg>
+          </button>
+          <button id="shuffleBtn" class="stone-btn icon-btn" aria-label="Перемешать" title="Перемешать">
+            <svg viewBox="0 0 100 100"><use href="#icon-shuffle"></use></svg>
+            <span id="shuffleCd" class="btn-badge"></span>
+          </button>
+          <button id="soundBtn" class="stone-btn icon-btn" aria-label="Звук и музыка" title="Звук и музыка">
+            <svg viewBox="0 0 100 100"><use id="soundIcon" href="#icon-sound"></use></svg>
+          </button>
+        </div>
+      </aside>
+
+      <section class="board-area">
+        <div class="board-frame">
+          <div class="board" id="board">
+            <div class="board-bg" aria-hidden="true"></div>
+            <div class="tiles" id="tiles"></div>
+            <div class="fx-layer" id="fx" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="combo-badge" id="comboBadge">×2</div>
+        <div id="toast" class="toast"></div>
+        <div class="hint-bar" id="hintBar">Соединяй камни в ряд из трёх и более</div>
+      </section>
+
+      <aside class="right-panel">
+        <div class="combo-title">Комбо</div>
+        <div class="ladder" id="ladder">
+          <div class="ladder-track"></div>
+          <div class="ladder-fill" id="ladderFill"></div>
+          <div class="rung" data-mult="8"><span>×8</span></div>
+          <div class="rung" data-mult="7"><span>×7</span></div>
+          <div class="rung" data-mult="6"><span>×6</span></div>
+          <div class="rung" data-mult="5"><span>×5</span></div>
+          <div class="rung" data-mult="4"><span>×4</span></div>
+          <div class="rung" data-mult="3"><span>×3</span></div>
+          <div class="rung" data-mult="2"><span>×2</span></div>
+          <div class="ladder-top">
+            <svg viewBox="0 0 100 100"><use href="#icon-sun"></use></svg>
+          </div>
+        </div>
+        <div class="combo-hint">серия<br>совпадений</div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="startScreen" class="overlay show">
+    <div class="start-card">
+      <div class="start-emblem">
+        <img class="emblem-img" src="assets/ui/sun-emblem.png" alt="">
+        <div class="emblem-glow"></div>
+      </div>
+      <h1 class="start-title">Сокровища<br><span>Солнца</span></h1>
+      <p class="start-sub">Три в ряд · Тайны древних ацтеков</p>
+      <button id="playBtn" class="gold-btn big">
+        <span>Играть</span>
+      </button>
+      <button id="continueBtn" class="stone-btn continue-btn" style="display:none">Продолжить</button>
+      <div class="start-links">
+        <button id="howBtn" class="link-btn">Как играть</button>
+        <span class="dot">·</span>
+        <button id="soundStartBtn" class="link-btn">Звук: вкл</button>
+      </div>
+      <div class="best-line">Лучший счёт <b id="bestScore">0</b></div>
+    </div>
+  </div>
+
+  <div id="howScreen" class="overlay">
+    <div class="modal-card">
+      <h2>Как играть</h2>
+      <ul class="rules">
+        <li>
+          <span class="rule-icon"><img class="rule-gem" src="assets/gems/gem-0.png" alt=""></span>
+          <div><b>Меняй камни местами</b><span>Собирай три и более одинаковых камня в ряд или столбец.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-bolt"></use></svg></span>
+          <div><b>4 в ряд — камень-молния</b><span>Сопоставь его — и целый ряд или столбец рассыплется.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-star"></use></svg></span>
+          <div><b>5 в ряд — солнечный камень</b><span>Уничтожает все камни своего цвета на поле.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-burst"></use></svg></span>
+          <div><b>Квадрат 2×2 — камень-взрыв</b><span>Сопоставь его — и взрыв сотрёт область 3×3 вокруг.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-totem"></use></svg></span>
+          <div><b>Уголок из 5 — тотем</b><span>Пересеки горизонталь и вертикаль — крест вычистит весь ряд и столбец.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-clock"></use></svg></span>
+          <div><b>Спеши — темп даёт очки</b><span>Чем раньше очищены нужные камни, тем выше множитель темпа. В конце останется небольшой бонус за секунды.</span></div>
+        </li>
+      </ul>
+      <p class="rules-note">Каскады повышают множитель: ×2, ×3 … до ×8.</p>
+      <button id="closeHowBtn" class="gold-btn">Понятно</button>
+    </div>
+  </div>
+
+  <div id="pauseScreen" class="overlay">
+    <div class="modal-card pause-card">
+      <h2>Пауза</h2>
+      <p class="modal-sub">Древние камни ждут своего часа</p>
+      <div class="pause-buttons">
+        <button id="resumeBtn" class="gold-btn">Продолжить</button>
+        <button id="restartBtn" class="stone-btn wide">Начать уровень заново</button>
+        <button id="homeBtn" class="stone-btn wide">В главное меню</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="endScreen" class="overlay">
+    <div class="modal-card end-card">
+      <div id="endEmblem" class="end-emblem">
+        <img class="emblem-img" src="assets/ui/sun-emblem.png" alt="">
+      </div>
+      <h2 id="endTitle">Уровень пройден!</h2>
+      <p id="endSub" class="modal-sub"></p>
+      <div class="end-stats">
+        <div><span>Счёт</span><b id="endScore">0</b></div>
+        <div><span>Бонус времени</span><b id="endBonus">0</b></div>
+        <div><span>Осталось</span><b id="endTime">0:00</b></div>
+      </div>
+      <div class="end-actions">
+        <button id="nextBtn" class="gold-btn">Следующий уровень</button>
+        <button id="retryBtn" class="stone-btn wide">Заново</button>
+        <button id="endHomeBtn" class="stone-btn wide">В меню</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="countdown" class="countdown hidden">
+    <span id="countdownNum">3</span>
+  </div>
+</div>
+
+<script src="js/art.js"></script>
+<script src="js/art-extra.js"></script>
+<script src="js/sfx-samples.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/economy.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
