@@ -1,0 +1,145 @@
+/* Сюжетные сцены и перенос прогресса.
+   Сцена: фон земли под тёмной вуалью, фраза не мельче 28px, кнопки не ниже
+   56px и 20px. Смена фраз — плавное проявление; при reduce-motion без анимации. */
+
+.overlay.story-screen {
+  place-items: end center;
+  padding: 20px 20px 32px;
+  background: #050d09 center / cover no-repeat;
+}
+
+/* Фон земли ставит скрипт (style.backgroundImage); вуаль лежит поверх него */
+.overlay.story-screen::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(3, 9, 6, .3) 0%, rgba(3, 9, 6, .6) 50%, rgba(3, 9, 6, .88) 100%);
+  pointer-events: none;
+}
+
+.story-card {
+  position: relative;
+  width: min(820px, 100%);
+  padding: 28px 32px 26px;
+  border-radius: 16px;
+  text-align: center;
+  background: rgba(8, 14, 10, .82);
+  border: 2px solid #c2a25e;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 241, 200, .25);
+}
+
+.story-text {
+  margin: 0;
+  min-height: 5.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(28px, 4vw, 34px);
+  line-height: 1.4;
+  color: #fff6dc;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .7);
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+
+.story-text.shown { opacity: 1; }
+
+.story-step {
+  margin: 14px 0 18px;
+  font-size: 20px;
+  color: #e4d4a8;
+}
+
+.story-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.story-actions .gold-btn,
+.story-actions .stone-btn {
+  min-width: 200px;
+  min-height: 60px;
+  font-size: 22px;
+  letter-spacing: .06em;
+}
+
+@media (max-width: 560px) {
+  .story-card { padding: 20px 16px 18px; }
+  .story-actions .gold-btn, .story-actions .stone-btn { width: 100%; }
+}
+
+/* ---------- Перенос прогресса ---------- */
+.transfer-card {
+  width: min(640px, 100%);
+  text-align: left;
+}
+
+.transfer-card h2 { text-align: center; }
+
+.transfer-lead {
+  margin: 0 0 18px;
+  font-size: 22px;
+  line-height: 1.4;
+  color: #f0e4c2;
+  text-align: center;
+}
+
+.transfer-label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold-bright);
+}
+
+.transfer-field {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  resize: vertical;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 20px;
+  line-height: 1.35;
+  word-break: break-all;
+  color: #fff6dc;
+  background: rgba(0, 0, 0, .55);
+  border: 2px solid rgba(236, 208, 138, .55);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.transfer-field:focus { outline: 3px solid var(--gold-bright); outline-offset: 2px; }
+.transfer-field::placeholder { color: #b9aa84; }
+
+.transfer-card .gold-btn {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  margin-top: 10px;
+  font-size: 22px;
+}
+
+.transfer-note {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+  font-size: 22px;
+  line-height: 1.35;
+  color: #e4d4a8;
+}
+
+.transfer-note.ok { color: #8ff0a8; font-weight: 700; }
+.transfer-note.error { color: #ffb4a0; font-weight: 700; }
+.transfer-note.hint { color: var(--gold-bright); }
+
+.transfer-card .stone-btn.wide {
+  display: flex;
+  margin: 18px auto 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-text { transition: none; }
+}

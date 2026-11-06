@@ -1583,10 +1583,13 @@
       return false;
     }
     const storage = getStorage();
+    /* Прежняя запись есть, а копию сделать не вышло — не затираем её */
     try {
       const prev = Progress.readRaw(storage);
       if (prev !== null) storage.setItem(BACKUP_KEY, prev);
-    } catch (e) { /* копия не удалась — замена всё равно нужна */ }
+    } catch (e) {
+      return false;
+    }
     state.save = clean;
     state.difficulty = state.save.difficulty;
     const ok = saveProgress();
@@ -1598,6 +1601,15 @@
     // Открытая карта перерисовывается по этому событию
     window.dispatchEvent(new CustomEvent('sun:save-replaced'));
     return ok;
+  }
+
+  /* Сцена показана (или пропущена) — запоминаем в сохранении. */
+  function markSceneSeen(sceneId) {
+    if (typeof sceneId !== 'string' || !sceneId) return false;
+    if (!Array.isArray(state.save.seenScenes)) state.save.seenScenes = [];
+    if (state.save.seenScenes.indexOf(sceneId) >= 0) return true;
+    state.save.seenScenes.push(sceneId);
+    return saveProgress();
   }
 
   /* ---------- Ввод ---------- */
@@ -1838,7 +1850,9 @@
     showHome,
     // Для экранов поверх игры (карта): оверлеи и флаг «поверх поля»
     openOverlay,
+    closeOverlay,
     closeAllOverlays,
+    markSceneSeen,
     // Перед запуском уровня (пролог, вступление земли). Можно вернуть Promise.
     onBeforeLevel() {},
     // Карта пути подключается в js/screens/map.js как Game.showMap.

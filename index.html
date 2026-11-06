@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="css/screens.css">
 <link rel="stylesheet" href="css/mode.css">
 <link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/story.css">
 </head>
 <body>
 <svg id="svg-defs" aria-hidden="true" focusable="false"></svg>
@@ -170,6 +171,7 @@
       </button>
       <button id="continueBtn" class="stone-btn continue-btn" style="display:none">Продолжить</button>
       <button id="mapBtn" class="stone-btn map-open-btn">Путь хранителя</button>
+      <button id="transferBtn" class="stone-btn map-open-btn" type="button">Перенести прогресс</button>
       <div class="start-links">
         <button id="howBtn" class="link-btn">Как играть</button>
         <span class="dot">·</span>
@@ -266,7 +268,7 @@
           <span>В главное меню</span>
         </button>
         <h2 class="map-title">Путь хранителя</h2>
-        <div class="map-stars-total" role="status">Звёзд собрано: <b id="mapStarsTotal">0</b></div>
+        <div class="map-stars-total" role="status">Всего звёзд: <b id="mapStarsTotal">0</b></div>
       </header>
 
       <div class="map-diff">
@@ -288,6 +290,36 @@
     </div>
   </div>
 
+  <div id="storyScreen" class="overlay story-screen" role="dialog" aria-modal="true" aria-label="История">
+    <div class="story-card">
+      <p id="storyText" class="story-text" aria-live="polite"></p>
+      <div id="storyStep" class="story-step"></div>
+      <div class="story-actions">
+        <button id="storyNextBtn" class="gold-btn" type="button">Дальше</button>
+        <button id="storySkipBtn" class="stone-btn" type="button">Пропустить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="transferScreen" class="overlay transfer-screen" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+    <div class="modal-card transfer-card">
+      <h2 id="transferTitle">Перенос прогресса</h2>
+      <p class="transfer-lead">Чтобы продолжить игру на другом компьютере, скопируйте код отсюда и вставьте его там.</p>
+
+      <label class="transfer-label" for="transferExport">Ваш код</label>
+      <textarea id="transferExport" class="transfer-field" rows="4" readonly spellcheck="false"></textarea>
+      <button id="transferCopyBtn" class="gold-btn" type="button">Скопировать</button>
+      <p id="transferCopyNote" class="transfer-note" role="status"></p>
+
+      <label class="transfer-label" for="transferImport">Код с другого компьютера</label>
+      <textarea id="transferImport" class="transfer-field" rows="4" spellcheck="false" autocomplete="off" placeholder="Вставьте сюда код"></textarea>
+      <button id="transferLoadBtn" class="gold-btn" type="button">Загрузить</button>
+      <p id="transferLoadNote" class="transfer-note" role="status"></p>
+
+      <button id="transferBackBtn" class="stone-btn wide" type="button">Назад</button>
+    </div>
+  </div>
+
   <div id="countdown" class="countdown hidden">
     <span id="countdownNum">3</span>
   </div>
@@ -306,6 +338,8 @@
 <script src="js/campaign/progress.js"></script>
 <script src="js/game.js"></script>
 <script src="js/screens/map.js"></script>
+<script src="js/screens/story.js"></script>
+<script src="js/screens/transfer.js"></script>
 <script src="js/visuals.js"></script>
 <script src="js/visuals-shaman.js"></script>
 <script src="js/visuals-screens.js"></script>

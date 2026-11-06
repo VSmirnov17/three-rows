@@ -375,6 +375,11 @@ button.land-head:hover { filter: brightness(1.12); }
   .mosaic-cell.tier-silver { border-width: 5px; }
 }
 
+/* Кнопка «История» под легендой мозаики */
+.stone-btn.story-open-btn {
+  margin: 14px 0 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .level-btn { transition: none; }
 }

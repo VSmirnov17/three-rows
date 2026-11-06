@@ -39,7 +39,7 @@
 }
 
 .mode-btn small {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.2;
   opacity: .9;
 }
@@ -68,7 +68,7 @@
     text-align: right;
   }
   .mode-btn b { font-size: 20px; }
-  .mode-btn small { font-size: 16px; }
+  .mode-btn small { font-size: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

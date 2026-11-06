@@ -177,6 +177,17 @@
     return grid;
   }
 
+  /* «История» — пересмотреть вступление (и финал, если он уже показан) */
+  function buildStoryBtn(land) {
+    const btn = el('button', 'stone-btn wide story-open-btn', 'История');
+    btn.type = 'button';
+    btn.addEventListener('click', () => {
+      if (window.SFX) window.SFX.click();
+      if (window.Story) window.Story.replayLand(land.id);
+    });
+    return btn;
+  }
+
   /* ---------- Земли ---------- */
   function buildLandCard(land, save, difficulty) {
     const selected = land.id === selectedLandId;
@@ -201,6 +212,7 @@
       const left = el('div', 'land-mosaic-col');
       left.appendChild(buildMosaic(land, save));
       left.appendChild(buildLegend());
+      left.appendChild(buildStoryBtn(land));
       const right = el('div', 'land-levels-col');
       const note = el('p', 'level-note');
       note.setAttribute('role', 'status');
