@@ -4,8 +4,10 @@
  * Прогоняет уровни кампании ботом на ядре поля (js/core/board.js) и считает
  * очки по js/economy.js так же, как js/game.js (resolveBoard).
  *
- *   node tools/level-bot.js --check   [--lands 1-2] [--seeds 20]
- *   node tools/level-bot.js --suggest [--lands 1-2] [--seeds 20] [--js]
+ *   node tools/level-bot.js --check   [--lands 1-2] [--seeds 20] [--seed-offset 0] [--star-seeds 500]
+ *   node tools/level-bot.js --suggest [--lands 1-2] [--seeds 20] [--star-seeds 500] [--js]
+ * --seeds: партии greedy (проходимость); --star-seeds: партии human (звёзды,
+ * медианы ходов); --seed-offset сдвигает сиды (независимая выборка).
  *
  * Политики:
  *   greedy — лучший ход по (прогресс целей, затем очки): проверка проходимости;
@@ -25,6 +27,11 @@ const MAX_MOVES = 150;
 const SECONDS_PER_MOVE = 4;
 const COLORS = 6;
 const HUMAN_TOP = 3;
+/* Пороги звёзд берутся с запасом от краёв коридоров (s2: p30-p50, s3: p75-p90):
+   40-й перцентиль — почти центр, а 82-й вместо 80-го — чтобы шум выборки
+   не выводил порог из коридора на независимых сидах. */
+const S2_PCT = 40;
+const S3_PCT = 82;
 const REST_LEVELS = new Set(['1-10', '1-15', '2-08', '2-14']);
 
 /* ---------- Утилиты ---------- */
@@ -93,7 +100,7 @@ function cloneProgress(p) {
    chain с 1. Камни, с которых лишь сорвана лиана, в clear не входят.
    Возвращает null, если обмен недопустим; иначе
    { progress, score, gained: {colors: Map, vines} }. */
-function runMove(grid, a, b, turnSeed, progress, timeLeft, totalTime) {
+function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime) {
   const rng = mulberry32(turnSeed);
   let idCounter = 1000000;
   const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS });
@@ -104,7 +111,7 @@ function runMove(grid, a, b, turnSeed, progress, timeLeft, totalTime) {
   const colorGain = new Map();
   let vinesGain = 0;
   let progressUnits = 0;
-  let score = 0;
+  const scores = timeLefts.map(() => 0);
   let offset = 0;
 
   res.cascades.forEach((plan, i) => {
@@ -129,18 +136,20 @@ function runMove(grid, a, b, turnSeed, progress, timeLeft, totalTime) {
     vinesGain += take;
     progressUnits += take;
 
-    score += Economy.clearDetail({
-      cells: size,
-      goalCells,
-      chain: i + 1,
-      creates: plan.creates,
-      triggers: plan.triggers,
-      timeLeft,
-      totalTime
-    }).score;
+    timeLefts.forEach((timeLeft, k) => {
+      scores[k] += Economy.clearDetail({
+        cells: size,
+        goalCells,
+        chain: i + 1,
+        creates: plan.creates,
+        triggers: plan.triggers,
+        timeLeft,
+        totalTime
+      }).score;
+    });
   });
 
-  return { progress: progressUnits, score, gained: { colors: colorGain, vines: vinesGain } };
+  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain } };
 }
 
 /* Все обмены, дающие совпадение (проверка как в Board.findMove). */
@@ -170,11 +179,15 @@ function legalMoves(grid) {
 /* ---------- Партия ---------- */
 
 /* resolved — результат Campaign.resolve(id, difficulty).
-   Возвращает { won, moves, score, shuffles }. */
+   Возвращает { won, moves, score, scores, shuffles }.
+   opts.models — модели времени для очков: 'calm' (timeLeft = econTime/2) и/или
+   'timed' (econTime - ходы*4). Ходы выбираются по первой модели, очки
+   считаются сразу по всем (scores); по умолчанию — модель самой сложности.
+   Так «Спокойно» и «Обычно» делят одну партию. */
 function playLevel(resolved, seed, opts) {
   const policy = (opts && opts.policy) || 'greedy';
   const maxMoves = (opts && opts.maxMoves) || MAX_MOVES;
-  const calm = resolved.timer == null;
+  const models = (opts && opts.models) || [resolved.timer == null ? 'calm' : 'timed'];
   const total = resolved.econTime;
 
   const base = (Math.imul(seed >>> 0, 2654435761) ^ hashString(resolved.id)) >>> 0;
@@ -187,7 +200,7 @@ function playLevel(resolved, seed, opts) {
   const progress = makeProgress(resolved);
 
   let moves = 0;
-  let score = 0;
+  const scores = models.map(() => 0);
   let shuffles = 0;
 
   while (!isDone(progress) && moves < maxMoves) {
@@ -197,12 +210,12 @@ function playLevel(resolved, seed, opts) {
       if (!Board.hasMove(grid)) break;
     }
 
-    const timeLeft = calm ? total * 0.5 : Math.max(0, total - moves * SECONDS_PER_MOVE);
+    const timeLefts = models.map(m => (m === 'calm' ? total * 0.5 : Math.max(0, total - moves * SECONDS_PER_MOVE)));
     const turnSeed = Math.floor(rng() * 4294967296);
 
     const cands = [];
     legalMoves(grid).forEach((mv, order) => {
-      const r = runMove(cloneGrid(grid), mv.a, mv.b, turnSeed, progress, timeLeft, total);
+      const r = runMove(cloneGrid(grid), mv.a, mv.b, turnSeed, progress, timeLefts.slice(0, 1), total);
       if (r) cands.push({ mv, order, progress: r.progress, score: r.score });
     });
     if (!cands.length) break;
@@ -214,16 +227,16 @@ function playLevel(resolved, seed, opts) {
       pick = cands[Math.floor(pickRng() * top)];
     }
 
-    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLeft, total);
+    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total);
     moves++;
-    score += r.score;
+    r.scores.forEach((v, k) => { scores[k] += v; });
     r.gained.colors.forEach((n, color) => {
       progress.colorLeft.set(color, progress.colorLeft.get(color) - n);
     });
     progress.vinesLeft -= r.gained.vines;
   }
 
-  return { won: isDone(progress), moves, score, shuffles };
+  return { won: isDone(progress), moves, score: scores[0], scores, shuffles };
 }
 
 /* ---------- Сбор статистики ---------- */
@@ -246,19 +259,34 @@ function levelIds(spec) {
 
 const median = a => percentile(a, 50);
 
-/* Прогоняет уровень по всем сложностям и политикам. */
-function analyzeLevel(id, seeds) {
-  const out = {};
-  Campaign.DIFFICULTIES.forEach(diff => {
-    const resolved = Campaign.resolve(id, diff);
-    const greedy = [];
-    const human = [];
-    for (let s = 1; s <= seeds; s++) {
-      greedy.push(playLevel(resolved, s, { policy: 'greedy' }));
-      human.push(playLevel(resolved, s, { policy: 'human' }));
+/* Прогоняет уровень по всем сложностям и политикам.
+   greedy: seeds партий (проходимость); human: starSeeds партий (пороги звёзд
+   и медианы ходов — им нужна большая выборка). «Спокойно» и «Обычно» имеют
+   одни цели, поэтому играются одной партией с двумя моделями времени. */
+function analyzeLevel(id, seeds, offset, starSeeds) {
+  const off = offset || 0;
+  const nStar = starSeeds || seeds;
+  const resolved = {};
+  Campaign.DIFFICULTIES.forEach(d => { resolved[d] = Campaign.resolve(id, d); });
+
+  const run = (diffs, policy, count) => {
+    const res = diffs.map(() => []);
+    const models = diffs.map(d => (d === 'calm' ? 'calm' : 'timed'));
+    for (let s = off + 1; s <= off + count; s++) {
+      const r = playLevel(resolved[diffs[diffs.length - 1]], s, { policy, models });
+      diffs.forEach((d, k) => res[k].push({ won: r.won, moves: r.moves, score: r.scores[k], shuffles: r.shuffles }));
     }
-    out[diff] = { resolved, greedy, human };
-  });
+    return res;
+  };
+
+  const out = {};
+  const gCN = run(['calm', 'normal'], 'greedy', seeds);
+  const gCh = run(['challenge'], 'greedy', seeds);
+  const hCN = run(['calm', 'normal'], 'human', nStar);
+  const hCh = run(['challenge'], 'human', nStar);
+  out.calm = { resolved: resolved.calm, greedy: gCN[0], human: hCN[0] };
+  out.normal = { resolved: resolved.normal, greedy: gCN[1], human: hCN[1] };
+  out.challenge = { resolved: resolved.challenge, greedy: gCh[0], human: hCh[0] };
   return out;
 }
 
@@ -291,10 +319,8 @@ function evaluate(id, data) {
 
     const scores = human.filter(r => r.won).map(r => r.score);
     const p30 = percentile(scores, 30);
-    const p40 = percentile(scores, 40);
     const p50 = percentile(scores, 50);
     const p75 = percentile(scores, 75);
-    const p80 = percentile(scores, 80);
     const p90 = percentile(scores, 90);
     const [s2, s3] = resolved.stars;
     if (!scores.length) {
@@ -314,7 +340,6 @@ function evaluate(id, data) {
       timer: resolved.timer,
       medMoves: median(wins.map(r => r.moves)),
       humanMoves: median(human.filter(r => r.won).map(r => r.moves)),
-      sugg: [p40, p80],
       stars: resolved.stars,
       shuffles: greedy.reduce((n, r) => n + r.shuffles, 0)
     };
@@ -344,8 +369,8 @@ function niceFit(target, lo, hi) {
 
 function suggestStars(human) {
   const scores = human.filter(r => r.won).map(r => r.score);
-  const s2 = niceFit(percentile(scores, 40), percentile(scores, 30), percentile(scores, 50));
-  const s3 = niceFit(percentile(scores, 80), percentile(scores, 75), percentile(scores, 90));
+  const s2 = niceFit(percentile(scores, S2_PCT), percentile(scores, 30), percentile(scores, 50));
+  const s3 = niceFit(percentile(scores, S3_PCT), percentile(scores, 75), percentile(scores, 90));
   return [s2, Math.max(s3, s2 + 1)];
 }
 
@@ -361,23 +386,55 @@ function padL(s, n) {
   return s.length >= n ? s : ' '.repeat(n - s.length) + s;
 }
 
+/* Гладкость: медиана human-ходов на «Спокойно» уровня n+1 не меньше 75% от
+   уровня n. Исключения: уровни-передышки и первый уровень земли (новая земля
+   начинается с обучающего уровня). */
 function smoothnessWarnings(rows) {
   const warns = [];
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1];
     const cur = rows[i];
-    if (REST_LEVELS.has(cur.id)) continue;
-    const a = prev.info.calm.medMoves;
-    const b = cur.info.calm.medMoves;
+    if (REST_LEVELS.has(cur.id) || /-01$/.test(cur.id)) continue;
+    const a = prev.info.calm.humanMoves;
+    const b = cur.info.calm.humanMoves;
     if (b < a * 0.75) {
-      warns.push('ПРЕДУПРЕЖДЕНИЕ ' + cur.id + ': медиана ходов ' + b + ' < 75% от ' + prev.id + ' (' + a + ')');
+      warns.push('ПРЕДУПРЕЖДЕНИЕ ' + cur.id + ': медиана human-ходов ' + b + ' < 75% от ' + prev.id + ' (' + a + ')');
     }
   }
   return warns;
 }
 
+/* ---------- Параллельный прогон по уровням (worker_threads) ---------- */
+
+function analyzeAll(ids, seeds, offset, starSeeds, jobs) {
+  const { Worker } = require('node:worker_threads');
+  const n = Math.max(1, Math.min(jobs, ids.length));
+  if (n === 1) return Promise.resolve(ids.map(id => analyzeLevel(id, seeds, offset, starSeeds)));
+  return new Promise((resolve, reject) => {
+    const results = new Array(ids.length);
+    let next = 0;
+    let done = 0;
+    const workers = [];
+    const feed = w => {
+      if (next >= ids.length) { w.terminate(); return; }
+      const index = next++;
+      w.postMessage({ index, id: ids[index], seeds, offset, starSeeds });
+    };
+    for (let i = 0; i < n; i++) {
+      const w = new Worker(__filename);
+      workers.push(w);
+      w.on('message', msg => {
+        results[msg.index] = msg.data;
+        if (++done === ids.length) { workers.forEach(x => x.terminate()); resolve(results); } else feed(w);
+      });
+      w.on('error', reject);
+      feed(w);
+    }
+  });
+}
+
 function parseArgs(argv) {
-  const args = { mode: null, lands: '1-2', seeds: 20, js: false };
+  const args = { mode: null, lands: '1-2', seeds: 20, offset: 0, starSeeds: 500, jobs: Math.max(1, Math.min(8, require('node:os').cpus().length - 1)), js: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--check') args.mode = 'check';
@@ -385,23 +442,26 @@ function parseArgs(argv) {
     else if (a === '--js') args.js = true;
     else if (a === '--lands') args.lands = argv[++i];
     else if (a === '--seeds') args.seeds = Number(argv[++i]);
+    else if (a === '--seed-offset') args.offset = Number(argv[++i]);
+    else if (a === '--star-seeds') args.starSeeds = Number(argv[++i]);
+    else if (a === '--jobs') args.jobs = Number(argv[++i]);
     else if (a === '--level') args.level = argv[++i];
   }
   return args;
 }
 
-function main(argv) {
+async function main(argv) {
   const args = parseArgs(argv);
   if (!args.mode) {
-    console.log('Использование: node tools/level-bot.js --check|--suggest [--lands 1-2] [--seeds 20] [--level 1-01] [--js]');
+    console.log('Использование: node tools/level-bot.js --check|--suggest [--lands 1-2] [--seeds 20] [--seed-offset 0] [--star-seeds 500] [--jobs N] [--level 1-01] [--js]');
     return 0;
   }
   const ids = args.level ? [args.level] : levelIds(args.lands);
-  const datas = ids.map(id => analyzeLevel(id, args.seeds));
+  const datas = await analyzeAll(ids, args.seeds, args.offset, args.starSeeds, args.jobs);
   const rows = ids.map((id, i) => evaluate(id, datas[i]));
 
   if (args.mode === 'suggest') {
-    console.log('Уровень | время | ходов (greedy, calm/norm/chal) | human-ходов (calm) | звёзды [s2,s3] calm / normal / challenge (p40/p80 human)');
+    console.log('Уровень | время | greedy-ходы calm/norm/chal | human-ходы calm/norm/chal | звёзды [s2,s3] calm / normal / challenge (p40/p82 human)');
     const table = {};
     ids.forEach((id, i) => {
       const r = rows[i];
@@ -410,8 +470,8 @@ function main(argv) {
       table[id] = sg;
       console.log(
         pad(id, 6) + ' ' + padL(r.time, 4) + ' с | ' +
-        Campaign.DIFFICULTIES.map(d => padL(r.info[d].medMoves, 4)).join(' ') + ' | ' +
-        padL(r.info.calm.humanMoves, 4) + ' | ' +
+        Campaign.DIFFICULTIES.map(d => padL(r.info[d].medMoves, 5)).join(' ') + ' | ' +
+        Campaign.DIFFICULTIES.map(d => padL(r.info[d].humanMoves, 5)).join(' ') + ' | ' +
         Campaign.DIFFICULTIES.map(d => '[' + sg[d].join(',') + ']').join(' ')
       );
     });
@@ -459,6 +519,12 @@ module.exports = {
   SECONDS_PER_MOVE
 };
 
-if (require.main === module) {
-  process.exitCode = main(process.argv.slice(2));
+const wt = require('node:worker_threads');
+if (!wt.isMainThread && wt.parentPort) {
+  /* Рабочий поток: считает один уровень по запросу из analyzeAll. */
+  wt.parentPort.on('message', msg => {
+    wt.parentPort.postMessage({ index: msg.index, data: analyzeLevel(msg.id, msg.seeds, msg.offset, msg.starSeeds) });
+  });
+} else if (require.main === module) {
+  main(process.argv.slice(2)).then(code => { process.exitCode = code; });
 }
