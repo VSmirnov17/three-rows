@@ -31,15 +31,17 @@ test('всё показано — сцен нет', () => {
   assert.deepEqual(Story.nextScenes(saveWith({}, ['prologue', '1-intro']), FIRST, Campaign), []);
 });
 
-test('продолжение с середины земли: ни пролога, ни вступления', () => {
-  const save = saveWith({ '1-01': PASSED, '1-02': PASSED });
-  assert.deepEqual(Story.nextScenes(save, '1-03', Campaign), []);
+test('старое сохранение на 1-05: пролог и вступление один раз', () => {
+  const save = saveWith({ '1-01': PASSED, '1-02': PASSED, '1-03': PASSED, '1-04': PASSED });
+  assert.deepEqual(Story.nextScenes(save, '1-05', Campaign), ['prologue', '1-intro']);
+  const seen = saveWith({ '1-01': PASSED, '1-02': PASSED, '1-03': PASSED, '1-04': PASSED }, ['prologue', '1-intro']);
+  assert.deepEqual(Story.nextScenes(seen, '1-05', Campaign), []);
 });
 
-test('вторая земля: только своё вступление, пролога нет', () => {
-  const save = saveWith({ '1-01': PASSED }, []);
+test('вторая земля: пролог уже показан — только своё вступление', () => {
+  const save = saveWith({ '1-01': PASSED }, ['prologue']);
   assert.deepEqual(Story.nextScenes(save, LAND2_FIRST, Campaign), ['2-intro']);
-  assert.deepEqual(Story.nextScenes(saveWith({ '1-01': PASSED }, ['2-intro']), LAND2_FIRST, Campaign), []);
+  assert.deepEqual(Story.nextScenes(saveWith({ '1-01': PASSED }, ['prologue', '2-intro']), LAND2_FIRST, Campaign), []);
 });
 
 test('неизвестный уровень и пустой аргумент не ломают выбор', () => {

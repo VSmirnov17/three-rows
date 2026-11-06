@@ -27,28 +27,22 @@
     return !!(save && Array.isArray(save.seenScenes) && save.seenScenes.indexOf(sceneId) >= 0);
   }
 
-  function landProgress(save, land) {
-    const levels = (save && save.levels) || {};
-    return land.levels.some(lv => Object.prototype.hasOwnProperty.call(levels, lv.id));
-  }
-
-  /* Какие сцены показать перед стартом уровня (по порядку).
-     Пролог — пока в сохранении нет ни одного результата. Вступление земли —
-     пока в этой земле нет ни одного результата. Игрок со старым сохранением,
-     продолжающий с середины земли, вступление не видит. */
+  /* Какие сцены показать перед стартом уровня (по порядку): пролог, если он
+     ещё не показан, и вступление земли этого уровня, если оно не показано —
+     независимо от результатов. Игрок со старым сохранением видит их один раз. */
   function nextScenes(save, levelId, campaign) {
     const out = [];
     const land = campaign && campaign.landOf ? campaign.landOf(levelId) : null;
     if (!land) return out;
-    const levels = (save && save.levels) || {};
-    if (!hasSeen(save, PROLOGUE_ID) && Object.keys(levels).length === 0) out.push(PROLOGUE_ID);
+    if (!hasSeen(save, PROLOGUE_ID)) out.push(PROLOGUE_ID);
     const introId = land.id + '-intro';
-    if (!hasSeen(save, introId) && !landProgress(save, land)) out.push(introId);
+    if (!hasSeen(save, introId)) out.push(introId);
     return out;
   }
 
   /* ---------------- Браузерная часть ---------------- */
   let playing = null;
+  let lastSkipped = false;
 
   function sceneLand(sceneId) {
     const lands = window.Campaign.lands();
@@ -63,6 +57,7 @@
   /* Одна сцена. Пока она идёт, повторный вызов возвращает тот же Promise. */
   function play(sceneId, lines) {
     if (playing) return playing;
+    lastSkipped = false;
     const root = document.getElementById('storyScreen');
     const Game = window.Game;
     if (!root || !Game || !Array.isArray(lines) || lines.length === 0) return Promise.resolve();
@@ -110,6 +105,7 @@
 
       function onSkip() {
         if (window.SFX) window.SFX.click();
+        lastSkipped = true;
         finish();
       }
 
@@ -122,10 +118,11 @@
     return playing;
   }
 
-  /* Сцены подряд */
-  async function playList(items) {
+  /* Сцены подряд; со stopOnSkip «Пропустить» обрывает всю цепочку */
+  async function playList(items, stopOnSkip) {
     for (const item of items) {
       await play(item.id, item.lines);
+      if (stopOnSkip && lastSkipped) break;
     }
   }
 
@@ -147,7 +144,7 @@
     if (hasSeen(window.Game.getSave(), landId + '-outro')) {
       items.push({ id: landId + '-outro', lines: sceneLines(landId + '-outro') });
     }
-    return playList(items);
+    return playList(items, true);
   }
 
   function install() {
