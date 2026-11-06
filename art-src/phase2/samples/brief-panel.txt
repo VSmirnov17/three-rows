@@ -1,0 +1,7 @@
+$imagegen
+Asset: game UI panel texture sample, landscape 3:2, one image
+Request: a single rectangular plaque made of polished black obsidian, framed by an engraved gold border with an Aztec stepped-meander (greca) pattern, small square jade inlays set in the middle of each side and tiny gold rivets at the corners
+Look: premium painted game art, crisp and solid; soft even frontal light; deep glossy black stone with faint subtle reflections and a few fine natural fractures; antique polished gold with slight wear; muted jade green
+Composition: strictly front view, no perspective, plaque fills the frame with an even margin; border band about 8% of the plaque height; center area plain obsidian with no ornaments so it can be stretched
+Image 1: mood and material reference only (do not copy layout, text, glow, gems or background)
+Constraints: no text, no letters, no numbers, no icons, no glow, no fire, no background scenery; plain dark #0d0b0a around the plaque

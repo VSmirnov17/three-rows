@@ -1,0 +1,7 @@
+$imagegen
+Asset: game UI element sample, square 1:1, one image, transparent background
+Request: a round carved stone disc in the spirit of an Aztec sun calendar, warm dark grey-brown stone with gold inlaid details; in the center a stern, dignified carved stone face of a sun deity, calm closed mouth, serious expression; around the face a wide smooth recessed ring band of plain dark stone with no divisions, no segments and no carvings, so lit segments can be drawn over it later; a narrow outer rim with an engraved gold meander and four small jade inlays at top, bottom, left and right
+Look: premium painted game art matching polished black-obsidian-and-gold UI; soft frontal light; solid, heavy, ancient; no cartoon features
+Image 1: mood and material reference only (do not copy layout, text, glow or background)
+Composition: strictly front view, perfect circle centered, small even margin
+Constraints: transparent background outside the disc; no text, no letters, no glow, no fire, not cute, not smiling
