@@ -1,18 +1,45 @@
 /* Земля 1 — Джунгли Ягуара. Данные уровней (без DOM, без логики).
  *
  * goals: [{type:'color', color, need}] — цвета 0..5: рубин, солнце, нефрит,
- * бирюза, аметист, обсидиан. stars — заглушки, реальные пороги задаёт Task 6.
+ * бирюза, аметист, обсидиан. stars — пороги по очкам бота (tools/level-bot.js).
  */
 (function () {
   'use strict';
 
-  const STARS = () => ({ calm: [1, 2], normal: [1, 2], challenge: [1, 2] });
+  /* Пороги звёзд [s2, s3] по очкам human-бота (40-й и 80-й перцентиль, 20 сидов):
+     node tools/level-bot.js --suggest --lands 1-2 --js */
+  const STARS_BY_LEVEL = {
+    1: { calm: [1850, 2350], normal: [4750, 6000], challenge: [4900, 6500] },
+    2: { calm: [2750, 3500], normal: [6300, 9500], challenge: [6700, 10100] },
+    3: { calm: [2700, 3650], normal: [6800, 8300], challenge: [7200, 8600] },
+    4: { calm: [3750, 4300], normal: [9500, 11900], challenge: [10400, 12900] },
+    5: { calm: [2650, 3100], normal: [6000, 8000], challenge: [6100, 9000] },
+    6: { calm: [2550, 3100], normal: [6000, 7800], challenge: [7100, 8800] },
+    7: { calm: [3100, 3950], normal: [7600, 9800], challenge: [8200, 11200] },
+    8: { calm: [3700, 4200], normal: [9500, 11200], challenge: [10000, 12200] },
+    9: { calm: [3600, 4450], normal: [7900, 10900], challenge: [9400, 12000] },
+    10: { calm: [2600, 2900], normal: [7000, 7700], challenge: [7700, 8800] },
+    11: { calm: [3850, 4450], normal: [9500, 11200], challenge: [10400, 12200] },
+    12: { calm: [4100, 4550], normal: [10100, 11600], challenge: [10400, 13000] },
+    13: { calm: [4050, 5100], normal: [10000, 12300], challenge: [11000, 13800] },
+    14: { calm: [4050, 4750], normal: [9900, 11300], challenge: [10200, 13000] },
+    15: { calm: [2850, 3250], normal: [6700, 8500], challenge: [8200, 9300] },
+    16: { calm: [4400, 5200], normal: [11100, 13300], challenge: [12000, 14900] },
+    17: { calm: [4350, 5400], normal: [10700, 13300], challenge: [12000, 14200] },
+    18: { calm: [4500, 5100], normal: [10800, 12700], challenge: [11700, 14000] },
+    19: { calm: [4400, 5200], normal: [10500, 13300], challenge: [11400, 14100] },
+    20: { calm: [4700, 5400], normal: [11800, 13400], challenge: [12500, 15400] }
+  };
+  const STARS = n => {
+    const s = STARS_BY_LEVEL[n];
+    return { calm: s.calm.slice(), normal: s.normal.slice(), challenge: s.challenge.slice() };
+  };
   const lvl = (n, name, time, goals) => ({
     id: '1-' + String(n).padStart(2, '0'),
     name,
     time,
     goals: goals.map(([color, need]) => ({ type: 'color', color, need })),
-    stars: STARS()
+    stars: STARS(n)
   });
 
   const land = {
