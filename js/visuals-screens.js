@@ -213,7 +213,9 @@
       burstLayer.setAttribute('aria-hidden', 'true');
       const n = 8;
       for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + rand(-.2, .2);
+        /* Только верхняя полусфера: камни разлетаются вверх и в стороны,
+           не задевая заголовок и строки статистики под эмблемой */
+        const a = Math.PI + ((i + .5) / n) * Math.PI + rand(-.12, .12);
         const r = rand(110, 170);
         burstLayer.appendChild(makeGem({
           '--s': Math.round(rand(20, 30)) + 'px',
@@ -231,14 +233,14 @@
     ashLayer = document.createElement('div');
     ashLayer.className = 'sfx-ash';
     ashLayer.setAttribute('aria-hidden', 'true');
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 34; i++) {
       const p = document.createElement('i');
       p.style.left = rand(0, 100).toFixed(1) + '%';
-      p.style.setProperty('--s', rand(2, 5).toFixed(1) + 'px');
+      p.style.setProperty('--s', rand(3, 7).toFixed(1) + 'px');
       p.style.setProperty('--d', rand(7, 12).toFixed(1) + 's');
       p.style.setProperty('--delay', (-rand(0, 10)).toFixed(1) + 's');
       p.style.setProperty('--dx', Math.round(rand(-60, 60)) + 'px');
-      p.style.setProperty('--o', rand(.25, .65).toFixed(2));
+      p.style.setProperty('--o', rand(.45, .85).toFixed(2));
       ashLayer.appendChild(p);
     }
     endScreen.prepend(ashLayer);

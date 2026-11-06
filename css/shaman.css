@@ -185,6 +185,13 @@ body[data-urgency="tense"] .shaman-mood {
   animation: shamanTremble .22s linear infinite;
 }
 body[data-urgency="tense"] .shaman-orb { animation-duration: 1.2s; }
+/* Янтарный ореол: тревогу видно и без дрожи (и в reduced-motion) */
+body[data-urgency="tense"] .shaman-aura {
+  background: radial-gradient(closest-side, rgba(255, 170, 40, 0) 56%, rgba(255, 180, 60, .6) 64%, rgba(220, 130, 20, .22) 78%, rgba(220, 130, 20, 0) 100%);
+  opacity: .7;
+  transform: scale(1);
+  animation: shamanAura .9s ease-in-out infinite;
+}
 
 /* Почти нет времени: мечется, сфера раскаляется */
 body[data-urgency="urgent"] .shaman-mood {
