@@ -62,4 +62,4 @@ node tools/level-bot.js --check --lands 1-2   # проходимость уро�
 
 - Этап 1 делался в изолированной рабочей копии `.claude/worktrees/atomic-booping-rossum`, ветка `worktree-atomic-booping-rossum`. Защита такой сессии блокирует git-команды через rtk и любые операции с основной копией. Поэтому там git вызывался как `/usr/bin/git`, а сливал ветку в `main` сам пользователь.
 - **Следующую сессию лучше запускать из основной папки** `/Users/vladimirsmirnov/opencode-projects/deepseek/three-rows` без изоляции. Тогда обычный `git` через rtk работает, и сливать можно самому.
-- Подписи коммитов: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Коммиты пишутся без подписей (`Co-Authored-By` и подобных не ставить).
