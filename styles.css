@@ -9,8 +9,8 @@
   --ink: #210f04;
   --jade: #2f9b6b;
   --jade-deep: #0d3d2b;
-  --display: 'Cinzel', Georgia, 'Times New Roman', serif;
-  --ui: 'Marcellus', Georgia, serif;
+  --display: 'Philosopher', Georgia, serif;
+  --ui: 'PT Serif', Georgia, serif;
   --shadow-hard: 0 18px 40px rgba(0, 0, 0, .55);
   --stone-tex: url("assets/ui/stone.webp"); /* только для styles.css; из css/*.css путь другой: ../assets/ui/stone.webp */
 }
