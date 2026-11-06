@@ -1,8 +1,9 @@
-/* Темы уровней: фон по body[data-level].
+/* Темы земель: фон по body[data-land] (1 — Джунгли Ягуара, 2 — Храм Змея).
    Контракт с игрой описан в js/game.js (setBodyState / emitVisual).
-   Слои .theme-bg создаёт js/visuals.js и перетекают друг в друга
-   только через opacity. Пока картинка не загрузилась, остаётся прежний
-   градиент и силуэты .jungle — запасной вид без JS и без сети. */
+   Слои .theme-bg[data-theme=<номер земли>] создаёт js/visuals.js по
+   land.bg из кампании; они перетекают друг в друга только через opacity.
+   Пока картинка не загрузилась, остаётся прежний градиент и силуэты
+   .jungle — запасной вид без JS и без сети. */
 
 .theme-bg {
   position: absolute;
@@ -22,37 +23,17 @@
 body.has-theme .scenery-img { display: none; }
 body.has-theme .leaf { opacity: .32 !important; }
 
-/* Лучи света подкрашиваются под уровень */
-body[data-level="1"] .light-shaft {
+/* Земля 1 (джунгли) — исходные тёплые лучи. Земля 2 (храм) — лучи теплее
+   и мягче, как свет сквозь проём в камне. */
+body[data-land="2"] .light-shaft {
   background: linear-gradient(180deg, rgba(255, 214, 160, .13), rgba(255, 214, 160, .03) 45%, transparent 75%);
-}
-
-body[data-level="2"] .light-shaft {
-  background: linear-gradient(180deg, rgba(190, 218, 255, .2), rgba(190, 218, 255, .04) 45%, transparent 75%);
-}
-
-body[data-level="3"] .light-shaft {
-  background: linear-gradient(180deg, rgba(255, 220, 140, .2), rgba(255, 220, 140, .04) 45%, transparent 75%);
-}
-
-/* Светлячки: в пещере — холодные, у золотого солнца — тёплая пыль */
-body[data-level="2"] .firefly {
-  background: #cfeaff;
-  box-shadow: 0 0 12px 4px rgba(150, 205, 255, .65);
-}
-
-body[data-level="3"] .firefly {
-  background: #ffe39a;
-  box-shadow: 0 0 12px 4px rgba(255, 200, 90, .7);
 }
 
 /* Вертикальный экран: по центру кадра остаётся только спокойная дымка,
    поэтому сдвигаем картину так, чтобы был виден хотя бы один силуэт храма. */
 @media (max-aspect-ratio: 3 / 4) {
-  .theme-bg[data-theme="0"] { background-position: 14% center; }
-  .theme-bg[data-theme="1"] { background-position: 12% center; }
-  .theme-bg[data-theme="2"] { background-position: 86% center; }
-  .theme-bg[data-theme="3"] { background-position: 14% center; }
+  .theme-bg[data-theme="1"] { background-position: 14% center; }
+  .theme-bg[data-theme="2"] { background-position: 12% center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -43,7 +43,7 @@
       <div class="top-right">
         <div class="level-plaque plaque">
           <span class="plaque-label">Уровень</span>
-          <span id="levelValue" class="level-value">1 / 4</span>
+          <span id="levelValue" class="level-value">1 / 20</span>
         </div>
         <button id="menuBtn" class="stone-btn menu-btn">
           <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#icon-menu"></use></svg>
@@ -153,12 +153,15 @@
       </div>
       <h1 class="start-title">Сокровища<br><span>Солнца</span></h1>
       <p class="start-sub">Три в ряд · Тайны древних ацтеков</p>
-      <div class="mode-switch" role="group" aria-label="Режим игры">
-        <button type="button" class="mode-btn active" data-mode-btn="relaxed" aria-pressed="true">
+      <div class="mode-switch" role="group" aria-label="Сложность">
+        <button type="button" class="mode-btn active" data-difficulty-btn="calm" aria-pressed="true">
           <b>Спокойно</b><small>без таймера</small>
         </button>
-        <button type="button" class="mode-btn" data-mode-btn="timed" aria-pressed="false">
-          <b>На время</b><small>с отсчётом</small>
+        <button type="button" class="mode-btn" data-difficulty-btn="normal" aria-pressed="false">
+          <b>Обычно</b><small>мягкий таймер</small>
+        </button>
+        <button type="button" class="mode-btn" data-difficulty-btn="challenge" aria-pressed="false">
+          <b>Испытание</b><small>строгий таймер</small>
         </button>
       </div>
       <button id="playBtn" class="gold-btn big">
@@ -200,7 +203,11 @@
         </li>
         <li>
           <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-clock"></use></svg></span>
-          <div><b>Спокойно или на время</b><span>В режиме «Спокойно» таймера нет — играй в своём темпе. В режиме «На время» чем быстрее собраны цели, тем больше очков.</span></div>
+          <div><b>Три сложности</b><span>«Спокойно» — таймера нет, играй в своём темпе. «Обычно» — щадящий таймер, чем быстрее собраны цели, тем больше очков. «Испытание» — времени меньше, целей больше.</span></div>
+        </li>
+        <li>
+          <span class="rule-icon"><svg viewBox="0 0 100 100"><use href="#icon-star"></use></svg></span>
+          <div><b>Звёзды и осколки</b><span>За каждый уровень — от одной до трёх звёзд по очкам. Осколок Солнечного Камня: каменный за «Спокойно», серебряный за «Обычно», золотой за «Испытание».</span></div>
         </li>
       </ul>
       <p class="rules-note">Каскады повышают множитель: ×2, ×3 … до ×8.</p>
@@ -227,15 +234,24 @@
       </div>
       <h2 id="endTitle">Уровень пройден!</h2>
       <p id="endSub" class="modal-sub"></p>
+      <div id="endStars" class="end-stars" role="img" aria-label="" hidden></div>
+      <p id="endStarsText" class="end-stars-text" hidden></p>
+      <div id="endFragment" class="end-fragment" hidden>
+        <svg class="end-fragment-icon" viewBox="0 0 100 100" aria-hidden="true">
+          <polygon points="46,4 88,26 80,74 40,96 10,62 16,22"/>
+          <path d="M46 4 L44 48 L88 26 M44 48 L80 74 M44 48 L10 62"/>
+        </svg>
+        <span class="end-fragment-text"><small>Награда</small><b id="endFragmentName">Каменный осколок</b></span>
+      </div>
       <div class="end-stats">
         <div><span>Счёт</span><b id="endScore">0</b></div>
         <div><span>Бонус времени</span><b id="endBonus">0</b></div>
         <div><span>Осталось</span><b id="endTime">0:00</b></div>
       </div>
       <div class="end-actions">
-        <button id="nextBtn" class="gold-btn">Следующий уровень</button>
-        <button id="retryBtn" class="stone-btn wide">Заново</button>
-        <button id="endHomeBtn" class="stone-btn wide">В меню</button>
+        <button id="nextBtn" class="gold-btn">Дальше</button>
+        <button id="retryBtn" class="stone-btn wide">Ещё раз</button>
+        <button id="endHomeBtn" class="stone-btn wide">На карту</button>
       </div>
     </div>
   </div>

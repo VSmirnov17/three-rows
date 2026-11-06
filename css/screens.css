@@ -475,48 +475,75 @@ body[data-combo="8"] .combo-badge::after {
   to { opacity: 1; transform: none; }
 }
 
-/* Строка звёзд и ранга */
-.sfx-rank {
+/* Звёзды уровня: крупно, заполненная — золотая, пустая — тёмная
+   с яркой обводкой (видно, что звезда есть, но не получена). */
+.end-stars {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0 2px;
+}
+
+.end-stars[hidden], .end-stars-text[hidden], .end-fragment[hidden] { display: none; }
+
+.end-star { display: inline-block; width: 64px; height: 64px; }
+.end-star svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.end-star.on polygon {
+  fill: #ffd04f;
+  stroke: #7a4a06;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 8px rgba(255, 200, 80, .75));
+}
+
+.end-star.off polygon {
+  fill: #2a241b;
+  stroke: #cdb98a;
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+
+.end-stars-text {
+  margin: 0 0 6px;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #ffe4a4;
+}
+
+/* Осколок Солнечного Камня: цвет по материалу */
+.end-fragment {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin: -8px 0 4px;
+  gap: 14px;
+  width: fit-content;
+  margin: 6px auto 0;
+  padding: 8px 18px 8px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .3);
+  border: 2px solid rgba(236, 208, 138, .45);
 }
 
-.sfx-rank .sfx-stars { display: inline-flex; gap: 4px; }
+.end-fragment-icon { width: 52px; height: 52px; flex: 0 0 auto; }
+.end-fragment-icon polygon { stroke: #1d1710; stroke-width: 5; stroke-linejoin: round; }
+.end-fragment-icon path { fill: none; stroke: rgba(29, 23, 16, .55); stroke-width: 3; }
+.end-fragment[data-tier="stone"] .end-fragment-icon polygon { fill: #a9a196; }
+.end-fragment[data-tier="silver"] .end-fragment-icon polygon { fill: #e4ebf2; }
+.end-fragment[data-tier="gold"] .end-fragment-icon polygon { fill: #ffcf45; }
 
-.sfx-rank .sfx-star {
-  display: inline-block;
-  font-size: 30px;
-  line-height: 1;
-  color: #ffd56a;
-  text-shadow: 0 0 14px rgba(255, 200, 80, .8), 0 2px 0 #6a3f08;
-}
+.end-fragment-text { display: flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.15; }
+.end-fragment-text small { font-size: 16px; color: #d2c29c; }
+.end-fragment-text b { font-family: var(--display); font-size: 22px; color: #fff0c4; letter-spacing: .02em; }
 
-.sfx-rank .sfx-star.off {
-  color: #4b4130;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, .6);
-}
-
-.sfx-rank .sfx-rank-name {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: #2a1703;
-  padding: 5px 12px 5px 14px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #ffeaa8, #d9a441 60%, #a8741f);
-  box-shadow: 0 0 0 1px #6a450f, 0 4px 10px rgba(0, 0, 0, .4);
-}
-
-.end-card.sfx-win .sfx-star { animation: sfxStarPop .5s cubic-bezier(.2, .9, .3, 1.6) both; }
-.end-card.sfx-win .sfx-star:nth-child(1) { animation-delay: .5s; }
-.end-card.sfx-win .sfx-star:nth-child(2) { animation-delay: .68s; }
-.end-card.sfx-win .sfx-star:nth-child(3) { animation-delay: .86s; }
-.end-card.sfx-win .sfx-rank-name { animation: sfxRise .45s ease-out 1.05s both; }
+.end-card.sfx-win .end-star { animation: sfxStarPop .5s cubic-bezier(.2, .9, .3, 1.6) both; }
+.end-card.sfx-win .end-star:nth-child(1) { animation-delay: .5s; }
+.end-card.sfx-win .end-star:nth-child(2) { animation-delay: .68s; }
+.end-card.sfx-win .end-star:nth-child(3) { animation-delay: .86s; }
+.end-card.sfx-win .end-stars-text { animation: sfxRise .45s ease-out 1s both; }
+.end-card.sfx-win .end-fragment { animation: sfxRise .45s ease-out 1.1s both; }
 
 @keyframes sfxStarPop {
   from { opacity: 0; transform: scale(2.2) rotate(-30deg); }
@@ -746,8 +773,7 @@ body[data-urgency="urgent"] .dial::after {
   .sfx-level-banner::after { right: 6px; width: 13px; height: 24px; margin-top: -12px; }
   .sfx-combo-word b { font-size: clamp(40px, 13vw, 64px); }
   .sfx-combo-word i { font-size: clamp(15px, 4.4vw, 20px); }
-  .sfx-rank .sfx-star { font-size: 26px; }
-  .sfx-rank .sfx-rank-name { font-size: 15px; letter-spacing: .14em; }
+  .end-star { width: 54px; height: 54px; }
 }
 
 /* =========================================================
@@ -767,7 +793,7 @@ body[data-urgency="urgent"] .dial::after {
   .sfx-level-banner.in { opacity: 1; }
   .sfx-level-banner.out { opacity: 0; }
   .end-card.sfx-win, .end-card.sfx-lose,
-  .end-card .end-stats > div, .end-card .sfx-star, .end-card .sfx-rank-name,
+  .end-card .end-stats > div, .end-card .end-star, .end-card .end-stars-text, .end-card .end-fragment,
   .end-card .end-actions, .end-card h2, .end-card .modal-sub,
   .end-card .end-emblem .emblem-img { animation: none !important; opacity: 1; transform: none; }
   .gold-btn::after { display: none; }

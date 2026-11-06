@@ -6,31 +6,14 @@
   const COLS = 8;
   const TYPES = 6;
   const GEM_COLORS = ['#ff7a5c', '#ffd166', '#6ef08a', '#63d8ff', '#d58cff', '#e8eef2'];
-  const SAVE_KEY = 'sun-treasures-save';
   const DIAL_C = 345.575;
-
-  const LEVELS = [
-    {
-      name: 'Тропа Ягуара',
-      time: 120,
-      goals: [{ color: 0, need: 12 }, { color: 2, need: 12 }]
-    },
-    {
-      name: 'Храм Пернатого Змея',
-      time: 130,
-      goals: [{ color: 1, need: 14 }, { color: 3, need: 14 }, { color: 5, need: 9 }]
-    },
-    {
-      name: 'Пещера Лунного Света',
-      time: 140,
-      goals: [{ color: 4, need: 18 }, { color: 2, need: 16 }]
-    },
-    {
-      name: 'Золотое Солнце',
-      time: 155,
-      goals: [{ color: 0, need: 18 }, { color: 1, need: 18 }, { color: 4, need: 14 }]
-    }
-  ];
+  /* Сюда кладётся копия нечитаемого нового ключа до первой записи */
+  const BROKEN_KEY = 'sun-keeper-save-broken';
+  const FRAGMENT_NAMES = {
+    stone: 'Каменный осколок',
+    silver: 'Серебряный осколок',
+    gold: 'Золотой осколок'
+  };
 
   const $ = id => document.getElementById(id);
 
@@ -69,6 +52,10 @@
     endBonus: $('endBonus'),
     endTime: $('endTime'),
     endCard: document.querySelector('.end-card'),
+    endStars: $('endStars'),
+    endStarsText: $('endStarsText'),
+    endFragment: $('endFragment'),
+    endFragmentName: $('endFragmentName'),
     nextBtn: $('nextBtn'),
     retryBtn: $('retryBtn'),
     continueBtn: $('continueBtn'),
@@ -85,13 +72,17 @@
     paused: false,
     ended: false,
     timeUp: false,
-    relaxed: true,
     overlay: true,
-    levelIndex: 0,
-    levelStartScore: 0,
+    // Выбранная сложность — для следующего запуска уровня
+    difficulty: 'calm',
+    // Сложность, с которой начат текущий уровень (по ней таймер и запись)
+    levelDifficulty: 'calm',
+    levelId: null,
+    level: null,
+    save: null,
+    lastResult: null,
+    atHome: true,
     score: 0,
-    best: 0,
-    unlocked: 0,
     timeLeft: 120,
     totalTime: 120,
     goals: [],
@@ -112,7 +103,8 @@
 
   const now = () => performance.now();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const { parseKey } = window.BoardCore;
+  const Board = window.BoardCore;
+  const { parseKey } = Board;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const isAdjacent = (a, b) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
 
@@ -221,16 +213,23 @@
     }
   }
 
+  function goalCountText(g) {
+    return Math.min(g.got, g.need) + ' / ' + g.need;
+  }
+
   function renderGoals() {
-    dom.goalList.innerHTML = state.goals.map((g, i) => `
-      <div class="goal-chip" data-i="${i}">
-        ${ART.gemSvg(g.color, 'mini-gem')}
+    dom.goalList.innerHTML = state.goals.map((g, i) => {
+      const vines = g.type === 'vines';
+      return `
+      <div class="goal-chip${vines ? ' goal-vines' : ''}" data-i="${i}">
+        ${vines ? GOAL_VINE_ICON : ART.gemSvg(g.color, 'mini-gem')}
         <div class="goal-meta">
-          <span class="goal-name">${ART.GEMS[g.color].name}</span>
-          <span class="goal-count">${Math.min(g.got, g.need)} / ${g.need}</span>
+          <span class="goal-name">${vines ? 'Лианы' : ART.GEMS[g.color].name}</span>
+          <span class="goal-count">${goalCountText(g)}</span>
         </div>
         <span class="goal-check"><svg viewBox="0 0 100 100"><use href="#icon-check"></use></svg></span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   function updateGoals(popIndex) {
@@ -238,7 +237,7 @@
       const chip = dom.goalList.querySelector(`.goal-chip[data-i="${i}"]`);
       if (!chip) return;
       const count = chip.querySelector('.goal-count');
-      if (count) count.textContent = `${Math.min(g.got, g.need)} / ${g.need}`;
+      if (count) count.textContent = goalCountText(g);
       const done = g.got >= g.need;
       chip.classList.toggle('done', done);
       if (popIndex === i) {
@@ -253,13 +252,16 @@
      Игра только выставляет атрибуты на <body> и шлёт события «sun:*» —
      всё оформление (темы уровней, шаман, эффекты) живёт в css/*.css и
      js/visuals.js и сюда не заходит.
-       body[data-level]   0..3            номер уровня
+       body[data-land]     1..10          номер земли (фон и тема)
+       body[data-level-id] "1-05"         текущий уровень кампании
+       body[data-difficulty] calm | normal | challenge  сложность уровня
        body[data-combo]   1..8            текущий множитель
        body[data-urgency] "" | tense | urgent
        body[data-outcome] "" | win | lose
        событие sun:special {type, r, c}   создан спецкамень
        событие sun:blast   {type}         сработал спецкамень
-       событие sun:match   {chain, mult}  очередной каскад */
+       событие sun:match   {chain, mult}  очередной каскад
+       событие sun:unlock  {r, c}         с камня сорвана лиана */
   function setBodyState(name, value) {
     const v = String(value);
     if (document.body.dataset[name] !== v) document.body.dataset[name] = v;
@@ -285,8 +287,13 @@
     }
   }
 
+  function levelNumber(id) {
+    return Number(String(id).split('-')[1]) || 1;
+  }
+
   function updateLevelUI() {
-    dom.level.textContent = `${state.levelIndex + 1} / ${LEVELS.length}`;
+    const land = Campaign.landOf(state.levelId);
+    dom.level.textContent = levelNumber(state.levelId) + ' / ' + (land ? land.levels.length : 20);
   }
 
   function updateRelic() {
@@ -305,68 +312,112 @@
     if (!SFX.muted) SFX.click();
   }
 
-  function loadSave() {
+  /* ---------- Сохранение ----------
+     Читаем и пишем только через Progress. Само обращение к localStorage
+     может бросить (Firefox с запретом cookies) — тогда игра идёт без
+     сохранения. Старый ключ sun-treasures-save не пишется никогда. */
+  const NO_STORAGE = {
+    getItem() { return null; },
+    setItem() { throw new Error('storage unavailable'); }
+  };
+
+  function getStorage() {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
-        state.best = Number(data.best) || 0;
-        state.unlocked = Number(data.unlocked) || 0;
-        if (typeof data.relaxed === 'boolean') state.relaxed = data.relaxed;
-      }
+      return window.localStorage || NO_STORAGE;
+    } catch (e) {
+      return NO_STORAGE;
+    }
+  }
+
+  /* Новый ключ есть, но load() его не взял — сохраняем копию, чтобы
+     первая же запись не стёрла то, что ещё можно спасти вручную. */
+  function backupBrokenSave(storage, raw) {
+    try {
+      const prev = storage.getItem(BROKEN_KEY);
+      if (prev === raw) return;
+      storage.setItem(prev === null ? BROKEN_KEY : BROKEN_KEY + '-' + Date.now(), raw);
     } catch (e) { /* ignore */ }
-    updateModeUI();
+  }
+
+  function loadSave() {
+    const storage = getStorage();
+    const raw = Progress.readRaw(storage);
+    if (raw !== null && !Progress.isUsableRaw(raw)) backupBrokenSave(storage, raw);
+    state.save = Progress.load(storage);
+    state.difficulty = state.save.difficulty;
+    updateDifficultyUI();
     updateStartUI();
   }
 
-  /* ---------- Режим игры ----------
-     «Спокойно» (по умолчанию): таймер стоит, проиграть нельзя, уровень идёт,
-     пока не собраны цели. «На время» — прежние правила с отсчётом. */
-  function setMode(relaxed) {
-    state.relaxed = !!relaxed;
-    updateModeUI();
-    saveProgress();
-    updateTimerUI();
+  function saveProgress() {
+    return Progress.persist(getStorage(), state.save);
   }
 
-  function updateModeUI() {
-    setBodyState('mode', state.relaxed ? 'relaxed' : 'timed');
-    document.querySelectorAll('[data-mode-btn]').forEach(btn => {
-      const on = (btn.dataset.modeBtn === 'relaxed') === state.relaxed;
+  /* ---------- Сложность ----------
+     «Спокойно»: таймера нет, проиграть нельзя, уровень идёт, пока не
+     собраны цели. «Обычно» и «Испытание» — с отсчётом. Выбор действует
+     со следующего запуска уровня. */
+  function isTimed() {
+    return !!(state.level && state.level.timer != null);
+  }
+
+  function setDifficulty(d) {
+    if (Campaign.DIFFICULTIES.indexOf(d) < 0) return false;
+    state.difficulty = d;
+    if (state.save.difficulty !== d) {
+      state.save.difficulty = d;
+      saveProgress();
+    }
+    updateDifficultyUI();
+    // На стартовом экране за меню видно поле: показываем его под новую сложность
+    if (state.atHome && state.levelId) {
+      applyLevel(state.levelId, d);
+      state.score = 0;
+      setScore(0, false);
+    }
+    return true;
+  }
+
+  function updateDifficultyUI() {
+    document.querySelectorAll('[data-difficulty-btn]').forEach(btn => {
+      const on = btn.dataset.difficultyBtn === state.difficulty;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-pressed', String(on));
     });
     const label = document.querySelector('.time-label');
-    if (label) label.textContent = state.relaxed ? 'Спокойно' : 'Время';
+    if (label) label.textContent = isTimed() ? 'Время' : 'Спокойно';
   }
 
   /* В спокойном режиме темп очков постоянный — как на середине уровня */
   function econTimeLeft() {
-    return state.relaxed ? state.totalTime * 0.5 : state.timeLeft;
+    return isTimed() ? state.timeLeft : state.totalTime * 0.5;
+  }
+
+  function levelTitle(id) {
+    const land = Campaign.landOf(id);
+    return (land ? land.name + ' · ' : '') + 'уровень ' + levelNumber(id);
   }
 
   function updateStartUI() {
-    dom.bestScore.textContent = fmtNum(state.best);
+    dom.bestScore.textContent = fmtNum(state.save.best);
     if (dom.continueBtn) {
-      const canContinue = state.unlocked > 0 && state.unlocked < LEVELS.length;
+      const canContinue = Progress.starsTotal(state.save) > 0;
       dom.continueBtn.style.display = canContinue ? '' : 'none';
       if (canContinue) {
-        dom.continueBtn.textContent = 'Продолжить · уровень ' + (state.unlocked + 1);
+        const id = Progress.currentLevelId(state.save, Campaign);
+        dom.continueBtn.textContent = 'Продолжить';
+        const sub = document.createElement('small');
+        sub.textContent = levelTitle(id);
+        dom.continueBtn.appendChild(sub);
       }
     }
-  }
-
-  function saveProgress() {
-    try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ best: state.best, unlocked: state.unlocked, relaxed: state.relaxed }));
-    } catch (e) { /* ignore */ }
   }
 
   /* ---------- Таймер ---------- */
   let lastTickShown = -1;
 
   function updateTimerUI() {
-    if (state.relaxed) {
+    if (!isTimed()) {
       if (dom.time.textContent !== '∞') dom.time.textContent = '∞';
       dom.dial.style.strokeDashoffset = '0';
       dom.dial.classList.remove('tense', 'urgent');
@@ -418,21 +469,28 @@
 
   /* ---------- Вспомогательное ---------- */
   function gemAt(r, c) {
-    return window.BoardCore.gemAt(state.grid, r, c);
+    return Board.gemAt(state.grid, r, c);
   }
 
   function currentLevel() {
-    return LEVELS[state.levelIndex];
+    return state.level;
   }
 
-  function applyLevel(index) {
-    state.levelIndex = clamp(index, 0, LEVELS.length - 1);
-    setBodyState('level', state.levelIndex);
+  /* Ставит уровень кампании id на сложности difficulty: цели, часы, тема. */
+  function applyLevel(id, difficulty) {
+    const level = Campaign.resolve(id, difficulty) || Campaign.resolve(Campaign.allLevelIds()[0], difficulty);
+    state.level = level;
+    state.levelId = level.id;
+    state.levelDifficulty = difficulty;
+    setBodyState('land', level.landId);
+    setBodyState('levelId', level.id);
+    setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    const level = currentLevel();
-    state.goals = level.goals.map(g => ({ color: g.color, need: g.need, got: 0 }));
-    state.timeLeft = level.time;
-    state.totalTime = level.time;
+    state.goals = level.goals.map(g => g.type === 'vines'
+      ? { type: 'vines', need: g.need, got: 0 }
+      : { type: 'color', color: g.color, need: g.need, got: 0 });
+    state.totalTime = level.econTime;
+    state.timeLeft = level.timer != null ? level.timer : level.econTime;
     state.clearedTotal = 0;
     state.econBase = 0;
     state.econClear = 0;
@@ -444,6 +502,7 @@
     lastTickShown = -1;
     setCombo(1);
     updateLevelUI();
+    updateDifficultyUI();
     renderGoals();
     updateRelic();
     updateTimerUI();
@@ -483,6 +542,14 @@
     '<ellipse cx="80" cy="76" rx="9" ry="5" transform="rotate(-35 80 76)"/>' +
     '<ellipse cx="50" cy="40" rx="8" ry="4.6" transform="rotate(-20 50 40)"/>' +
     '</g></svg>';
+
+  /* Значок цели «Лианы»: те же плетения на светлой каменной плитке —
+     контрастно и на тёмной панели целей. */
+  const GOAL_VINE_ICON =
+    '<svg class="mini-gem goal-vine-icon" viewBox="0 0 100 100" aria-hidden="true">' +
+    '<rect x="5" y="5" width="90" height="90" rx="20" fill="#c9b58a" stroke="#f3e2b0" stroke-width="4"/>' +
+    VINE_SVG.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '') +
+    '</svg>';
 
   /* Включает/выключает лианы на камне: класс и оверлей. */
   function setGemLocked(gem, locked) {
@@ -546,7 +613,8 @@
   }
 
   function generateGridData() {
-    state.grid = window.BoardCore.generateGrid({ colors: TYPES }, Math.random, () => ++state.gemSeq);
+    const vines = state.level ? state.level.vines : [];
+    state.grid = Board.generateGrid({ colors: TYPES, vines }, Math.random, () => ++state.gemSeq);
   }
 
   function spawnBoard() {
@@ -589,8 +657,6 @@
   /* ---------- Поиск совпадений и ходов ----------
      Алгоритмы вынесены в js/core/board.js (чистое ядро без DOM).
      Здесь — тонкие обёртки над state.grid с прежними именами. */
-  const Board = window.BoardCore;
-
   /* Горизонтальные и вертикальные серии длиной >= 3 */
   function findLineGroups() {
     return Board.findLineGroups(state.grid);
@@ -1056,7 +1122,9 @@
       // заметно больше, чтобы «фарм» пустых камней не окупался.
       const needLeft = new Map();
       state.goals.forEach(g => {
-        if (g.got < g.need) needLeft.set(g.color, g.need - g.got);
+        if (g.type === 'color' && g.got < g.need) {
+          needLeft.set(g.color, (needLeft.get(g.color) || 0) + g.need - g.got);
+        }
       });
       let goalCells = 0;
       cellsArr.forEach(p => {
@@ -1107,9 +1175,15 @@
         if (!gem) return;
         state.clearedTotal++;
         state.goals.forEach(goal => {
-          if (goal.color === gem.color && goal.got < goal.need) goal.got++;
+          if (goal.type === 'color' && goal.color === gem.color && goal.got < goal.need) goal.got++;
         });
       });
+      // Цель «Лианы»: каждая сорванная лиана — один шаг
+      if (unlockArr.length) {
+        state.goals.forEach(goal => {
+          if (goal.type === 'vines') goal.got = Math.min(goal.need, goal.got + unlockArr.length);
+        });
+      }
       const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
       if (changed >= 0) updateGoals(changed);
       updateRelic();
@@ -1207,9 +1281,23 @@
       winLevel();
       return;
     }
-    if (!state.relaxed && (state.timeUp || state.timeLeft <= 0)) {
+    if (isTimed() && (state.timeUp || state.timeLeft <= 0)) {
       loseLevel();
     }
+  }
+
+  /* Звёзды: победа — 1★; очки за очистку (без бонуса времени, как в
+     tools/level-bot.js) от s2 — 2★, от s3 — 3★. */
+  function starsFor(points, thresholds) {
+    const t = thresholds || [];
+    if (points >= t[1]) return 3;
+    if (points >= t[0]) return 2;
+    return 1;
+  }
+
+  function isLastOfLand(id) {
+    const land = Campaign.landOf(id);
+    return !!(land && land.levels.length && land.levels[land.levels.length - 1].id === id);
   }
 
   function winLevel() {
@@ -1222,23 +1310,28 @@
     SFX.setUrgency(0);
     SFX.musicScene('menu');
 
+    const bonus = isTimed()
+      ? Economy.levelBonus({ timeLeft: state.timeLeft, totalTime: state.totalTime })
+      : 0;
     const breakdown = Economy.formatBreakdown({
       base: state.econBase,
       clearScore: state.econClear,
-      timeBonus: state.relaxed ? 0 : Economy.levelBonus({
-        timeLeft: state.timeLeft,
-        totalTime: state.totalTime,
-        levelIndex: state.levelIndex
-      }),
+      timeBonus: bonus,
       timeLeft: econTimeLeft(),
-      totalTime: state.totalTime,
-      levelIndex: state.levelIndex
+      totalTime: state.totalTime
     });
-    const bonus = breakdown.timeBonus;
     setScore(state.score + bonus, true);
-    state.best = Math.max(state.best, state.score);
-    state.unlocked = Math.max(state.unlocked, state.levelIndex + 1);
+
+    const stars = starsFor(state.econClear, state.level.stars);
+    const result = Progress.record(state.save, state.levelId, state.levelDifficulty, state.score, stars);
+    state.save = result.save;
     saveProgress();
+    state.lastResult = {
+      win: true,
+      stars,
+      newTier: result.newTier,
+      landComplete: isLastOfLand(state.levelId) ? state.level.landId : null
+    };
     updateStartUI();
     SFX.win();
     setBodyState('outcome', 'win');
@@ -1255,47 +1348,73 @@
     clearHints();
     SFX.setUrgency(0);
     SFX.musicScene('menu');
-    state.best = Math.max(state.best, state.score);
-    saveProgress();
-    updateStartUI();
+    // Поражение ничего не пишет: сохранённый прогресс остаётся как был
+    state.lastResult = { win: false, stars: 0, newTier: null, landComplete: null };
     SFX.lose();
     setBodyState('outcome', 'lose');
     setHint('Время вышло', 'bad');
     setTimeout(() => showEndScreen(false, 0), 350);
   }
 
+  const STAR_SVG =
+    '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+    '<polygon points="50,5 62,37 96,38 69,59 79,93 50,73 21,93 31,59 4,38 38,37"/></svg>';
+
+  function starsWord(n) {
+    return n === 1 ? 'звезда' : 'звезды';
+  }
+
+  function renderEndStars(win, stars) {
+    if (!dom.endStars) return;
+    dom.endStars.hidden = !win;
+    dom.endStarsText.hidden = !win;
+    if (!win) return;
+    let html = '';
+    for (let i = 1; i <= 3; i++) {
+      html += '<span class="end-star ' + (i <= stars ? 'on' : 'off') + '">' + STAR_SVG + '</span>';
+    }
+    dom.endStars.innerHTML = html;
+    const text = stars + ' ' + starsWord(stars) + ' из 3';
+    dom.endStars.setAttribute('aria-label', text);
+    dom.endStarsText.textContent = text;
+  }
+
+  function renderEndFragment(tier) {
+    if (!dom.endFragment) return;
+    const name = tier && FRAGMENT_NAMES[tier];
+    dom.endFragment.hidden = !name;
+    if (!name) return;
+    dom.endFragment.dataset.tier = tier;
+    dom.endFragmentName.textContent = name;
+  }
+
   function showEndScreen(win, bonus, breakdown) {
-    const last = state.levelIndex >= LEVELS.length - 1;
-    const bd = breakdown || Economy.formatBreakdown({
-      base: state.econBase,
-      clearScore: state.econClear,
-      timeBonus: bonus,
-      timeLeft: state.timeLeft,
-      totalTime: state.totalTime,
-      levelIndex: state.levelIndex
-    });
-    const sub = win
-      ? (last ? 'Все сокровища древних ацтеков собраны' : currentLevel().name)
-      : 'Цели не достигнуты — попробуй ещё раз';
+    const res = state.lastResult || {};
+    const timed = isTimed();
+    const level = currentLevel();
+    let sub = win ? level.name : 'Цели не собраны — попробуйте ещё раз';
+    /* Темп имеет смысл только в игре на время */
+    if (win && timed && breakdown) sub += ' · средний темп ' + breakdown.paceLabel;
     dom.endCard.classList.toggle('lost', !win);
-    dom.endTitle.textContent = win ? (last ? 'Солнце у тебя!' : 'Уровень пройден!') : 'Время вышло';
-    /* Темп и ранг скорости имеют смысл только в игре на время */
-    dom.endSub.textContent = win && !state.relaxed
-      ? sub + ' · средний темп ' + bd.paceLabel + ' · ' + bd.starsLabel + ' ' + bd.rank
-      : sub;
+    dom.endTitle.textContent = win ? (res.landComplete ? 'Земля пройдена!' : 'Уровень пройден!') : 'Время вышло';
+    dom.endSub.textContent = sub;
+    renderEndStars(win, res.stars || 1);
+    renderEndFragment(win ? res.newTier : null);
     dom.endScore.textContent = fmtNum(state.score);
     dom.endBonus.textContent = '+' + fmtNum(bonus);
-    dom.endTime.textContent = state.relaxed ? '∞' : fmtTime(state.timeLeft);
-    dom.nextBtn.style.display = win && !last ? '' : 'none';
-    dom.retryBtn.style.display = win ? 'none' : '';
+    dom.endTime.textContent = timed ? fmtTime(state.timeLeft) : '∞';
+    dom.nextBtn.style.display = win ? '' : 'none';
+    dom.retryBtn.style.display = '';
     openOverlay('endScreen');
   }
 
   /* ---------- Запуск уровня ---------- */
-  async function beginLevel(index) {
+  async function beginLevel(levelId) {
     const session = ++state.session;
-    applyLevel(index);
-    state.levelStartScore = state.score;
+    state.atHome = false;
+    state.lastResult = null;
+    applyLevel(levelId, state.difficulty);
+    state.score = 0;
     state.ended = false;
     state.paused = false;
     state.timeUp = false;
@@ -1304,7 +1423,7 @@
     clearHints();
     closeAllOverlays();
     setCombo(1);
-    setScore(state.score, false);
+    setScore(0, false);
     updateSoundUI();
     updateTimerUI();
     SFX.musicStart('game');
@@ -1315,14 +1434,15 @@
     await runCountdown(session);
     if (session !== state.session) return;
 
+    const level = currentLevel();
     state.running = true;
     state.paused = false;
     state.started = true;
-    state.timeLeft = currentLevel().time;
-    state.totalTime = currentLevel().time;
+    state.timeLeft = level.timer != null ? level.timer : level.econTime;
+    state.totalTime = level.econTime;
     state.lastAction = now();
     updateTimerUI();
-    setHint(currentLevel().name + ' — ' + hintMessages.default);
+    setHint(level.name + ' — ' + hintMessages.default);
   }
 
   async function runCountdown(session) {
@@ -1344,27 +1464,64 @@
     dom.countdown.classList.add('hidden');
   }
 
-  async function startNewRun(startIndex = 0) {
-    SFX.click();
-    state.score = 0;
-    setScore(0, false);
-    state.levelIndex = clamp(startIndex, 0, LEVELS.length - 1);
-    await beginLevel(state.levelIndex);
+  /* Запуск уровня кампании. Сначала — хук Game.onBeforeLevel (сцены
+     Task 9); пока он идёт, игра стоит. Сложность берётся текущая. */
+  async function startLevel(levelId) {
+    if (!Campaign.level(levelId)) return false;
+    const session = ++state.session;
+    state.running = false;
+    state.paused = false;
+    state.ended = false;
+    state.started = false;
+    clearSelection();
+    clearHints();
+    try {
+      await Game.onBeforeLevel(levelId);
+    } catch (e) { /* сцена не должна мешать игре */ }
+    if (session !== state.session) return false;
+    await beginLevel(levelId);
+    return true;
   }
 
-  async function retryLevel() {
+  function retryLevel() {
     SFX.click();
-    state.score = state.levelStartScore;
-    await beginLevel(state.levelIndex);
+    return startLevel(state.levelId);
   }
 
-  async function nextLevel() {
-    SFX.click();
-    if (state.levelIndex >= LEVELS.length - 1) {
-      goHome();
+  /* Пройден последний уровень земли: хук вызывается один раз за победу,
+     когда игрок уходит с экрана итогов вперёд («Дальше» или «На карту»). */
+  function finishLand(landId) {
+    state.lastResult = null;
+    try {
+      const r = Game.onLandComplete(landId);
+      if (r && typeof r.catch === 'function') r.catch(() => showHome());
+    } catch (e) {
+      showHome();
+    }
+  }
+
+  /* Карта появится в Task 8 (Game.showMap); пока её нет — стартовый экран. */
+  function toMap() {
+    const res = state.lastResult;
+    if (res && res.landComplete) {
+      SFX.click();
+      finishLand(res.landComplete);
       return;
     }
-    await beginLevel(state.levelIndex + 1);
+    if (typeof Game.showMap === 'function') Game.showMap();
+    else showHome();
+  }
+
+  function nextLevel() {
+    SFX.click();
+    const res = state.lastResult;
+    if (res && res.landComplete) {
+      finishLand(res.landComplete);
+      return;
+    }
+    const next = Campaign.nextLevelId(state.levelId);
+    if (next) startLevel(next);
+    else toMap();
   }
 
   function pauseGame() {
@@ -1385,21 +1542,22 @@
     setHint(currentLevel().name + ' — ' + hintMessages.default);
   }
 
-  async function goHome() {
+  /* Стартовый экран; за ним — поле текущего уровня кампании. */
+  async function showHome() {
     state.session++;
     state.running = false;
     state.paused = false;
     state.ended = false;
     state.started = false;
     state.busy = true;
+    state.atHome = true;
+    state.lastResult = null;
     clearSelection();
     clearHints();
     closeAllOverlays();
-    applyLevel(0);
+    applyLevel(Progress.currentLevelId(state.save, Campaign), state.difficulty);
     state.score = 0;
     setScore(0, false);
-    state.timeLeft = LEVELS[0].time;
-    updateTimerUI();
     dom.countdown.classList.add('hidden');
     updateStartUI();
     SFX.setUrgency(0);
@@ -1408,6 +1566,18 @@
     openOverlay('startScreen');
     await buildBoard();
     setHint(hintMessages.default);
+  }
+
+  /* После импорта кода: сохранение заменяется целиком и сразу пишется. */
+  function replaceSave(save) {
+    if (!save || typeof save !== 'object' || !save.levels || typeof save.levels !== 'object') return false;
+    state.save = JSON.parse(JSON.stringify(save));
+    if (Campaign.DIFFICULTIES.indexOf(state.save.difficulty) < 0) state.save.difficulty = 'calm';
+    state.difficulty = state.save.difficulty;
+    const ok = saveProgress();
+    updateDifficultyUI();
+    updateStartUI();
+    return ok;
   }
 
   /* ---------- Ввод ---------- */
@@ -1498,14 +1668,20 @@
 
   /* ---------- События ---------- */
   function attachEvents() {
-    $('playBtn').addEventListener('click', () => startNewRun(0));
-    document.querySelectorAll('[data-mode-btn]').forEach(btn => {
+    $('playBtn').addEventListener('click', () => {
+      SFX.click();
+      startLevel(Campaign.allLevelIds()[0]);
+    });
+    document.querySelectorAll('[data-difficulty-btn]').forEach(btn => {
       btn.addEventListener('click', () => {
         SFX.click();
-        setMode(btn.dataset.modeBtn === 'relaxed');
+        setDifficulty(btn.dataset.difficultyBtn);
       });
     });
-    dom.continueBtn.addEventListener('click', () => startNewRun(state.unlocked));
+    dom.continueBtn.addEventListener('click', () => {
+      SFX.click();
+      startLevel(Progress.currentLevelId(state.save, Campaign));
+    });
     $('howBtn').addEventListener('click', () => {
       SFX.click();
       openOverlay('howScreen');
@@ -1519,31 +1695,25 @@
     $('menuBtn').addEventListener('click', () => {
       if (state.ended) return;
       if (state.running) pauseGame();
-      else if (state.overlay) goHome();
+      else if (state.overlay) showHome();
     });
     $('menuBtnMobile').addEventListener('click', () => {
       if (state.ended) return;
       if (state.running) pauseGame();
-      else if (state.overlay) goHome();
+      else if (state.overlay) showHome();
     });
     $('resumeBtn').addEventListener('click', () => {
       SFX.click();
       resumeGame();
     });
-    $('restartBtn').addEventListener('click', async () => {
-      closeAllOverlays();
-      await retryLevel();
+    $('restartBtn').addEventListener('click', () => retryLevel());
+    $('homeBtn').addEventListener('click', () => {
+      SFX.click();
+      showHome();
     });
-    $('homeBtn').addEventListener('click', goHome);
-    $('endHomeBtn').addEventListener('click', goHome);
-    dom.nextBtn.addEventListener('click', async () => {
-      closeAllOverlays();
-      await nextLevel();
-    });
-    dom.retryBtn.addEventListener('click', async () => {
-      closeAllOverlays();
-      await retryLevel();
-    });
+    $('endHomeBtn').addEventListener('click', toMap);
+    dom.nextBtn.addEventListener('click', nextLevel);
+    dom.retryBtn.addEventListener('click', () => retryLevel());
     $('hintBtn').addEventListener('click', () => showHint(true));
     dom.shuffleBtn.addEventListener('click', manualShuffle);
     dom.tiles.addEventListener('pointerdown', onPointerDown);
@@ -1571,7 +1741,7 @@
     lastFrame = t;
 
     if (state.running && !state.paused && !state.overlay && !state.ended) {
-      if (!state.relaxed) state.timeLeft = Math.max(0, state.timeLeft - dt);
+      if (isTimed()) state.timeLeft = Math.max(0, state.timeLeft - dt);
 
       const cdBefore = state.shuffleCd;
       state.shuffleCd = Math.max(0, state.shuffleCd - dt);
@@ -1580,7 +1750,7 @@
 
       updateTimerUI();
 
-      if (!state.relaxed && state.timeLeft <= 0) {
+      if (isTimed() && state.timeLeft <= 0) {
         state.timeUp = true;
         if (!state.busy) checkEnd();
       }
@@ -1602,7 +1772,8 @@
     updateSoundUI();
     SFX.musicScene('menu');
     attachEvents();
-    applyLevel(0);
+    state.atHome = true;
+    applyLevel(Progress.currentLevelId(state.save, Campaign), state.difficulty);
     state.score = 0;
     setScore(0, false);
     updateTimerUI();
@@ -1618,6 +1789,8 @@
     window.__SUN = {
       state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
       checkEnd, upgradeGem, applyPos, beginLevel, showHint,
+      // Запускает уровень кампании: __SUN.start('2-01')
+      start: levelId => startLevel(levelId),
       findSquares, findCorners, analyzePatterns,
       findLineGroups, hasAnyMatch,
       expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys),
@@ -1631,6 +1804,27 @@
       }
     };
   }
+
+  /* ---------- Внешний интерфейс для экранов карты и сцен ----------
+     Хуки onBeforeLevel / onLandComplete можно заменить присваиванием:
+     игра вызывает их через Game.*, а не по ссылке. Карта (Task 8)
+     подключается как Game.showMap. */
+  const Game = {
+    startLevel,
+    getSave: () => JSON.parse(JSON.stringify(state.save)),
+    setDifficulty,
+    getDifficulty: () => state.difficulty,
+    replaceSave,
+    showHome,
+    // Перед запуском уровня (пролог, вступление земли). Можно вернуть Promise.
+    onBeforeLevel() {},
+    // Пройден последний уровень земли: по умолчанию — на карту или в меню.
+    onLandComplete() {
+      if (typeof Game.showMap === 'function') Game.showMap();
+      else showHome();
+    }
+  };
+  window.Game = Game;
 
   init();
 })();

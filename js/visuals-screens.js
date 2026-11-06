@@ -4,7 +4,6 @@
 (function () {
   "use strict";
 
-  const LEVEL_NAMES = ['Тропа Ягуара', 'Храм Пернатого Змея', 'Пещера Лунного Света', 'Золотое Солнце'];
   const GEM_COUNT = 6;
   const reduceMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const reduced = () => !!(reduceMq && reduceMq.matches);
@@ -120,9 +119,11 @@
   let bannerShown = false;
 
   function showBanner() {
-    const idx = Math.max(0, Math.min(LEVEL_NAMES.length - 1, Number(document.body.dataset.level) || 0));
-    bannerKicker.textContent = 'Уровень ' + (idx + 1);
-    bannerName.textContent = LEVEL_NAMES[idx];
+    /* Название — из кампании по body[data-level-id] (например «1-05») */
+    const id = document.body.dataset.levelId || '';
+    const level = window.Campaign && id ? window.Campaign.level(id) : null;
+    bannerKicker.textContent = 'Уровень ' + (Number(id.split('-')[1]) || 1);
+    bannerName.textContent = level ? level.name : '';
     banner.classList.remove('out');
     replay(banner, 'in');
     bannerShown = true;
@@ -164,7 +165,6 @@
   const endScreen = $('endScreen');
   const endCard = endScreen && endScreen.querySelector('.end-card');
   const endEmblem = $('endEmblem');
-  const endSub = $('endSub');
   let cleanupTimer = 0;
   let countRaf = 0;
   let countItems = [];
@@ -256,40 +256,6 @@
     confettiLayer = burstLayer = ashLayer = null;
   }
 
-  /* Звёзды и ранг из подзаголовка — отдельной строкой */
-  function buildRank(win) {
-    const old = endCard.querySelector('.sfx-rank');
-    if (old) old.remove();
-    if (!win || !endSub) return;
-    const text = endSub.textContent;
-    const m = text.match(/[★☆]{1,5}/);
-    if (!m) return;
-    const rankName = text.slice(m.index + m[0].length).trim();
-    endSub.textContent = text.slice(0, m.index).replace(/[\s·]+$/, '');
-    const row = document.createElement('div');
-    row.className = 'sfx-rank';
-    const stars = document.createElement('span');
-    stars.className = 'sfx-stars';
-    stars.setAttribute('role', 'img');
-    const on = (m[0].match(/★/g) || []).length;
-    stars.setAttribute('aria-label', on + ' из ' + m[0].length);
-    for (const ch of m[0]) {
-      const s = document.createElement('span');
-      s.className = 'sfx-star' + (ch === '★' ? '' : ' off');
-      s.textContent = '★';
-      s.setAttribute('aria-hidden', 'true');
-      stars.appendChild(s);
-    }
-    row.appendChild(stars);
-    if (rankName) {
-      const r = document.createElement('span');
-      r.className = 'sfx-rank-name';
-      r.textContent = rankName;
-      row.appendChild(r);
-    }
-    endSub.after(row);
-  }
-
   /* Набегающий счёт; в конце — точная исходная строка */
   function countUp(ids, delay) {
     if (reduced()) return;
@@ -323,7 +289,6 @@
     const win = !endCard.classList.contains('lost') && document.body.dataset.outcome !== 'lose';
     endCard.classList.remove('sfx-win', 'sfx-lose');
     endScreen.classList.toggle('sfx-lose-screen', !win);
-    buildRank(win);
     void endCard.offsetWidth;
     endCard.classList.add(win ? 'sfx-win' : 'sfx-lose');
     if (reduced()) return;
