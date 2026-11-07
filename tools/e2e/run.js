@@ -22,9 +22,14 @@ function rec(browser, scenario, ok, notes) {
 }
 function assert(c, msg) { if (!c) throw new Error('assert: ' + msg); }
 
-async function newPage(browser, bname, label, viewport) {
-  const ctx = await browser.newContext({ viewport: viewport || { width: 1366, height: 768 } });
-  await ctx.addInitScript(() => { try { localStorage.setItem('sun-treasures-muted', '1'); } catch (e) {} });
+async function newPage(browser, bname, label, viewport, opts) {
+  opts = opts || {};
+  const ctx = await browser.newContext({ viewport: viewport || { width: 1366, height: 768 }, ...(opts.reducedMotion ? { reducedMotion: 'reduce' } : {}) });
+  await ctx.addInitScript((fxFull) => {
+    try { localStorage.setItem('sun-treasures-muted', '1'); } catch (e) {}
+    // огонь: полный режим, чтобы медленный headless не включил слабый (без искр) сам
+    if (fxFull) { try { localStorage.setItem('sun-keeper-fx', 'full'); } catch (e) {} }
+  }, !!opts.fxFull);
   const page = await ctx.newPage();
   const key = bname + '/' + label;
   consoleLog[key] = consoleLog[key] || [];
@@ -703,6 +708,166 @@ async function suite(bt, bname, url) {
         return log.join(' || ');
       });
     }
+
+    // ---- 9 braziers layout ----
+    for (const vp of [
+      { width: 1366, height: 768, n: 'desktop' },
+      { width: 1366, height: 650, n: 'desktop-short' },
+      { width: 390, height: 844, n: 'mobile' },
+      { width: 360, height: 740, n: 'mobile-small' }
+    ]) {
+      await scenario(bname, `9 braziers ${vp.width}x${vp.height}`, async () => {
+        const { ctx, page } = await newPage(browser, bname, 's9' + vp.n, { width: vp.width, height: vp.height }, { fxFull: true });
+        await startFresh(page, url);
+        await page.click('#playBtn');
+        await page.waitForSelector('#storyScreen.show');
+        await page.click('#storySkipBtn');
+        await waitStarted(page);
+        await page.waitForTimeout(600);
+        const r = await ev(page, () => {
+          const iw = innerWidth, ih = innerHeight;
+          const box = e => { const c = e.getBoundingClientRect(); return { l: c.left, t: c.top, r: c.right, b: c.bottom, w: c.width, h: c.height }; };
+          const shown = e => { const cs = getComputedStyle(e); const c = e.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && c.width > 0 && c.height > 0; };
+          const name = e => (e.id ? '#' + e.id : '') + '.' + String(e.className).trim().split(/\s+/).join('.');
+          const hits = (a, b) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > 2 && Math.min(a.b, b.b) - Math.max(a.t, b.t) > 2;
+          const controls = [...document.querySelectorAll('button, .hud-plaque, .goal-card, .board-frame')].filter(e => !e.closest('.overlay') && shown(e));
+          const all = [...document.querySelectorAll('.brazier')];
+          const vis = all.filter(shown);
+          const bad = [];
+          const out = [];
+          vis.forEach(br => {
+            const below = br.nextElementSibling;
+            const fire = br.querySelector('.brazier-fire'), bowl = br.querySelector('img.brazier-bowl');
+            const bf = box(fire), bb = box(bowl), bbr = box(br);
+            if (bbr.l < 0 || bbr.r > iw || bbr.t < 0 || bbr.b > ih) bad.push(name(br) + ' вне окна ' + JSON.stringify(bbr));
+            if (bf.t < 0 || bb.t < 0) bad.push(name(br) + ' пламя/чаша выше окна');
+            if (bowl.naturalWidth === 0) bad.push('чаша не загрузилась');
+            controls.forEach(c => {
+              const bc = box(c);
+              if (hits(bf, bc)) bad.push(name(br) + ' .brazier-fire × ' + name(c));
+              if (c !== below && !(below && below.contains(c)) && hits(bb, bc)) bad.push(name(br) + ' чаша × ' + name(c));
+            });
+            out.push(name(br) + ' fire ' + Math.round(bf.t) + '..' + Math.round(bf.b) + ' bowl ' + Math.round(bb.t) + '..' + Math.round(bb.b));
+          });
+          const small = [...document.querySelectorAll('button')].filter(b => shown(b) && !b.closest('.overlay') && b.getBoundingClientRect().height < 56).map(b => (b.id || b.className) + ':' + Math.round(b.getBoundingClientRect().height));
+          return {
+            total: all.length, vis: vis.length, bad, out, small,
+            aria: all.map(b => b.getAttribute('aria-hidden')),
+            pe: all.map(b => getComputedStyle(b).pointerEvents),
+            light: document.querySelectorAll('.fire-light').length,
+            sparks: document.querySelectorAll('canvas.fire-sparks').length,
+            sh: document.scrollingElement.scrollHeight, ih, sw: document.scrollingElement.scrollWidth, iw
+          };
+        });
+        await shot(page, bname, vp.n + '-L4-braziers');
+        const desktop = vp.width >= 1366;
+        const issues = [];
+        if (r.total !== 2) issues.push('жаровен в разметке ' + r.total);
+        if (r.aria.some(a => a !== 'true')) issues.push('aria-hidden: ' + JSON.stringify(r.aria));
+        if (r.pe.some(p => p !== 'none')) issues.push('pointer-events: ' + JSON.stringify(r.pe));
+        if (r.light !== 1 || r.sparks !== 1) issues.push(`fire-light=${r.light} fire-sparks=${r.sparks}`);
+        if (desktop && r.vis !== 2) issues.push('на десктопе видимых жаровен ' + r.vis);
+        if (!desktop && r.vis !== 0) issues.push('на телефоне жаровни видны: ' + r.vis);
+        if (r.bad.length) issues.push('перекрытие: ' + r.bad.join('; '));
+        if (r.small.length) issues.push('кнопки <56px: ' + r.small.join(', '));
+        if (r.sw > r.iw) issues.push(`горизонтальная прокрутка ${r.sw}/${r.iw}`);
+        if (vp.height === 650 && r.sh > r.ih + 1) issues.push(`вертикальная прокрутка ${r.sh}/${r.ih}`);
+        await ctx.close();
+        if (issues.length) throw new Error(issues.join(' | '));
+        return `visible=${r.vis} ${r.out.join(' | ')} fire-light=${r.light} fire-sparks=${r.sparks} scrollH=${r.sh}/${r.ih}`;
+      });
+    }
+
+    // ---- 10 fire reacts ----
+    await scenario(bname, '10 fire reacts: pause on overlay, flare, sparks, no stuck flare', async () => {
+      const { ctx, page } = await newPage(browser, bname, 's10', { width: 1366, height: 768 }, { fxFull: true });
+      await startFresh(page, url);
+      assert(await ev(page, () => !!window.__FIRE), '__FIRE missing (need ?debug)');
+      // Стартовый экран — оверлей: цикл стоит
+      await page.waitForTimeout(500);
+      const f0 = await ev(page, () => __FIRE.frames);
+      await page.waitForTimeout(1000);
+      const f1 = await ev(page, () => __FIRE.frames);
+      assert(f0 === f1, `на стартовом экране кадры идут: ${f0} -> ${f1}`);
+      assert(await ev(page, () => !__FIRE.state().running), 'running на стартовом экране');
+      await page.click('#playBtn');
+      await page.waitForSelector('#storyScreen.show');
+      await page.click('#storySkipBtn');
+      await waitStarted(page);
+      await page.waitForTimeout(500);
+      const g0 = await ev(page, () => __FIRE.frames);
+      await page.waitForTimeout(1000);
+      const g1 = await ev(page, () => __FIRE.frames);
+      assert(g1 > g0, `на уровне кадры не идут: ${g0} -> ${g1}`);
+      const st0 = await ev(page, () => __FIRE.state());
+      assert(st0.running && !st0.low && !st0.reduced, 'состояние на уровне: ' + JSON.stringify(st0));
+      assert(await ev(page, () => !document.querySelector('.brazier[data-flare]')), 'data-flare до события');
+      // Каскад из 5: вспышка видна в течение 300 мс, свет не выше 0.55, через 2.2 с её нет
+      const fl = await ev(page, () => new Promise(res => {
+        const t0 = performance.now();
+        let appeared = -1, maxLight = 0, maxScale = 1, sparksMax = 0;
+        const light = document.querySelector('.fire-light');
+        const fire = document.querySelector('.brazier-fire');
+        window.dispatchEvent(new CustomEvent('sun:match', { detail: { chain: 5, mult: 6 } }));
+        const iv = setInterval(() => {
+          const t = performance.now() - t0;
+          if (appeared < 0 && document.querySelector('.brazier[data-flare]')) appeared = Math.round(t);
+          maxLight = Math.max(maxLight, parseFloat(getComputedStyle(light).opacity));
+          maxScale = Math.max(maxScale, parseFloat(fire.style.getPropertyValue('--flare-scale')) || 1);
+          sparksMax = Math.max(sparksMax, __FIRE.state().sparks);
+          if (t >= 2200) { clearInterval(iv); res({ appeared, maxLight, maxScale, sparksMax, stuck: !!document.querySelector('.brazier[data-flare]'), end: __FIRE.state() }); }
+        }, 40);
+      }));
+      assert(fl.appeared >= 0 && fl.appeared <= 300, 'data-flare не появился за 300 мс: ' + fl.appeared);
+      assert(!fl.stuck, 'data-flare залип через 2.2 с');
+      assert(fl.maxLight <= 0.56, 'свет ярче 0.55: ' + fl.maxLight);
+      assert(fl.maxScale <= 1.225, 'пламя выросло больше 22%: ' + fl.maxScale);
+      assert(fl.sparksMax > 0, 'искр не было');
+      assert(fl.end.flare < 0.01, 'огибающая не дошла до 0: ' + fl.end.flare);
+      // Вспышка на пике: верх рамки спрайта (в нём прозрачные поля) может чуть выйти за окно, видимое пламя нет — это смотрят глазами по скриншоту
+      const top = await ev(page, () => new Promise(res => {
+        __FIRE.flare(1);
+        setTimeout(() => {
+          const tops = [...document.querySelectorAll('.brazier-fire')].map(e => Math.round(e.getBoundingClientRect().top));
+          res(tops);
+        }, 450);
+      }));
+      assert(top.every(t => t > -40), 'пламя при вспышке далеко за верхом окна: ' + JSON.stringify(top));
+      await shot(page, bname, 'desktop-L4-flare-peak');
+      await page.waitForTimeout(1700);
+      assert(await ev(page, () => !document.querySelector('.brazier[data-flare]')), 'data-flare залип после __FIRE.flare(1)');
+      await ctx.close();
+      return `startFrames ${f0}->${f1}; levelFrames ${g0}->${g1}; flare appeared ${fl.appeared}ms maxLight=${fl.maxLight.toFixed(2)} maxScale=${fl.maxScale.toFixed(2)} sparksMax=${fl.sparksMax}; no stuck flare; flareTop=${JSON.stringify(top)}`;
+    });
+
+    // ---- 11 reduced motion ----
+    await scenario(bname, '11 prefers-reduced-motion: static fire, no sparks', async () => {
+      const { ctx, page } = await newPage(browser, bname, 's11', { width: 1366, height: 768 }, { reducedMotion: true, fxFull: true });
+      await startFresh(page, url);
+      await page.click('#playBtn');
+      await page.waitForSelector('#storyScreen.show');
+      await page.click('#storySkipBtn');
+      await waitStarted(page);
+      await page.waitForTimeout(500);
+      await ev(page, () => window.dispatchEvent(new CustomEvent('sun:match', { detail: { chain: 5, mult: 6 } })));
+      const f0 = await ev(page, () => __FIRE.frames);
+      await page.waitForTimeout(800);
+      const r = await ev(page, () => {
+        const cv = document.querySelector('canvas.fire-sparks');
+        const px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let painted = 0;
+        for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) painted++;
+        return { st: __FIRE.state(), frames: __FIRE.frames, flare: !!document.querySelector('.brazier[data-flare]'), painted, mq: matchMedia('(prefers-reduced-motion: reduce)').matches };
+      });
+      assert(r.mq, 'браузер не применил reducedMotion');
+      assert(r.st.reduced === true && r.st.running === false, 'цикл идёт: ' + JSON.stringify(r.st));
+      assert(r.st.sparks === 0 && r.painted === 0, `искры есть: sparks=${r.st.sparks} painted=${r.painted}`);
+      assert(!r.flare, 'data-flare при reduced-motion');
+      assert(r.frames === f0, `кадры идут: ${f0} -> ${r.frames}`);
+      await shot(page, bname, 'desktop-L4-reduced');
+      await ctx.close();
+      return `reduced=true running=false sparks=0 canvasPainted=0 frames ${f0}->${r.frames}`;
+    });
   } finally {
     await browser.close();
   }
@@ -727,6 +892,17 @@ async function smokeFile(bt, bname) {
         return faceLoaded && document.fonts.check('20px "Philosopher"', 'Хранитель');
       });
       assert(fontOk === true, 'Philosopher face not loaded from file:// (or check failed)');
+      // Лист огня и чаша жаровни грузятся с диска: фон .fire-calm / .fire-flare и img.brazier-bowl
+      const fire = await ev(page, async () => {
+        const urlOf = sel => { const m = /url\(["']?(.*?)["']?\)/.exec(getComputedStyle(document.querySelector(sel)).backgroundImage); return m && m[1]; };
+        const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src; });
+        const calm = urlOf('.fire-calm'), flare = urlOf('.fire-flare');
+        const bowl = document.querySelector('img.brazier-bowl');
+        return { calm, flare, calmW: calm ? await load(calm) : 0, flareW: flare ? await load(flare) : 0, bowlW: bowl.complete ? bowl.naturalWidth : 0 };
+      });
+      assert(fire.calm && fire.calm.startsWith('file:') && fire.calmW > 0, 'fire-calm sheet not loaded: ' + JSON.stringify(fire));
+      assert(fire.flare && fire.flareW > 0, 'fire-flare sheet not loaded: ' + JSON.stringify(fire));
+      assert(fire.bowlW > 0, 'brazier bowl not loaded: ' + JSON.stringify(fire));
       await playRealMove(page);
       await forceWin(page);
       const saved = await ev(page, () => localStorage.getItem('sun-keeper-save'));
@@ -735,7 +911,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }
