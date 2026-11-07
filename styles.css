@@ -12,7 +12,6 @@
   --display: 'Philosopher', Georgia, serif;
   --ui: 'PT Serif', Georgia, serif;
   --shadow-hard: 0 18px 40px rgba(0, 0, 0, .55);
-  --stone-tex: url("assets/ui/stone.webp"); /* только для styles.css; из css/*.css путь другой: ../assets/ui/stone.webp */
 }
 
 * { box-sizing: border-box; }
@@ -51,7 +50,7 @@ button:focus-visible {
   position: relative;
   min-height: 100dvh;
   isolation: isolate;
-  /* Декоративные слои (лучи, листья, сияние шамана) выходят за край экрана —
+  /* Декоративные слои (лучи, листья, светлячки) выходят за край экрана —
      обрезаем, чтобы на телефоне не появлялась горизонтальная прокрутка. */
   overflow-x: hidden;
   overflow-x: clip;
@@ -159,162 +158,6 @@ button:focus-visible {
   pointer-events: none;
 }
 
-/* Десктоп: поле — главный герой. Рамка занимает всю высоту экрана
-   (минус ~96px на подсказку и поля), а счёт, уровень и меню уходят
-   в боковые колонки. .topbar, .top-right и .game «растворяются»
-   (display: contents), и их дети раскладываются прямо по сетке оболочки:
-
-     brand  | board | menu
-     score  | board | level
-     left   | board | right                                         */
-.game-shell {
-  --side: clamp(228px, 15vw, 290px);
-  --gap: clamp(14px, 1.4vw, 26px);
-  --pad-x: clamp(12px, 1.4vw, 26px);
-  --frame: min(calc(100dvh - 96px), calc(100vw - 2 * var(--side) - 2 * var(--gap) - 2 * var(--pad-x)), 1040px);
-  position: relative;
-  width: 100%;
-  margin: 0 auto;
-  padding: 10px var(--pad-x);
-  display: grid;
-  grid-template-columns: var(--side) var(--frame) var(--side);
-  grid-template-rows: auto auto 1fr;
-  grid-template-areas:
-    "brand board menu"
-    "score board level"
-    "left  board right";
-  column-gap: var(--gap);
-  row-gap: 12px;
-  justify-content: center;
-  align-content: center;
-  min-height: 100dvh;
-}
-
-.topbar, .top-right, .game { display: contents; }
-
-.brand { grid-area: brand; min-width: 0; align-self: center; }
-.score-plaque { grid-area: score; }
-.level-plaque { grid-area: level; }
-.menu-btn { grid-area: menu; }
-.left-panel { grid-area: left; }
-.board-area { grid-area: board; }
-.right-panel { grid-area: right; }
-
-.brand-kicker {
-  display: block;
-  font-family: var(--display);
-  font-size: 14px;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: #d6c08a;
-  opacity: .9;
-  white-space: nowrap;
-}
-
-.brand-title {
-  margin: 4px 0 0;
-  font-family: var(--display);
-  font-size: min(28px, calc(var(--side) * .088));
-  font-weight: 700;
-  letter-spacing: .04em;
-  line-height: 1;
-  background: linear-gradient(180deg, #fff4c9 8%, #e5c070 48%, #9a6a24 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 2px 1px rgba(40, 20, 0, .8));
-  white-space: nowrap;
-}
-
-.plaque {
-  position: relative;
-  border-radius: 9px;
-  border: 2px solid #c7a865;
-  background:
-    linear-gradient(180deg, rgba(255, 245, 210, .16), transparent 45%),
-    var(--stone-tex) center / cover no-repeat,
-    #241f17;
-  box-shadow:
-    inset 0 0 0 2px rgba(28, 21, 11, .9),
-    inset 0 1px 0 rgba(255, 235, 180, .35),
-    0 8px 18px rgba(0, 0, 0, .45);
-  color: var(--gold);
-}
-
-.plaque::before, .plaque::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff0b6, #b6852f 55%, #5d3c0d);
-  box-shadow: 0 0 0 1px #2a1c09;
-  transform: translateY(-50%);
-}
-
-.plaque::before { left: 5px; }
-.plaque::after { right: 5px; }
-
-.score-plaque {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  padding: 8px 22px 10px;
-}
-
-.plaque-label {
-  font-family: var(--display);
-  font-size: 14px;
-  letter-spacing: .2em;
-  text-transform: uppercase;
-  color: #dcc48e;
-  line-height: 1.4;
-}
-
-.score-value {
-  font-family: var(--display);
-  /* 36–40px; на узкой колонке (228px) шестизначный счёт всё ещё в одну строку */
-  font-size: min(40px, calc(var(--side) * .16));
-  font-weight: 700;
-  letter-spacing: .05em;
-  line-height: 1;
-  white-space: nowrap;
-  color: #ffe19a;
-  text-shadow: 0 0 16px rgba(255, 198, 80, .45), 0 2px 2px #3a2000;
-  font-variant-numeric: tabular-nums;
-}
-
-.score-value.bump { animation: scoreBump .32s ease; }
-
-@keyframes scoreBump {
-  40% { transform: scale(1.13); color: #fff8d4; }
-  100% { transform: scale(1); }
-}
-
-.level-plaque {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 20px 10px;
-}
-
-.level-value {
-  font-family: var(--display);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: .08em;
-  color: #f2d992;
-}
-
-/* Одна подписанная кнопка «Меню» (#menuBtn) на всех экранах;
-   иконочная #menuBtnMobile остаётся в разметке ради обработчика. */
-.stone-btn.mobile-menu { display: none; }
-
 /* ---------- Кнопки ---------- */
 .gold-btn {
   position: relative;
@@ -413,460 +256,6 @@ button:focus-visible {
 .stone-btn:hover { filter: brightness(1.18); }
 .stone-btn:active { transform: translateY(2px); }
 
-.menu-btn {
-  width: 100%;
-  min-height: 56px;
-  padding: 10px 14px;
-  align-self: center;
-  background:
-    linear-gradient(180deg, rgba(220, 255, 250, .28), transparent 48%),
-    linear-gradient(170deg, #2b8b8f 0%, #14606b 52%, #093c47 100%);
-  border-color: #d6bd7c;
-  color: #ffeab0;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: .16em;
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px rgba(4, 34, 38, .8), 0 4px 12px rgba(0, 0, 0, .4);
-}
-
-.menu-btn svg { width: 22px; height: 22px; opacity: .95; flex: 0 0 auto; }
-
-.icon-btn {
-  position: relative;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border-radius: 50%;
-  flex: 0 0 auto;
-}
-
-.icon-btn svg { width: 23px; height: 23px; }
-.icon-btn.wide { width: 100%; border-radius: 8px; }
-.icon-btn:disabled { opacity: .45; cursor: default; filter: grayscale(.4); }
-
-/* Кнопки-инструменты с подписью: на десктопе — широкие плитки «иконка + слово» */
-.tool-btn {
-  width: 100%;
-  height: 60px;
-  padding: 0 16px;
-  justify-content: flex-start;
-  gap: 14px;
-  border-radius: 12px;
-}
-
-.tool-btn svg { width: 28px; height: 28px; flex: 0 0 auto; color: #ffd97c; }
-
-.tool-label {
-  font-family: var(--ui);
-  font-size: 18px;
-  letter-spacing: .03em;
-  text-transform: none;
-  color: #fbe7b4;
-  white-space: nowrap;
-}
-
-.btn-badge {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  min-width: 30px;
-  height: 26px;
-  padding: 0 6px;
-  border-radius: 13px;
-  transform: translateY(-50%);
-  background: #3a1c0b;
-  border: 1px solid #d9b96f;
-  color: #ffe1a0;
-  font-family: var(--display);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 24px;
-  text-align: center;
-}
-
-.btn-badge:empty { display: none; }
-
-/* ---------- Раскладка ---------- */
-.left-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: stretch;
-  min-width: 0;
-  min-height: 0;
-}
-
-/* ---------- Циферблат ---------- */
-.dial-wrap { display: flex; justify-content: center; position: relative; }
-
-.dial {
-  position: relative;
-  width: min(100%, 184px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  padding: 9px;
-  background:
-    radial-gradient(circle at 34% 26%, rgba(255, 244, 207, .16), transparent 46%),
-    conic-gradient(from 210deg, #7e7259, #b3a583 12%, #5c5342 28%, #a2947a 46%, #4d4638 62%, #b4a685 80%, #5a5241 94%, #7e7259);
-  box-shadow:
-    0 16px 34px rgba(0, 0, 0, .5),
-    inset 0 0 0 2px rgba(30, 23, 12, .8),
-    inset 0 2px 3px rgba(255, 240, 200, .28);
-}
-
-.dial::before {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  border: 2px solid rgba(219, 187, 118, .65);
-  box-shadow: inset 0 0 0 3px rgba(20, 15, 7, .55);
-  pointer-events: none;
-}
-
-.dial-svg {
-  position: absolute;
-  inset: 9px;
-  width: calc(100% - 18px);
-  height: calc(100% - 18px);
-  transform: rotate(-90deg);
-  overflow: visible;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .55));
-}
-
-.dial-track {
-  fill: rgba(7, 24, 17, .86);
-  stroke: #2c261b;
-  stroke-width: 10;
-}
-
-.dial-progress {
-  fill: none;
-  stroke: url(#dialGrad);
-  stroke-width: 10;
-  stroke-linecap: round;
-  stroke-dasharray: 345.58;
-  stroke-dashoffset: 0;
-  transition: stroke-dashoffset .18s linear;
-  filter: drop-shadow(0 0 5px rgba(148, 227, 107, .55));
-}
-
-.dial-progress.tense {
-  stroke: #ffd166;
-  filter: drop-shadow(0 0 6px rgba(255, 190, 80, .7));
-  animation: tensePulse 1.25s ease-in-out infinite alternate;
-}
-
-.dial-progress.urgent {
-  stroke: #ff8a4c;
-  filter: drop-shadow(0 0 7px rgba(255, 90, 50, .8));
-  animation: urgentPulse .6s ease-in-out infinite alternate;
-}
-
-@keyframes tensePulse { to { opacity: .72; } }
-@keyframes urgentPulse { to { opacity: .55; } }
-
-.dial-ring {
-  fill: none;
-  stroke: rgba(235, 209, 143, .2);
-  stroke-width: 1.4;
-  stroke-dasharray: 1 6;
-}
-
-.dial-ticks line { stroke: rgba(255, 229, 163, .35); stroke-width: 2; }
-
-.dial-center {
-  position: absolute;
-  inset: 16%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, rgba(15, 48, 35, .92), rgba(4, 18, 12, .96));
-  box-shadow: inset 0 0 16px rgba(0, 0, 0, .8), 0 0 0 2px rgba(218, 186, 116, .28);
-}
-
-.time-value {
-  font-family: var(--display);
-  font-size: 44px;
-  font-weight: 700;
-  color: #eaf7c4;
-  text-shadow: 0 0 12px rgba(159, 231, 108, .45);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.time-value.tense {
-  color: #ffe0a0;
-  text-shadow: 0 0 14px rgba(255, 190, 80, .6);
-  animation: timeTense 1.25s ease-in-out infinite alternate;
-}
-
-.time-value.urgent {
-  color: #ffb08a;
-  text-shadow: 0 0 16px rgba(255, 90, 50, .8);
-  animation: timeTense .6s ease-in-out infinite alternate;
-}
-
-@keyframes timeTense { to { transform: scale(1.045); } }
-
-.time-label {
-  margin-top: 4px;
-  font-size: 14px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: #c6d8a8;
-}
-
-/* ---------- Карточка целей ---------- */
-.goal-card {
-  position: relative;
-  padding: 10px 11px 11px;
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 245, 210, .08), rgba(0, 0, 0, .12) 45%, rgba(0, 0, 0, .34)),
-    var(--stone-tex) center / cover no-repeat,
-    #241f17;
-  border: 2px solid #a98e55;
-  box-shadow: inset 0 0 0 1px rgba(26, 19, 9, .8), 0 10px 22px rgba(0, 0, 0, .35);
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-family: var(--display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: #e6cb8c;
-}
-
-.card-title::before, .card-title::after {
-  content: '';
-  height: 1px;
-  flex: 1;
-  background: linear-gradient(90deg, transparent, rgba(219, 189, 128, .55), transparent);
-}
-
-.goal-list { display: flex; flex-direction: column; gap: 6px; }
-
-.goal-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, .3);
-  border: 1px solid rgba(207, 177, 112, .22);
-  transition: background .2s, border-color .2s;
-}
-
-.goal-chip .mini-gem { width: 40px; height: 40px; flex: 0 0 auto; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
-.goal-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.12; }
-.goal-name { font-size: 16px; color: #e3d4ae; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.goal-count { font-family: var(--display); font-size: 22px; font-weight: 700; color: #ffe2a0; letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Галочка выполненной цели — значком на углу камня, не отнимая ширину у текста */
-.goal-chip { position: relative; }
-.goal-check {
-  position: absolute;
-  left: 34px;
-  bottom: 2px;
-  width: 20px;
-  height: 20px;
-  padding: 3px;
-  border-radius: 50%;
-  background: #14351c;
-  box-shadow: 0 0 0 1px rgba(143, 224, 122, .75);
-  color: #8fe07a;
-  opacity: 0;
-  transform: scale(.4);
-  transition: .25s;
-}
-.goal-check svg { width: 100%; height: 100%; }
-
-.goal-chip.done { border-color: rgba(143, 224, 122, .45); background: rgba(56, 110, 58, .26); }
-.goal-chip.done .goal-check { opacity: 1; transform: scale(1); }
-.goal-chip.done .goal-count { color: #a8ee92; }
-.goal-chip.pop { animation: goalPop .35s ease; }
-
-@keyframes goalPop { 40% { transform: scale(1.04); background: rgba(255, 220, 130, .18); } }
-
-/* ---------- Шаман ---------- */
-/* Десктоп: шаман занимает остаток колонки под целями и масштабируется
-   по высоте (контейнер-запрос); если места меньше ~110px — прячется,
-   а счётчик камней остаётся. */
-.shaman-wrap {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  flex: 1 1 0;
-  min-height: 0;
-  container: shaman / size;
-}
-
-.shaman-art {
-  width: min(100%, 220px, 70cqh);
-  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, .55));
-}
-.shaman-art svg, .shaman-art img { display: block; width: 100%; height: auto; }
-
-@container shaman (max-height: 110px) {
-  .shaman-art { display: none; }
-}
-
-.relic-plaque {
-  position: absolute;
-  right: 0;
-  bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 12px 5px 8px;
-  border-radius: 8px;
-  background:
-    linear-gradient(170deg, rgba(255, 245, 210, .12), rgba(0, 0, 0, .28)),
-    var(--stone-tex) center / cover no-repeat,
-    #2a241a;
-  border: 1px solid #b69657;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, .5), inset 0 0 0 1px rgba(20, 15, 7, .7);
-}
-
-.relic-icon { width: 24px; height: 24px; color: #ffd36c; filter: drop-shadow(0 0 5px rgba(255, 190, 60, .5)); }
-.relic-meta { display: flex; flex-direction: column; line-height: 1; }
-.relic-meta b { font-family: var(--display); font-size: 20px; color: #ffe4a4; }
-.relic-meta span { font-size: 14px; letter-spacing: .06em; color: #cdb98c; margin-top: 2px; }
-
-.tool-row { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: auto; }
-
-/* ---------- Правая колонка: шкала комбо и кнопки ---------- */
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 0;
-}
-
-.combo-title {
-  font-family: var(--display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: #e6cb8c;
-}
-
-.ladder {
-  position: relative;
-  width: 78px;
-  flex: 1 1 0;
-  min-height: 0;
-  max-height: 460px;
-  border-radius: 30px;
-  padding: 14px 6px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  background:
-    linear-gradient(180deg, rgba(255, 240, 200, .1), transparent 30%),
-    linear-gradient(180deg, #4a4131, #2c271d 55%, #1b1710);
-  border: 2px solid #a98c50;
-  box-shadow: inset 0 0 0 2px rgba(20, 15, 7, .75), 0 12px 26px rgba(0, 0, 0, .4);
-}
-
-.ladder-track {
-  position: absolute;
-  left: 50%;
-  top: 20px;
-  bottom: 20px;
-  width: 10px;
-  transform: translateX(-50%);
-  border-radius: 6px;
-  background: #140f09;
-  box-shadow: inset 0 0 0 1px rgba(210, 177, 107, .18), inset 0 3px 6px rgba(0, 0, 0, .8);
-}
-
-.ladder-fill {
-  position: absolute;
-  left: 50%;
-  bottom: 20px;
-  width: 10px;
-  height: 0;
-  transform: translateX(-50%);
-  border-radius: 6px;
-  background: linear-gradient(0deg, #3fbf6c 0%, #b8e05a 55%, #ffe37c 100%);
-  box-shadow: 0 0 12px rgba(180, 235, 110, .65);
-  transition: height .35s cubic-bezier(.3, .8, .4, 1.2);
-}
-
-.rung {
-  position: relative;
-  z-index: 2;
-  width: 62px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: #2a2418;
-  border: 1px solid #7a6439;
-  font-family: var(--display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  color: #b49c68;
-  transition: .2s;
-}
-
-.rung.active {
-  color: #241403;
-  background: linear-gradient(180deg, #ffeaa5, #e0b257);
-  border-color: #fff0b9;
-  box-shadow: 0 0 10px rgba(255, 214, 112, .55);
-}
-
-.ladder-top { display: none; }
-
-.combo-hint {
-  font-size: 14px;
-  line-height: 1.3;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  text-align: center;
-  color: #c4b088;
-}
-
-.combo-badge {
-  display: none;
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 6;
-  min-width: 46px;
-  padding: 4px 9px;
-  border-radius: 20px;
-  background: rgba(20, 14, 7, .85);
-  border: 2px solid #e0bb62;
-  color: #ffe6a2;
-  font-family: var(--display);
-  font-size: 17px;
-  text-align: center;
-  box-shadow: 0 0 16px rgba(255, 200, 80, .4);
-  opacity: 0;
-  transform: scale(.7);
-  transition: .2s;
-}
-
-.combo-badge.show { opacity: 1; transform: scale(1); }
-
 /* ---------- Игровое поле ---------- */
 .board-area {
   position: relative;
@@ -878,16 +267,16 @@ button:focus-visible {
   min-width: 0;
 }
 
-/* Ширина рамки задаётся одной переменной --frame (см. .game-shell).
-   Внутренний край рисунка рамки — 3.7% (47 из 1280 px): поле начинается
-   чуть раньше, его кромка уходит под рамку, и поле занимает ~93% рамки.
-   (Раньше padding: 3.6cqw считался от ширины окна — рамка на самом деле
-   не была контейнером — и на 1920px съедала 20% ширины.) */
+/* Ширина рамки задаётся одной переменной --frame (css/hud.css, .game-shell).
+   Золотая рамка — фоном поверх поля, растянута 100% × 100% (вставки в
+   серединах сторон через border-image ломаются). Её внутренний край —
+   8.1–8.4% ширины рисунка; поле начинается чуть раньше (7%), его кромка
+   уходит под рамку, а камни (.tiles, отступ 2%) остаются целиком видны. */
 .board-frame {
   position: relative;
   width: var(--frame);
   max-width: 100%;
-  padding: calc(var(--frame) * .034);
+  padding: calc(var(--frame) * .07);
   transition: transform .15s;
 }
 
@@ -896,8 +285,8 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: url("assets/ui/board-frame.webp") center / 100% 100% no-repeat;
-  filter: drop-shadow(0 22px 34px rgba(0, 0, 0, .55));
+  background: url("assets/ui/board-frame-gold.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 22px 34px rgba(0, 0, 0, .6));
   pointer-events: none;
 }
 
@@ -916,8 +305,12 @@ button:focus-visible {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
+  /* Тёмный полированный камень под камнями: обсидиан, чуть приподнятый
+     тёплым светом к центру, чтобы цветные камни читались */
   background:
-    radial-gradient(circle at 50% 40%, #1b4835 0%, #123526 42%, #0a2017 78%, #071710 100%);
+    radial-gradient(circle at 50% 42%, rgba(70, 56, 38, .5) 0%, rgba(30, 24, 17, .35) 48%, transparent 80%),
+    url("assets/ui/obsidian.webp") 0 0 / 256px repeat,
+    #0b0a09;
   border: 2px solid #2f2718;
   box-shadow:
     inset 0 0 0 1px rgba(235, 206, 140, .25),
@@ -929,26 +322,14 @@ button:focus-visible {
   -webkit-touch-callout: none;
 }
 
+/* Сетка поля — по клеткам камней (.tiles, отступ 2%) */
 .board-bg {
   position: absolute;
-  inset: 0;
+  inset: 2%;
   background-image:
-    radial-gradient(circle at 50% 50%, rgba(255, 220, 140, .045) 0 32%, transparent 33%),
-    linear-gradient(rgba(0, 0, 0, .16) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, .16) 1px, transparent 1px);
-  background-size: 12.5% 12.5%, 12.5% 12.5%, 12.5% 12.5%;
-  opacity: .9;
-}
-
-.board-bg::before {
-  content: '';
-  position: absolute;
-  inset: 8%;
-  background:
-    repeating-conic-gradient(from 0deg, rgba(255, 218, 130, .05) 0 3deg, transparent 3deg 9deg);
-  border-radius: 50%;
-  mask-image: radial-gradient(circle, #000 0 62%, transparent 70%);
-  -webkit-mask-image: radial-gradient(circle, #000 0 62%, transparent 70%);
+    linear-gradient(rgba(236, 208, 138, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236, 208, 138, .07) 1px, transparent 1px);
+  background-size: 12.5% 12.5%;
 }
 
 .board-bg::after {
@@ -1412,9 +793,9 @@ button:focus-visible {
   letter-spacing: .02em;
   text-align: center;
   text-wrap: balance;
-  color: #f4e7c3;
-  background: rgba(6, 18, 12, .8);
-  border: 1px solid rgba(214, 184, 118, .4);
+  color: #f3e6c4;
+  background: rgba(10, 8, 6, .84);
+  border: 1px solid rgba(236, 208, 138, .45);
   box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
   backdrop-filter: blur(4px);
   max-width: 100%;
@@ -1516,7 +897,7 @@ button:focus-visible {
 .start-title {
   margin: 0;
   font-family: var(--display);
-  font-weight: 900;
+  font-weight: 700;
   font-size: clamp(38px, 6.4vh, 62px);
   line-height: .95;
   letter-spacing: .02em;
@@ -1581,8 +962,8 @@ button:focus-visible {
   text-align: center;
   background:
     linear-gradient(180deg, rgba(255, 245, 210, .1), transparent 30%),
-    var(--stone-tex) center / cover no-repeat,
-    #241f17;
+    url("assets/ui/obsidian.webp") 0 0 / 256px repeat,
+    #0d0b0a;
   border: 2px solid #c2a25e;
   box-shadow:
     0 0 0 4px rgba(31, 24, 12, .8),
@@ -1705,7 +1086,7 @@ button:focus-visible {
 .countdown span {
   font-family: var(--display);
   font-size: clamp(90px, 22vh, 180px);
-  font-weight: 900;
+  font-weight: 700;
   color: #ffe6a0;
   text-shadow: 0 0 40px rgba(255, 190, 60, .7), 0 6px 0 #6d450c;
   animation: countPop .6s cubic-bezier(.2, .9, .3, 1.4) both;
@@ -1728,167 +1109,10 @@ button:focus-visible {
 }
 
 /* ---------- Адаптивность ----------
-   Десктоп (по умолчанию выше): сетка «колонка | поле | колонка», рамка поля
-   = высота окна − 96px. Телефон (≤900px): шапка «счёт · уровень · меню»,
-   под ней таймер и цели, поле от края до края, внизу панель кнопок
-   с подписями. Минимальные размеры текста: десктоп 14px, телефон 13px. */
-
-/* Невысокий ноутбук: компактнее циферблат, без подзаголовка */
-@media (max-height: 820px) and (min-width: 901px) {
-  .dial { width: min(100%, 160px); }
-  .brand-kicker { display: none; }
-}
-
-@media (max-height: 740px) and (min-width: 901px) {
-  .game-shell { row-gap: 10px; }
-  .left-panel { gap: 10px; }
-  .goal-chip .mini-gem { width: 34px; height: 34px; }
-  .combo-hint { display: none; }
-}
-
-@media (max-width: 1080px) and (min-width: 901px) {
-  .game-shell { --side: 212px; }
-  .brand-kicker { display: none; }
-}
-
+   Раскладка игрового экрана (десктоп, телефон, телефон боком) — в
+   css/hud.css. Здесь — только оверлеи на телефоне. */
 @media (max-width: 900px) and (orientation: portrait), (max-width: 900px) and (min-height: 501px) {
   body { overflow-y: auto; }
-  .game-shell {
-    --pad-x: 6px;
-    --bar-h: 80px;
-    /* Поле — во всю ширину, но не выше свободной области: сверху шапка
-       и таймер с целями (~230px), снизу подсказка (до двух строк) и
-       фиксированная панель кнопок (~90px). */
-    --frame: min(100%, max(260px, calc(100dvh - 372px - env(safe-area-inset-top) - env(safe-area-inset-bottom))));
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    max-width: 620px;
-    padding: max(8px, env(safe-area-inset-top)) var(--pad-x) calc(var(--bar-h) + 8px + env(safe-area-inset-bottom));
-  }
-
-  /* Шапка: счёт · уровень · меню в одну строку */
-  .topbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 6px;
-    margin-bottom: 8px;
-    align-items: stretch;
-  }
-  .brand { display: none; }
-  .score-plaque, .level-plaque, .menu-btn { grid-area: auto; }
-  .score-plaque, .level-plaque { min-height: 52px; padding: 4px 14px 5px; }
-  .plaque-label { font-size: 14px; letter-spacing: .06em; line-height: 1.25; }
-  .score-value { font-size: 24px; }
-  .level-value { font-size: 20px; }
-  .menu-btn {
-    width: auto;
-    min-height: 56px;
-    padding: 0 12px;
-    gap: 6px;
-    font-size: 16px;
-    letter-spacing: .06em;
-  }
-  .menu-btn svg { width: 20px; height: 20px; }
-
-  .game { display: flex; flex-direction: column; gap: 8px; }
-
-  /* Таймер и цели (шаман — третьей колонкой, см. css/shaman.css) */
-  .left-panel {
-    order: 0;
-    width: 100%;
-    display: grid;
-    grid-template-columns: 104px minmax(0, 1fr);
-    gap: 6px;
-    align-items: stretch;
-  }
-  .dial-wrap { grid-column: 1; align-items: center; }
-  .dial { width: 104px; padding: 6px; }
-  .dial-svg { inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
-  .dial-center { inset: 14%; }
-  .time-value { font-size: 30px; }
-  .time-label { margin-top: 2px; font-size: 13px; letter-spacing: .02em; text-transform: none; }
-  .goal-card {
-    grid-column: 2;
-    margin: 0;
-    padding: 6px 8px 7px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  .card-title { margin-bottom: 4px; font-size: 13px; letter-spacing: .18em; }
-  .goal-list { gap: 4px; }
-  .goal-chip { min-width: 0; gap: 8px; padding: 3px 6px; }
-  .goal-chip .mini-gem { width: 30px; height: 30px; }
-  .goal-meta { line-height: 1.1; }
-  .goal-name { font-size: 13px; }
-  .goal-count { font-size: 18px; }
-  .goal-check { left: 25px; bottom: 1px; width: 17px; height: 17px; padding: 2px; }
-
-  /* Нижняя панель: три кнопки с подписями под иконками */
-  .right-panel { display: contents; }
-  .combo-title, .ladder, .combo-hint { display: none; }
-  .tool-row {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 20;
-    flex-direction: row;
-    justify-content: center;
-    gap: 10px;
-    width: auto;
-    margin: 0;
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(3, 10, 6, 0), rgba(3, 10, 6, .82) 38%);
-    pointer-events: none;
-  }
-  .tool-btn {
-    flex: 0 1 112px;
-    width: auto;
-    height: 64px;
-    flex-direction: column;
-    justify-content: center;
-    gap: 4px;
-    padding: 4px 6px;
-    border-radius: 14px;
-    pointer-events: auto;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 235, 180, .25);
-  }
-  .tool-btn svg { width: 26px; height: 26px; }
-  .tool-label { font-size: 14px; }
-  .btn-badge {
-    top: 4px;
-    right: 6px;
-    min-width: 26px;
-    height: 22px;
-    transform: none;
-    font-size: 14px;
-    line-height: 20px;
-  }
-
-  /* Поле от края до края: тонкая рамка через border-image того же рисунка */
-  .board-area { order: 1; width: auto; margin-inline: calc(-1 * var(--pad-x)); }
-  .board-frame { width: var(--frame); padding: 3px; margin-inline: auto; }
-  .board-frame::after {
-    background: none;
-    border: 8px solid transparent;
-    border-image: url("assets/ui/board-frame.webp") 80 / 8px stretch;
-  }
-  .board { border-radius: 4px; border-width: 1px; }
-  .tiles, .fx-layer { inset: 0; }
-  .gem-inner { inset: 1%; }
-  .gem.selected::after { border-width: 3px; }
-  .combo-badge { display: block; top: 8px; right: 8px; }
-  .hint-bar {
-    margin-top: 6px;
-    min-height: 36px;
-    padding: 6px 12px;
-    max-width: calc(100% - 12px);
-    border-radius: 16px;
-    font-size: 15px;
-  }
-  .toast { font-size: 15px; padding: 8px 16px; }
 
   /* Оверлеи */
   .overlay { padding: 12px; }
@@ -1913,78 +1137,6 @@ button:focus-visible {
   .pause-card .gold-btn, .end-actions .gold-btn, .stone-btn.wide { min-width: 0; width: 100%; max-width: none; }
 }
 
-/* Узкий или невысокий телефон: шаман убран (css/shaman.css), освободившуюся
-   ширину отдаём целям — имя и счёт в одну строку, цели становятся ниже. */
-@media (max-width: 379px), (max-width: 900px) and (max-height: 759px) {
-  .goal-list { gap: 3px; }
-  .goal-chip { gap: 6px; padding: 2px 5px; }
-  .goal-chip .mini-gem { width: 26px; height: 26px; }
-  .goal-check { left: 20px; }
-  .goal-meta { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 4px; }
-  .hint-bar { padding: 4px 10px; min-height: 32px; }
-}
-
-/* Телефон боком и другие низкие широкие окна: вертикальная раскладка не
-   влезает (панель кнопок легла бы на поле), поэтому — та же сетка, что на
-   десктопе, только плотнее: без заголовка, шкалы комбо и шамана; комбо
-   показывает значок на поле. */
-@media (orientation: landscape) and (max-height: 500px) {
-  .game-shell {
-    --side: clamp(196px, 23vw, 228px);
-    --gap: 10px;
-    --pad-x: max(8px, env(safe-area-inset-left), env(safe-area-inset-right));
-    --frame: min(calc(100dvh - 70px), calc(100vw - 2 * var(--side) - 2 * var(--gap) - 2 * var(--pad-x)));
-    padding-block: 8px;
-    row-gap: 8px;
-    grid-template-areas:
-      "score board menu"
-      "left  board level"
-      "left  board right";
-  }
-  .brand, .shaman-wrap, .combo-title, .ladder, .combo-hint { display: none; }
-  .score-plaque, .level-plaque { padding: 4px 12px 5px; }
-  .plaque-label { font-size: 14px; letter-spacing: .06em; line-height: 1.25; }
-  .score-value { font-size: 24px; }
-  .level-value { font-size: 20px; }
-  .menu-btn { min-height: 56px; font-size: 16px; }
-  .left-panel { gap: 8px; }
-  .dial { width: 96px; padding: 6px; }
-  .dial-svg { inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
-  .dial-center { inset: 14%; }
-  .time-value { font-size: 28px; }
-  .time-label { margin-top: 2px; font-size: 13px; letter-spacing: .02em; text-transform: none; }
-  .goal-card { padding: 6px 8px 7px; }
-  .card-title { margin-bottom: 4px; font-size: 13px; }
-  .goal-meta { flex-direction: column; align-items: stretch; gap: 0; }
-  .goal-name { font-size: 13px; }
-  .goal-count { font-size: 18px; }
-  .goal-check { left: 20px; bottom: 1px; width: 16px; height: 16px; padding: 2px; }
-  .right-panel { justify-content: flex-end; }
-  .tool-row { gap: 6px; }
-  .tool-btn { height: 48px; padding: 0 12px; gap: 10px; }
-  .tool-btn svg { width: 22px; height: 22px; }
-  .tool-label { font-size: 15px; }
-  .btn-badge { right: 8px; font-size: 13px; }
-  .board-frame { padding: 3px; }
-  .board-frame::after {
-    background: none;
-    border: 8px solid transparent;
-    border-image: url("assets/ui/board-frame.webp") 80 / 8px stretch;
-  }
-  .tiles, .fx-layer { inset: 0; }
-  .gem-inner { inset: 1%; }
-  .gem.selected::after { border-width: 3px; }
-  .combo-badge { display: block; top: 8px; right: 8px; }
-  .hint-bar { margin-top: 6px; font-size: 15px; padding: 4px 12px; min-height: 30px; }
-  .toast { font-size: 15px; }
-}
-
-@media (max-width: 370px) {
-  .tool-label { font-size: 13px; }
-  .score-plaque, .level-plaque { padding-inline: 12px; }
-}
-
-
 /* ---------- Доступность ---------- */
 body { touch-action: manipulation; }
 
@@ -2002,14 +1154,6 @@ body { touch-action: manipulation; }
     transform: scale(1.04);
     filter: drop-shadow(0 0 12px rgba(255, 240, 140, 1));
   }
-}
-
-/* ---------- Телефон: доводка ---------- */
-/* Высокий экран: под полем остаётся место — отдаём его кнопкам */
-@media (max-width: 900px) and (min-height: 800px) {
-  .tool-btn { flex-basis: 120px; height: 76px; gap: 5px; }
-  .tool-btn svg { width: 30px; height: 30px; }
-  .tool-label { font-size: 15px; }
 }
 
 /* Низкий экран: «Как играть» помещается без прокрутки за счёт отступов,

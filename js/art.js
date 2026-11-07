@@ -142,8 +142,6 @@
     GEMS, SHAPES, buildDefs, gemSvg, gemInner, icon,
     init() {
       document.getElementById('svg-defs').innerHTML = buildDefs();
-      const shamanHost = document.getElementById('shamanArt');
-      if (shamanHost && this.shaman) shamanHost.innerHTML = this.shaman();
       const leavesHost = document.getElementById('leaves');
       if (leavesHost && this.leaves) leavesHost.innerHTML = this.leaves();
     }

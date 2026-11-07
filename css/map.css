@@ -126,7 +126,7 @@
   color: #efe3c4;
   background:
     linear-gradient(180deg, rgba(255, 240, 200, .08), rgba(0, 0, 0, .25)),
-    url("../assets/ui/stone.webp") center / cover,
+    url("../assets/ui/obsidian.webp") 0 0 / 256px repeat,
     var(--stone-4);
   border: 0;
   cursor: pointer;
@@ -160,7 +160,7 @@ button.land-head:hover { filter: brightness(1.12); }
 .land-card.soon .land-head {
   cursor: default;
   color: #b4a98c;
-  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .7)), url("../assets/ui/stone.webp") center / cover, #14110c;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .7)), url("../assets/ui/obsidian.webp") 0 0 / 256px repeat, #14110c;
 }
 
 .land-soon {
@@ -215,8 +215,8 @@ button.land-head:hover { filter: brightness(1.12); }
 
 .mosaic-cell.empty {
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, .5)),
-    url("../assets/ui/stone.webp") center / cover,
+    radial-gradient(ellipse 90% 80% at 50% 20%, rgba(150, 120, 80, .16), transparent 75%),
+    url("../assets/ui/obsidian.webp") 0 0 / 256px repeat,
     #3a3326;
   border: 2px solid #5c5340;
 }
@@ -377,6 +377,11 @@ button.land-head:hover { filter: brightness(1.12); }
 
   .mosaic-num { font-size: 14px; }
   .mosaic-cell.tier-silver { border-width: 5px; }
+}
+
+/* Уже 340 px четыре кнопки по 64 px с отступами вылезают вбок — 3 в ряд */
+@media (max-width: 339px) {
+  .level-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* Кнопка «История» под легендой мозаики */

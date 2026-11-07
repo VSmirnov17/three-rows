@@ -1,10 +1,6 @@
-/* Шаман-идол и джунгли */
+/* Джунгли: фон и листья */
 (() => {
   'use strict';
-
-  function shaman() {
-    return `<img class="shaman-img" src="assets/art/shaman.png" alt="" draggable="false">`;
-  }
 
   function leaves() {
     const spots = [
@@ -27,6 +23,5 @@
     </span>`).join('');
   }
 
-  ART.shaman = shaman;
   ART.leaves = leaves;
 })();

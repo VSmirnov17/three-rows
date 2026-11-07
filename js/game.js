@@ -6,7 +6,6 @@
   const COLS = 8;
   const TYPES = 6;
   const GEM_COLORS = ['#ff7a5c', '#ffd166', '#6ef08a', '#63d8ff', '#d58cff', '#e8eef2'];
-  const DIAL_C = 345.575;
   /* Сюда кладётся копия нечитаемого нового ключа до первой записи */
   const BROKEN_KEY = 'sun-keeper-save-broken';
   const BACKUP_KEY = 'sun-keeper-save-backup';
@@ -27,13 +26,11 @@
     score: $('scoreValue'),
     level: $('levelValue'),
     time: $('timeValue'),
-    dial: $('dialProgress'),
-    dialTicks: $('dialTicks'),
+    timePlaque: $('timePlaque'),
+    timeBar: $('timeBar'),
     goalList: $('goalList'),
-    relic: $('relicValue'),
-    ladder: $('ladder'),
-    ladderFill: $('ladderFill'),
-    rungs: Array.from(document.querySelectorAll('.rung')),
+    sunStone: $('sunStone'),
+    sunStoneCaption: $('sunStoneCaption'),
     comboBadge: $('comboBadge'),
     hintBar: $('hintBar'),
     toast: $('toast'),
@@ -91,7 +88,6 @@
     goals: [],
     comboMult: 1,
     chain: 0,
-    clearedTotal: 0,
     econBase: 0,
     econClear: 0,
     lastAction: 0,
@@ -167,21 +163,6 @@
     host.innerHTML = html;
   }
 
-  function buildDialTicks() {
-    if (!dom.dialTicks) return;
-    let html = '';
-    for (let i = 0; i < 36; i++) {
-      const a = (i / 36) * Math.PI * 2;
-      const inner = i % 3 === 0 ? 58 : 60;
-      const x1 = 65 + Math.cos(a) * inner;
-      const y1 = 65 + Math.sin(a) * inner;
-      const x2 = 65 + Math.cos(a) * 62;
-      const y2 = 65 + Math.sin(a) * 62;
-      html += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
-    }
-    dom.dialTicks.innerHTML = html;
-  }
-
   /* ---------- Оверлеи ---------- */
   function syncOverlayFlag() {
     state.overlay = !!document.querySelector('.overlay.show');
@@ -253,7 +234,7 @@
 
   /* ---------- Контракт для визуальных слоёв ----------
      Игра только выставляет атрибуты на <body> и шлёт события «sun:*» —
-     всё оформление (темы уровней, шаман, эффекты) живёт в css/*.css и
+     всё оформление (темы уровней, эффекты) живёт в css/*.css и
      js/visuals.js и сюда не заходит.
        body[data-land]     1..10          номер земли (фон и тема)
        body[data-level-id] "1-05"         текущий уровень кампании
@@ -279,13 +260,8 @@
     state.comboMult = mult;
     SFX.setEnergy(mult);
     const active = mult > 1;
-    const pct = active ? clamp((mult - 1) / 7, 0, 1) * 100 : 0;
-    if (dom.ladderFill) dom.ladderFill.style.height = pct + '%';
-    dom.rungs.forEach(rung => {
-      rung.classList.toggle('active', active && mult >= Number(rung.dataset.mult));
-    });
     if (dom.comboBadge) {
-      dom.comboBadge.textContent = '×' + mult;
+      dom.comboBadge.textContent = 'Серия ×' + mult;
       dom.comboBadge.classList.toggle('show', active);
     }
   }
@@ -299,8 +275,13 @@
     dom.level.textContent = levelNumber(state.levelId) + ' / ' + (land ? land.levels.length : 20);
   }
 
-  function updateRelic() {
-    dom.relic.textContent = fmtNum(state.clearedTotal);
+  /* Круг Солнечного Камня: осколки текущей главы, обведён текущий уровень */
+  function updateSunStone() {
+    if (!dom.sunStone || !window.SunStone) return;
+    const land = Campaign.landOf(state.levelId);
+    if (!land) return;
+    SunStone.render(dom.sunStone, SunStone.segments(state.save, land), levelNumber(state.levelId) - 1);
+    if (dom.sunStoneCaption) dom.sunStoneCaption.textContent = land.name;
   }
 
   function updateSoundUI() {
@@ -435,9 +416,8 @@
   function updateTimerUI() {
     if (!isTimed()) {
       if (dom.time.textContent !== '∞') dom.time.textContent = '∞';
-      dom.dial.style.strokeDashoffset = '0';
-      dom.dial.classList.remove('tense', 'urgent');
-      dom.time.classList.remove('tense', 'urgent');
+      dom.timeBar.style.width = '100%';
+      dom.timePlaque.classList.remove('tense', 'urgent');
       setBodyState('urgency', '');
       SFX.setUrgency(0);
       lastTickShown = -1;
@@ -447,16 +427,14 @@
     const text = fmtTime(left);
     if (dom.time.textContent !== text) dom.time.textContent = text;
     const frac = state.totalTime > 0 ? clamp(left / state.totalTime, 0, 1) : 0;
-    dom.dial.style.strokeDashoffset = String(DIAL_C * (1 - frac));
+    dom.timeBar.style.width = (frac * 100).toFixed(2) + '%';
 
     const urgent = left <= 20;
     const tense = left <= 45 && !urgent;
     const active = state.running && !state.paused && !state.ended && !state.overlay;
     setBodyState('urgency', active ? (urgent ? 'urgent' : tense ? 'tense' : '') : '');
-    dom.dial.classList.toggle('tense', tense);
-    dom.dial.classList.toggle('urgent', urgent);
-    dom.time.classList.toggle('tense', tense);
-    dom.time.classList.toggle('urgent', urgent);
+    dom.timePlaque.classList.toggle('tense', tense);
+    dom.timePlaque.classList.toggle('urgent', urgent);
 
     /* На последних 45 секундах включаем часы и постепенное нагнетание */
     SFX.setUrgency(active && left <= 45 ? clamp((45 - left) / 45, 0, 1) : 0);
@@ -507,7 +485,6 @@
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
     state.timeLeft = level.timer != null ? level.timer : level.econTime;
-    state.clearedTotal = 0;
     state.econBase = 0;
     state.econClear = 0;
     state.chain = 0;
@@ -520,7 +497,7 @@
     updateLevelUI();
     updateDifficultyUI();
     renderGoals();
-    updateRelic();
+    updateSunStone();
     updateTimerUI();
     updateShuffleUI();
     setHint(level.name + ' — ' + hintMessages.default);
@@ -1112,7 +1089,7 @@
       if (!plan) break;
       const { creates, clear, triggers } = plan;
       // Камни в лианах из clear уже исключены ядром: их лиана срывается, а
-      // сами они не считаются собранными (цели цвета, очки, clearedTotal).
+      // сами они не считаются собранными (цели цвета, очки).
       const unlockArr = Array.from(plan.unlocks || []).map(parseKey);
 
       chain++;
@@ -1189,7 +1166,6 @@
       cellsArr.forEach(p => {
         const gem = gemAt(p.r, p.c);
         if (!gem) return;
-        state.clearedTotal++;
         state.goals.forEach(goal => {
           if (goal.type === 'color' && goal.color === gem.color && goal.got < goal.need) goal.got++;
         });
@@ -1202,7 +1178,6 @@
       }
       const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
       if (changed >= 0) updateGoals(changed);
-      updateRelic();
 
       SFX.match(chain, clear.size, triggers.length > 0);
       clear.forEach(k => {
@@ -1342,6 +1317,7 @@
     const result = Progress.record(state.save, state.levelId, state.levelDifficulty, state.score, stars);
     state.save = result.save;
     saveProgress();
+    updateSunStone();
     state.lastResult = {
       win: true,
       stars,
@@ -1830,7 +1806,6 @@
   async function init() {
     ART.init();
     buildFireflies();
-    buildDialTicks();
     loadSave();
     updateSoundUI();
     SFX.musicScene('menu');
