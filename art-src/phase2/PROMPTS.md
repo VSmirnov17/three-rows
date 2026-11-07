@@ -60,3 +60,22 @@ background: url(../assets/ui/obsidian.webp) 0 0 / 256px;   /* заливка п�
 
 ## Предпросмотр
 `art-src/phase2/series-preview.png` (HTML: `series-preview.html`, Firefox, DPR 2): все пять файлов, panel-frame 300×170, 300×420 и 200×90, btn-plate 300×72 и 240×56 с текстом PT Serif 700.
+
+---
+
+# Шаг 2 — жаровни (утверждено 2026-11-07)
+
+Образец: `samples/brazier-motion.webp`, `samples/braziers-desktop.png`, `samples/braziers-desktop-zoom.png`. Пользователь: «Да, так хорошо». Телефон — вариант П2 (`samples/braziers-phone-p1-p2.png`, справа): чаш нет, только свет и искры от верхних углов рамки поля.
+
+## Огонь
+
+- Первый вариант — своя симуляция Mantaflow (`blender/fire.py`) — отклонён: «огонь очень дешёвый… ощущение, что это игра из 90-х». Скрипт остался запасным путём.
+- Утверждён: готовая симуляция **EmberGen «Small Camp Fire»** из бесплатного набора JangaFX — https://jangafx.com/software/embergen/download/free-vdb-animations/ (архив `SmallCampfireVDB.zip`, 200 кадров VDB, поля `flames`, `density`; лицензия **CC0 — Public Domain**, авторы просят упоминать «Created with EmberGen by JangaFX»). VDB в git нет.
+- Рендер: `blender/fire_vdb.py -- --vdb <папка VDB> --out <кадры> --render 40-199 --center 0.02x-1.1 --scale 1.15 --size 448x384 --samples 64 --view Standard --glow 1.4 --range 1.6`. Светится только `flames`, дым выключен, градиент B-spline: 0 чёрный, 0.08 тёмно-красный, 0.25 красно-оранжевый, 0.5 оранжевый, 0.75 жёлто-оранжевый, 1 жёлто-белый; `flames / 1.6` на вход градиента; интерполяция объёма CUBIC. AgX отклонён: уводит пламя в розовый.
+- Сборка: `tools/pack_fire.py <кадры> <лист> --loop 48 --fade 12 --start auto --crop --width 224 --q 76`. На образце начало цикла — 54-й кадр от начала рендера, кадр 224×196, лист 8×6 = 1792×1176, 681 КБ.
+- Вспышка — кодом (рост, вторая копия листа поверх с `screen`, ускорение, искры), отдельного листа нет.
+
+## Чаша
+
+- Бриф: `fire/brief-brazier.txt`, референсы: `samples/panel.png` (материал), `fire/ref-concept-brazier.png` (форма, вырезка из концепта). Исходник Codex: `fire/brazier-src.png` (1402×1122, прозрачный фон; альфа внутри чаши 250–254 — при экспорте довести до 255).
+- В макете: ширина чаши `0.82·bh`, пламя шириной `0.72·bh` основанием на `0.44·bh`, жаровня заходит на табличку под ней на `0.22·bh`.
