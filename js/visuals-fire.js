@@ -91,9 +91,6 @@
      Левая колонка гибкая (круг Камня ужимается), правая — нет: меню,
      уровень, таймер и три кнопки. Жаровня стоит в ней ~0.9·bh, поэтому
      bh уменьшаем на нехватку / 0.9. */
-  function desktopLayout() {
-    return braziers.some(b => b.el.offsetParent !== null) || body.dataset.braziers === 'off';
-  }
   /* Правая колонка может заходить на полосу подсказки под полем (до низа
      окна) — тогда подсказка не шире поля (body[data-hint-narrow]), чтобы
      не наехать на нижнюю кнопку. */
@@ -123,13 +120,27 @@
     placeHint();
   }
 
+  /* Длинная подсказка при заходе колонки на её полосу: сначала пробуем
+     сдвинуть её влево (правым краем к краю поля). Если там что-то есть
+     (узкое окно: поле по центру по высоте, рядом круг Камня), подсказка
+     остаётся по центру, не шире поля, и переносится на вторую строку. */
   const hintBar = document.getElementById('hintBar');
+  const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 &&
+    Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2;
   function placeHint() {
     if (!hintBar) return;
-    hintBar.classList.remove('hint-shift');
+    hintBar.classList.remove('hint-shift', 'hint-fit');
     if (!body.dataset.hintNarrow) return;
     const frame = document.querySelector('.board-frame');
-    if (frame && hintBar.offsetWidth > frame.getBoundingClientRect().width - 24) hintBar.classList.add('hint-shift');
+    if (!frame || hintBar.offsetWidth <= frame.getBoundingClientRect().width - 24) return;
+    hintBar.classList.add('hint-shift');
+    const hr = hintBar.getBoundingClientRect();
+    const blockers = document.querySelectorAll('.left-panel > *, .right-panel > *, .right-panel button');
+    const blocked = Array.from(blockers).some(el => el.offsetParent !== null && hit(hr, el.getBoundingClientRect()));
+    if (blocked) {
+      hintBar.classList.remove('hint-shift');
+      hintBar.classList.add('hint-fit');
+    }
   }
   if (hintBar) new MutationObserver(placeHint).observe(hintBar, { childList: true, characterData: true, subtree: true });
 
@@ -227,7 +238,8 @@
   }
 
   function triggerFlare(strength) {
-    if (!(strength > 0)) return;
+    // На паузе события не копятся: иначе вспышка проиграла бы потом
+    if (!(strength > 0) || paused()) return;
     const cur = flareLevel();
     if (cur >= strength) return;  // идущая вспышка не слабее — не трогаем
     // Не чаще одной вспышки в 250 мс; более сильная (спецкамень в том же
@@ -278,7 +290,7 @@
   }
 
   function burst(n) {
-    if (low || isReduced() || !sources.length) return;
+    if (low || isReduced() || !sources.length || paused()) return;
     // Не больше sparksMax искр на одно окно 250 мс (ряд, удар и спецкамень
     // одного шага каскада приходят вместе)
     if (clock - burstWindowAt >= L.throttleMs) { burstWindowAt = clock; burstInWindow = 0; }
@@ -289,8 +301,8 @@
     wake();
   }
 
-  function stepSparks(dt) {
-    if (!low && sources.length) {
+  function stepSparks(dt, idle) {
+    if (idle && !low && sources.length) {
       if (nextIdle.length !== sources.length) nextIdle = sources.map(() => clock + rand(400, 2500));
       sources.forEach((src, i) => {
         if (clock >= nextIdle[i]) {
@@ -317,11 +329,12 @@
     if (canvasDirty) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
     canvasDirty = false;
   }
-  function drawSparks() {
+  function drawSparks(fade) {
     if (!sparks.length && !canvasDirty) return;
     ctx2d.clearRect(0, 0, canvas.width, canvas.height);
     canvasDirty = sparks.length > 0;
     ctx2d.globalCompositeOperation = 'lighter';
+    ctx2d.globalAlpha = fade;
     sparks.forEach(p => {
       const k = p.age / p.life;
       const a = Math.pow(1 - k, 1.5);
@@ -334,6 +347,7 @@
       ctx2d.fill();
     });
     ctx2d.globalCompositeOperation = 'source-over';
+    ctx2d.globalAlpha = 1;
   }
 
   /* ---------- Спокойное состояние (пауза, reduced motion) ---------- */
@@ -370,12 +384,30 @@
     return document.hidden || !!document.querySelector('.overlay.show');
   }
 
+  /* Открылся оверлей: огонь не обрывается за кадр, а за то же время, что
+     проявляется оверлей (0,3 с), плавно сходит к спокойному горению. */
+  const PAUSE_FADE_MS = 320;
+  let pauseAt = 0;
+
   function tick(ts) {
     raf = 0;
-    if (paused() || isReduced()) {
+    if (isReduced()) {
       lastTs = 0;
       settle();
       return;
+    }
+    let fade = 1;
+    if (paused()) {
+      if (!pauseAt) pauseAt = ts;
+      fade = 1 - (ts - pauseAt) / PAUSE_FADE_MS;
+      if (fade <= 0 || document.hidden) {
+        pauseAt = 0;
+        lastTs = 0;
+        settle();
+        return;
+      }
+    } else {
+      pauseAt = 0;
     }
     // Слабый режим: цикл 12 раз в секунду
     if (low && lastTs && ts - lastTs < LOW_STEP_MS) {
@@ -402,7 +434,7 @@
     const urgency = body.dataset.urgency || '';
     const target = FC.speedFor(urgency);
     urgSpeed += (target - urgSpeed) * Math.min(1, dt / 270);
-    const e = flareLevel();
+    const e = flareLevel() * fade;
     fireT += dt * urgSpeed * FC.flareSpeed(e);
     braziers.forEach(b => showFrame(b, FC.frameAt(fireT, S, 1, b.phase)));
 
@@ -418,11 +450,11 @@
     });
     flaring = on;
 
-    const fl = low ? 0 : FC.flicker(clock / 1000, 1) * (FLICKER_GAIN[urgency] || FLICKER_GAIN['']);
+    const fl = low ? 0 : FC.flicker(clock / 1000, 1) * (FLICKER_GAIN[urgency] || FLICKER_GAIN['']) * fade;
     setLight(FC.glow(GLOW_BASE, e, fl));
 
-    stepSparks(dt);
-    drawSparks();
+    stepSparks(dt, fade === 1);
+    drawSparks(Math.max(0, fade));
     raf = requestAnimationFrame(tick);
   }
 
@@ -479,11 +511,9 @@
   });
   // Высота табличек зависит от шрифта: подогнать ещё раз, когда он загрузится
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
-  // Цели уровня меняют высоту левой колонки — точки света пересчитать
-  if (window.ResizeObserver) {
-    const left = document.querySelector('.left-panel');
-    if (left) new ResizeObserver(() => measure()).observe(left);
-  }
+  // Слои света и искр закреплены (fixed): при прокрутке страницы
+  // (очень низкое окно) точки огня пересчитать
+  window.addEventListener('scroll', () => measure(), { passive: true });
   if (reduceMq) {
     if (reduceMq.addEventListener) reduceMq.addEventListener('change', applyReduced);
     else if (reduceMq.addListener) reduceMq.addListener(applyReduced);

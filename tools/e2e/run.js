@@ -655,7 +655,7 @@ async function suite(bt, bname, url) {
         await page.waitForTimeout(500);
         await shot(page, bname, vp.n + '-L4-level');
         await visit('level (game)', b => !b.inOverlay);
-        const desktop = vp.width >= 1366;
+        const desktop = vp.width >= 901;
         const gm = await ev(page, () => {
           const se = document.scrollingElement;
           const segs = document.querySelectorAll('#sunStone .sun-seg').length;
@@ -716,6 +716,7 @@ async function suite(bt, bname, url) {
       { width: 1366, height: 650, n: 'desktop-short' },
       { width: 1366, height: 640, n: 'desktop-640' },
       { width: 1366, height: 600, n: 'desktop-600' },
+      { width: 1024, height: 768, n: 'desktop-1024' },
       { width: 390, height: 844, n: 'mobile' },
       { width: 360, height: 740, n: 'mobile-small' }
     ]) {
@@ -758,6 +759,9 @@ async function suite(bt, bname, url) {
           if (hint && shown(hint)) {
             const hb = box(hint);
             document.querySelectorAll('.right-panel button').forEach(btn => { if (shown(btn) && hits(hb, box(btn))) hintHits.push(name(btn)); });
+            // и на содержимое левой колонки (круг Солнечного Камня на узком окне)
+            document.querySelectorAll('.left-panel > *').forEach(el => { if (!el.classList.contains('brazier') && shown(el) && hits(hb, box(el))) hintHits.push(name(el)); });
+            if (hint.scrollHeight > hint.clientHeight + 2) hintHits.push('текст подсказки обрезан');
           }
           const small = [...document.querySelectorAll('button')].filter(b => shown(b) && !b.closest('.overlay') && b.getBoundingClientRect().height < 56).map(b => (b.id || b.className) + ':' + Math.round(b.getBoundingClientRect().height));
           return {
@@ -771,7 +775,7 @@ async function suite(bt, bname, url) {
           };
         });
         await shot(page, bname, vp.n + '-L4-braziers');
-        const desktop = vp.width >= 1366;
+        const desktop = vp.width >= 901;
         const off = vp.height <= 600;   // жаровням не хватает места: body[data-braziers="off"]
         const issues = [];
         if (r.total !== 2) issues.push('жаровен в разметке ' + r.total);

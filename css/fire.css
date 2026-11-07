@@ -92,6 +92,8 @@ body[data-braziers="off"] .brazier { display: none; }
    колонку — там внизу свободно. Класс hint-shift ставит js/visuals-fire.js. */
 body[data-hint-narrow] .game-shell .hint-bar { max-width: calc(var(--frame) + var(--side) + var(--gap) - 12px); }
 body[data-hint-narrow] .game-shell .hint-bar.hint-shift { align-self: flex-end; }
+/* Сдвинуть некуда (узкое окно) — по центру, не шире поля, в две строки */
+body[data-hint-narrow] .game-shell .hint-bar.hint-fit { max-width: calc(var(--frame) - 24px); -webkit-line-clamp: 2; line-clamp: 2; }
 
 /* ---------- Тёплый свет от огня ----------
    Две радиальные заливки из точек огня (на телефоне — из верхних углов
