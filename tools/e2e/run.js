@@ -712,7 +712,10 @@ async function suite(bt, bname, url) {
     // ---- 9 braziers layout ----
     for (const vp of [
       { width: 1366, height: 768, n: 'desktop' },
+      { width: 1366, height: 721, n: 'desktop-721' },
       { width: 1366, height: 650, n: 'desktop-short' },
+      { width: 1366, height: 640, n: 'desktop-640' },
+      { width: 1366, height: 600, n: 'desktop-600' },
       { width: 390, height: 844, n: 'mobile' },
       { width: 360, height: 740, n: 'mobile-small' }
     ]) {
@@ -749,11 +752,19 @@ async function suite(bt, bname, url) {
             });
             out.push(name(br) + ' fire ' + Math.round(bf.t) + '..' + Math.round(bf.b) + ' bowl ' + Math.round(bb.t) + '..' + Math.round(bb.b));
           });
+          // подсказка под полем не заезжает на кнопки правой колонки
+          const hint = document.getElementById('hintBar');
+          const hintHits = [];
+          if (hint && shown(hint)) {
+            const hb = box(hint);
+            document.querySelectorAll('.right-panel button').forEach(btn => { if (shown(btn) && hits(hb, box(btn))) hintHits.push(name(btn)); });
+          }
           const small = [...document.querySelectorAll('button')].filter(b => shown(b) && !b.closest('.overlay') && b.getBoundingClientRect().height < 56).map(b => (b.id || b.className) + ':' + Math.round(b.getBoundingClientRect().height));
           return {
             total: all.length, vis: vis.length, bad, out, small,
             aria: all.map(b => b.getAttribute('aria-hidden')),
             pe: all.map(b => getComputedStyle(b).pointerEvents),
+            hintHits, off: document.body.dataset.braziers === 'off', hintNarrow: !!document.body.dataset.hintNarrow,
             light: document.querySelectorAll('.fire-light').length,
             sparks: document.querySelectorAll('canvas.fire-sparks').length,
             sh: document.scrollingElement.scrollHeight, ih, sw: document.scrollingElement.scrollWidth, iw
@@ -761,20 +772,25 @@ async function suite(bt, bname, url) {
         });
         await shot(page, bname, vp.n + '-L4-braziers');
         const desktop = vp.width >= 1366;
+        const off = vp.height <= 600;   // жаровням не хватает места: body[data-braziers="off"]
         const issues = [];
         if (r.total !== 2) issues.push('жаровен в разметке ' + r.total);
         if (r.aria.some(a => a !== 'true')) issues.push('aria-hidden: ' + JSON.stringify(r.aria));
         if (r.pe.some(p => p !== 'none')) issues.push('pointer-events: ' + JSON.stringify(r.pe));
         if (r.light !== 1 || r.sparks !== 1) issues.push(`fire-light=${r.light} fire-sparks=${r.sparks}`);
-        if (desktop && r.vis !== 2) issues.push('на десктопе видимых жаровен ' + r.vis);
+        if (desktop && !off && r.vis !== 2) issues.push('на десктопе видимых жаровен ' + r.vis);
+        if (desktop && !off && r.off) issues.push('data-braziers=off, а место есть');
+        if (desktop && off && !r.off) issues.push('низкое окно: нет body[data-braziers="off"]');
+        if (off && r.vis !== 0) issues.push('низкое окно: жаровни видны ' + r.vis);
         if (!desktop && r.vis !== 0) issues.push('на телефоне жаровни видны: ' + r.vis);
         if (r.bad.length) issues.push('перекрытие: ' + r.bad.join('; '));
         if (r.small.length) issues.push('кнопки <56px: ' + r.small.join(', '));
+        if (desktop && r.hintHits.length) issues.push('подсказка заходит на кнопки: ' + r.hintHits.join(', '));
         if (r.sw > r.iw) issues.push(`горизонтальная прокрутка ${r.sw}/${r.iw}`);
-        if (vp.height === 650 && r.sh > r.ih + 1) issues.push(`вертикальная прокрутка ${r.sh}/${r.ih}`);
+        if (desktop && r.sh > r.ih + 1) issues.push(`вертикальная прокрутка ${r.sh}/${r.ih}`);
         await ctx.close();
         if (issues.length) throw new Error(issues.join(' | '));
-        return `visible=${r.vis} ${r.out.join(' | ')} fire-light=${r.light} fire-sparks=${r.sparks} scrollH=${r.sh}/${r.ih}`;
+        return `visible=${r.vis} off=${r.off} hintNarrow=${r.hintNarrow} ${r.out.join(' | ')} fire-light=${r.light} fire-sparks=${r.sparks} scrollH=${r.sh}/${r.ih}`;
       });
     }
 
@@ -824,6 +840,19 @@ async function suite(bt, bname, url) {
       assert(fl.maxScale <= 1.225, 'пламя выросло больше 22%: ' + fl.maxScale);
       assert(fl.sparksMax > 0, 'искр не было');
       assert(fl.end.flare < 0.01, 'огибающая не дошла до 0: ' + fl.end.flare);
+      // Пауза: вспышка и искры в полёте, открываем паузу — огонь успокаивается (искр нет, data-flare снят)
+      await ev(page, () => { __FIRE.flare(1); });
+      await page.waitForTimeout(150);
+      const live = await ev(page, () => ({ sparks: __FIRE.state().sparks, flare: !!document.querySelector('.brazier[data-flare]') }));
+      assert(live.flare, 'перед паузой вспышки нет: ' + JSON.stringify(live));
+      await page.click('#menuBtn');
+      await page.waitForSelector('#pauseScreen.show');
+      await page.waitForTimeout(400);
+      const paused = await ev(page, () => ({ st: __FIRE.state(), flare: !!document.querySelector('.brazier[data-flare]') }));
+      assert(paused.st.sparks === 0 && !paused.flare && !paused.st.running, 'на паузе огонь не успокоился: ' + JSON.stringify(paused));
+      await page.click('#resumeBtn');
+      await page.waitForFunction(() => !document.querySelector('.overlay.show'));
+      await page.waitForTimeout(300);
       // Вспышка на пике: верх рамки спрайта (в нём прозрачные поля) может чуть выйти за окно, видимое пламя нет — это смотрят глазами по скриншоту
       const top = await ev(page, () => new Promise(res => {
         __FIRE.flare(1);
