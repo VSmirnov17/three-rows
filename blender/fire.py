@@ -39,6 +39,10 @@ def parse_args():
     p.add_argument("--dist", type=float, default=0.3, help="толщина зоны выброса")
     p.add_argument("--domain", default="1.6x0.7x1.4", help="ширина x глубина x высота домена")
     p.add_argument("--src", default="2.6x1.2", help="растяжение источника по x и y")
+    p.add_argument("--emitters", type=int, default=1, help="число очагов по ширине")
+    p.add_argument("--shade", default="blackbody", choices=["blackbody", "ramp"])
+    p.add_argument("--glow", type=float, default=40.0, help="яркость свечения")
+    p.add_argument("--view", default="AgX", help="преобразование цвета (AgX, Standard)")
     a = p.parse_args(argv)
     a.bake = tuple(int(x) for x in a.bake.split("-"))
     a.render = tuple(int(x) for x in a.render.split("-"))
@@ -87,8 +91,16 @@ def setup_scene(a):
     sc.render.image_settings.file_format = "PNG"
     sc.render.image_settings.color_mode = "RGB"
     sc.render.image_settings.color_depth = "8"
-    sc.view_settings.view_transform = "Standard"
-    sc.view_settings.look = "None"
+    try:
+        sc.view_settings.view_transform = a.view
+    except TypeError:
+        sc.view_settings.view_transform = "Standard"
+    for look in ("AgX - Punchy", "Punchy", "None"):
+        try:
+            sc.view_settings.look = look
+            break
+        except TypeError:
+            pass
     sc.view_settings.exposure = 0.0
     world = bpy.data.worlds.new("FireWorld")
     world.use_nodes = True
@@ -129,7 +141,7 @@ def disc_mesh(name, r, depth, verts=48):
     return me
 
 
-def fire_material():
+def fire_material(a):
     m = bpy.data.materials.new("FireVolume")
     m.use_nodes = True
     nt = m.node_tree
@@ -143,6 +155,36 @@ def fire_material():
     flame.attribute_name = "flame"
     dens = nt.nodes.new("ShaderNodeAttribute")
     dens.attribute_name = "density"
+
+    if a.shade == "blackbody":
+        # Цвет как у настоящего пламени: температура по полю flame,
+        # от тёмно-красных кончиков (~900 K) к бело-жёлтой сердцевине (~3000 K)
+        mr = nt.nodes.new("ShaderNodeMapRange")
+        mr.inputs["From Min"].default_value = 0.0
+        mr.inputs["From Max"].default_value = 1.0
+        mr.inputs["To Min"].default_value = 900.0
+        mr.inputs["To Max"].default_value = 3000.0
+        nt.links.new(flame.outputs["Fac"], mr.inputs["Value"])
+        bb = nt.nodes.new("ShaderNodeBlackbody")
+        nt.links.new(mr.outputs["Result"], bb.inputs["Temperature"])
+        nt.links.new(bb.outputs["Color"], pv.inputs["Emission Color"])
+        sq = nt.nodes.new("ShaderNodeMath")
+        sq.operation = "POWER"
+        sq.inputs[1].default_value = 2.0
+        nt.links.new(flame.outputs["Fac"], sq.inputs[0])
+        st = nt.nodes.new("ShaderNodeMath")
+        st.operation = "MULTIPLY"
+        st.inputs[1].default_value = a.glow
+        nt.links.new(sq.outputs[0], st.inputs[0])
+        nt.links.new(st.outputs[0], pv.inputs["Emission Strength"])
+        dmul = nt.nodes.new("ShaderNodeMath")
+        dmul.operation = "MULTIPLY"
+        dmul.inputs[1].default_value = 0.04
+        nt.links.new(dens.outputs["Fac"], dmul.inputs[0])
+        nt.links.new(dmul.outputs[0], pv.inputs["Density"])
+        pv.inputs["Color"].default_value = (0.05, 0.04, 0.035, 1)
+        pv.inputs["Blackbody Intensity"].default_value = 0.0
+        return m
 
     ramp = nt.nodes.new("ShaderNodeValToRGB")
     cr = ramp.color_ramp
@@ -183,10 +225,6 @@ def build(sc, a):
     DOM_W, DOM_D, DOM_H = a.domain
     dom = link(sc, bpy.data.objects.new("FireDomain", box_mesh("FireDomainMesh", DOM_W, DOM_D, DOM_H)))
     dom.location = (0, 0, DOM_H / 2)  # низ домена на z=0
-    src = link(sc, bpy.data.objects.new("FireSource", disc_mesh("FireSourceMesh", 0.2, 0.05)))
-    src.location = (0, 0, 0.1)
-    src.scale = (a.src[0], a.src[1], 1.0)  # широкое основание, как жар в чаше
-    src.hide_render = True       # в кадре только пламя
 
     md = dom.modifiers.new("Fluid", "FLUID")
     md.fluid_type = "DOMAIN"
@@ -210,8 +248,32 @@ def build(sc, a):
     d.cache_type = "ALL"
     d.cache_directory = os.path.join(a.out, "cache")
     d.cache_frame_start, d.cache_frame_end = a.bake
-    dom.data.materials.append(fire_material())
+    dom.data.materials.append(fire_material(a))
 
+    # Очаги: один растянутый диск или несколько маленьких по ширине чаши.
+    # Отдельные очаги дают отдельные языки пламени, а не сплошную завесу.
+    n = max(1, a.emitters)
+    for k in range(n):
+        x = 0.0 if n == 1 else (k / (n - 1) - 0.5) * DOM_W * 0.5
+        r = 0.2 if n == 1 else (0.13 if k in (0, n - 1) else 0.16)
+        src = link(sc, bpy.data.objects.new("FireSource%d" % k, disc_mesh("FireSourceMesh%d" % k, r, 0.05)))
+        src.location = (x, 0, 0.1)
+        if n == 1:
+            src.scale = (a.src[0], a.src[1], 1.0)  # широкое основание, как жар в чаше
+        src.hide_render = True  # в кадре только пламя
+        add_flow(src, a, k)
+
+    cam_data = bpy.data.cameras.new("FireCam")
+    cam_data.type = "ORTHO"
+    cam_data.ortho_scale = max(DOM_W, DOM_H)
+    cam = link(sc, bpy.data.objects.new("FireCam", cam_data))
+    cam.location = (0, -5, DOM_H / 2)
+    cam.rotation_euler = (1.5707963, 0, 0)
+    sc.camera = cam
+    return dom
+
+
+def add_flow(src, a, k):
     mf = src.modifiers.new("Fluid", "FLUID")
     mf.fluid_type = "FLOW"
     f = mf.flow_settings
@@ -225,16 +287,16 @@ def build(sc, a):
     f.use_initial_velocity = True
     f.velocity_normal = 1.2
     # Неровная подача топлива — язычки пламени живут сами по себе
-    tex = bpy.data.textures.new("FireFlowNoise", "CLOUDS")
+    tex = bpy.data.textures.new("FireFlowNoise%d" % k, "CLOUDS")
     tex.noise_scale = 0.45
     tex.noise_depth = 2
     f.use_texture = True
     f.noise_texture = tex
     f.texture_map_type = "AUTO"
     f.texture_size = 1.0
-    f.texture_offset = 0.0
+    f.texture_offset = k * 1.7  # у каждого очага свой узор подачи
     f.keyframe_insert("texture_offset", frame=a.bake[0])
-    f.texture_offset = (a.bake[1] - a.bake[0]) * 0.03
+    f.texture_offset = k * 1.7 + (a.bake[1] - a.bake[0]) * 0.03
     f.keyframe_insert("texture_offset", frame=a.bake[1])
 
     if a.variant == "flare":
@@ -243,15 +305,6 @@ def build(sc, a):
             f.fuel_amount, f.temperature = fuel, temp
             f.keyframe_insert("fuel_amount", frame=frame)
             f.keyframe_insert("temperature", frame=frame)
-
-    cam_data = bpy.data.cameras.new("FireCam")
-    cam_data.type = "ORTHO"
-    cam_data.ortho_scale = max(DOM_W, DOM_H)
-    cam = link(sc, bpy.data.objects.new("FireCam", cam_data))
-    cam.location = (0, -5, DOM_H / 2)
-    cam.rotation_euler = (1.5707963, 0, 0)
-    sc.camera = cam
-    return dom
 
 
 def bake(sc, dom):
