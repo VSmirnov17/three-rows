@@ -34,7 +34,7 @@
 
 ## Этап 2, шаг 2: жаровни с живым огнём — сделан
 
-Ветка `phase2-step2-braziers`. План и решения: `docs/superpowers/plans/2026-11-07-phase2-step2-braziers.md`, утверждённый арт и параметры — `art-src/phase2/PROMPTS.md`, раздел «Шаг 2 — жаровни». Что вошло:
+Ветка `phase2-step2-braziers`, влита в `main` и запушена. План и решения: `docs/superpowers/plans/2026-11-07-phase2-step2-braziers.md`, утверждённый арт и параметры — `art-src/phase2/PROMPTS.md`, раздел «Шаг 2 — жаровни». Что вошло:
 
 - Две жаровни над боковыми колонками (над «Счётом» и «Меню»): чаша Codex (`assets/ui/brazier.webp`) и живой огонь.
 - Огонь — готовая симуляция EmberGen «Small Camp Fire» (JangaFX, лицензия CC0), отрендеренная в Blender (`blender/fire_vdb.py`) и собранная в спрайт-лист (`tools/pack_fire.py` → `assets/fire/fire-calm.webp`, 48 кадров, 686 КБ). Свою симуляцию Mantaflow (`blender/fire.py`) пользователь счёл «дешёвой, как игра из 90-х» — она осталась запасным путём. Сами VDB (~400 МБ) в проект не кладутся, как пересобрать — README, «Огонь жаровен».
