@@ -1832,6 +1832,7 @@
       checkEnd, upgradeGem, applyPos, beginLevel, showHint,
       // Запускает уровень кампании: __SUN.start('2-01')
       start: levelId => startLevel(levelId),
+      setScore,
       findSquares, findCorners, analyzePatterns,
       findLineGroups, hasAnyMatch,
       expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys),

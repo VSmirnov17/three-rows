@@ -120,6 +120,10 @@ async function suite(bt, bname, url) {
       await waitStarted(page);
       const d = await dbg(page);
       assert(d.levelId === '1-01', 'level ' + d.levelId);
+      // «Спокойно»: на табличке времени знак бесконечности, тревоги нет
+      const calm = await ev(page, () => ({ time: document.getElementById('timeValue').textContent.trim(), urgency: document.body.dataset.urgency }));
+      assert(calm.time === '∞', 'calm timeValue: ' + JSON.stringify(calm.time));
+      assert(calm.urgency === undefined || calm.urgency === '', 'calm urgency: ' + JSON.stringify(calm.urgency));
       await shot(page, bname, 'desktop-3-level');
       await playRealMove(page);
       await forceWin(page);
@@ -150,8 +154,14 @@ async function suite(bt, bname, url) {
       await page.waitForTimeout(400);
       const tier2 = await page.locator('.mosaic-cell').first().getAttribute('class');
       assert(/tier-stone/.test(tier2), 'mosaic after reload ' + tier2);
+      // Следующий уровень: первый сектор Солнечного Камня заполнен каменным осколком
+      await ev(page, () => { window.__SUN.start('1-02'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const seg0 = await ev(page, () => { const e = document.querySelectorAll('#sunStone .sun-seg')[0]; return e ? String(e.getAttribute('class')) : null; });
+      assert(seg0 && !/\bempty\b/.test(seg0) && /tier-stone/.test(seg0), 'sector 0 after win: ' + seg0);
       await ctx.close();
-      return `stars="${stars}" frag="${frag}" step="${step}" intro1="${intro1.slice(0, 40)}"`;
+      return `stars="${stars}" frag="${frag}" step="${step}" intro1="${intro1.slice(0, 40)}" calm=∞ sector0="${seg0}"`;
     });
 
     // ---- 2 ----
@@ -575,7 +585,12 @@ async function suite(bt, bname, url) {
     });
 
     // ---- 7 layout ----
-    for (const vp of [{ width: 1366, height: 768, n: 'desktop' }, { width: 390, height: 844, n: 'mobile' }]) {
+    for (const vp of [
+      { width: 1366, height: 768, n: 'desktop' },
+      { width: 1366, height: 650, n: 'desktop-short' },
+      { width: 390, height: 844, n: 'mobile' },
+      { width: 360, height: 740, n: 'mobile-small' }
+    ]) {
       await scenario(bname, `7 layout ${vp.width}x${vp.height}`, async () => {
         const { ctx, page } = await newPage(browser, bname, 's7' + vp.n, { width: vp.width, height: vp.height });
         const issues = [];
@@ -625,6 +640,36 @@ async function suite(bt, bname, url) {
         await page.waitForTimeout(500);
         await shot(page, bname, vp.n + '-L4-level');
         await visit('level (game)', b => !b.inOverlay);
+        const desktop = vp.width >= 1366;
+        const gm = await ev(page, () => {
+          const se = document.scrollingElement;
+          const segs = document.querySelectorAll('#sunStone .sun-seg').length;
+          const ring = document.querySelector('#sunStone svg.sun-stone-ring');
+          const rs = document.getElementById('sunStone').getBoundingClientRect();
+          return { sh: se.scrollHeight, ih: innerHeight, segs, ring: !!ring, stoneShown: rs.width > 0 && rs.height > 0, plaque: !!document.getElementById('timePlaque'), bar: !!document.getElementById('timeBar') };
+        });
+        if (vp.height === 650) {
+          log.push(`game scrollH=${gm.sh}/${gm.ih}`);
+          if (gm.sh > gm.ih + 1) issues.push(`game screen scrolls vertically ${gm.sh}/${gm.ih}`);
+        }
+        if (desktop) {
+          log.push(`sun-seg=${gm.segs}`);
+          if (gm.segs !== 20 || !gm.ring || !gm.stoneShown) issues.push(`Sun Stone: segments ${gm.segs}, ring ${gm.ring}, visible ${gm.stoneShown}`);
+        }
+        if (!gm.plaque || !gm.bar) issues.push('time plaque/bar missing');
+        // Большой счёт «1 234 567» целиком помещается на табличке
+        const big = await ev(page, () => {
+          window.__SUN.setScore(1234567);
+          const el = document.getElementById('scoreValue');
+          const rc = el.getBoundingClientRect();
+          return { text: el.textContent, want: (1234567).toLocaleString('ru-RU'), sw: el.scrollWidth, cw: el.clientWidth, len: el.dataset.len, right: Math.round(rc.right), iw: innerWidth };
+        });
+        await page.waitForTimeout(300);
+        log.push(`bigScore "${big.text}" scrollW=${big.sw}/${big.cw} len=${big.len}`);
+        if (big.text !== big.want) issues.push(`big score text "${big.text}" != "${big.want}"`);
+        if (big.sw > big.cw) issues.push(`big score clipped ${big.sw}/${big.cw}`);
+        if (big.right > big.iw) issues.push(`big score outside viewport right=${big.right}/${big.iw}`);
+        await ev(page, () => window.__SUN.setScore(0));
         await playRealMove(page);
         await forceWin(page);
         await page.waitForTimeout(2500);
@@ -635,6 +680,14 @@ async function suite(bt, bname, url) {
         await page.waitForTimeout(500);
         await shot(page, bname, vp.n + '-L6-map-progress');
         await visit('map after progress', b => b.inOverlay === 'mapScreen');
+        if (desktop) {
+          await ev(page, () => { window.__SUN.start('1-02'); });
+          await waitStarted(page);
+          await page.waitForTimeout(300);
+          const seg0 = await ev(page, () => { const e = document.querySelectorAll('#sunStone .sun-seg')[0]; return e ? String(e.getAttribute('class')) : null; });
+          log.push(`sector0 after win: ${seg0}`);
+          if (!seg0 || /\bempty\b/.test(seg0)) issues.push('sector 0 empty after win: ' + seg0);
+        }
         await ctx.close();
         if (issues.length) throw new Error(issues.join(' | ') + ' || ' + log.join(' || '));
         return log.join(' || ');
@@ -655,6 +708,13 @@ async function smokeFile(bt, bname) {
       await waitStarted(page);
       const d = await dbg(page);
       assert(d.levelId === '1-01', 'level');
+      // Шрифт заголовков загрузился с диска (проверка по кириллице)
+      const fontOk = await ev(page, async () => {
+        await document.fonts.load('20px "Philosopher"', 'Хранитель');
+        await document.fonts.ready;
+        return document.fonts.check('20px "Philosopher"', 'Хранитель');
+      });
+      assert(fontOk === true, 'Philosopher (cyrillic) not loaded from file://');
       await playRealMove(page);
       await forceWin(page);
       const saved = await ev(page, () => localStorage.getItem('sun-keeper-save'));
@@ -663,7 +723,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }
