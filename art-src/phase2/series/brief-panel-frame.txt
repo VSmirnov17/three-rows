@@ -1,0 +1,7 @@
+$imagegen
+Asset: game UI frame for border-image slicing, landscape 3:2, one image
+Request: a single rectangular plaque: an engraved antique-gold border band with a perfectly regular, uniform Aztec stepped-meander (greca) pattern all the way around, enclosing a plain flat black obsidian field
+Look: premium painted game art, crisp and solid; soft even frontal light; antique polished gold with slight wear; muted jade green; deep black stone; same gold, same meander and same jade as Image 1
+Composition: strictly front view, no perspective; plaque fills the frame with a thin even margin of plain dark #0d0b0a; the gold border band is about 8% of the plaque height, identical thickness on all four sides. The band along each of the four sides is ONLY the uniform repeating meander, repeated evenly with the same rhythm, with NO jade, NO rivet and NO other ornament anywhere along the sides. Ornaments appear ONLY in the four corners: each corner is a plain square gold block with one round gold rivet and one small square jade inlay beside the rivet (identical in all four corners). Centre field: plain black obsidian with no ornaments, no cracks near the frame
+Image 1: style and material reference — match its gold, meander and jade exactly, but do NOT copy its jade inlays in the middle of the sides and do not copy its layout of corners (corners here get a rivet plus a small jade square)
+Constraints: no text, no letters, no numbers, no icons, no glow, no fire, no scenery

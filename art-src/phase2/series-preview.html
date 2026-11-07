@@ -1,0 +1,33 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Серия обсидиан</title>
+<link rel="stylesheet" href="../../css/fonts.css">
+<style>
+body{margin:0;padding:24px;background:#0d0b0a;color:#bfae8a;font:14px 'PT Serif',serif;width:1280px}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:28px}
+.cap{font-size:13px;margin-top:6px;color:#8a7d63}
+.panel{box-sizing:border-box;border:18px solid transparent;
+ border-image:url(../../assets/ui/panel-frame.webp) 58 83 58 89 / 18px 27px 18px 29px round;
+ background:url(../../assets/ui/obsidian.webp) 0 0/256px;color:#f3e6c4;display:flex;align-items:center;justify-content:center;
+ font:700 28px 'PT Serif',serif;text-align:center}
+.btn{box-sizing:border-box;width:300px;height:72px;border:14px solid transparent;
+ border-image:url(../../assets/ui/btn-plate.webp) 20 fill / 14px stretch;
+ color:#f3e6c4;font:700 24px/44px 'PT Serif',serif;text-align:center;padding:0;background:none}
+.btn.s{height:56px;width:240px;font-size:20px;line-height:28px}
+.board{position:relative;width:360px;height:360px;background:url(../../assets/ui/board-frame-gold.webp) center/100% 100%;box-sizing:border-box;padding:8.4%}
+.board i{display:block;width:100%;height:100%;background:#1a2a3a;background-image:linear-gradient(#0003 1px,transparent 1px),linear-gradient(90deg,#0003 1px,transparent 1px);background-size:12.5% 12.5%}
+.sw{width:256px;height:256px;background:url(../../assets/ui/obsidian.webp) 0 0/256px;outline:1px solid #333}
+.sun{width:256px;height:256px;background:url(../../assets/ui/sun-stone.webp) center/contain no-repeat}
+</style></head><body>
+<div class="row">
+ <div><div class="sun"></div><div class="cap">sun-stone.webp 512</div></div>
+ <div><div class="sw"></div><div class="cap">obsidian.webp (256 px плитка, 2x2 из 512)</div></div>
+ <div><div class="board"><i></i></div><div class="cap">board-frame-gold.webp, фон 100% 100% (сетка условная)</div></div>
+</div>
+<div class="row">
+ <div><div class="panel" style="width:300px;height:170px">СЧЁТ<br>47 950</div><div class="cap">panel-frame 300×170</div></div>
+ <div><div class="panel" style="width:300px;height:420px">СЧЁТ<br>47 950</div><div class="cap">panel-frame 300×420</div></div>
+ <div><div class="panel" style="width:200px;height:90px;font-size:22px">12 ходов</div><div class="cap">panel-frame 200×90</div>
+ <div style="height:24px"></div>
+ <div class="btn">Перемешать</div><div class="cap">btn-plate 300×72</div><div style="height:12px"></div>
+ <div class="btn s">Подсказка</div><div class="cap">btn-plate 240×56</div></div>
+</div>
+</body></html>

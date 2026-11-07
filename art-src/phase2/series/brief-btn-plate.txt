@@ -1,0 +1,7 @@
+$imagegen
+Asset: game button plate, wide landscape about 4:1 (for example 1600x400), one image
+Request: a single horizontal rectangular button plate of polished black obsidian with a very THIN antique-gold edge line (the gold edge is only about 2 percent of the plate height), slightly rounded corners, a faint subtle bevel, nothing else
+Look: premium painted game art, crisp and solid, calm; soft even frontal light; deep glossy black with faint reflections; gold slightly worn, muted; flat and quiet, not shiny plastic, no glossy highlight stripe; plain obsidian face with no ornament
+Composition: strictly front view, no perspective; the plate fills the width of the image with a tiny even margin of plain dark #0d0b0a around it; the gold edge has identical thickness on all four sides; completely uniform interior so it can be stretched
+Image 1: material reference only (gold tone and black obsidian); do not copy the meander, jade, rivets or layout
+Constraints: no meander, no jade, no rivets, no text, no letters, no numbers, no icons, no glow, no fire, no drop shadow

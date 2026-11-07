@@ -1,0 +1,7 @@
+$imagegen
+Asset: game board frame for a square 8x8 puzzle grid, square 1:1, one image
+Request: a single square frame: an engraved antique-gold border band with a regular Aztec stepped-meander (greca) pattern all the way around, enclosing a plain flat black field; a small square jade inlay in a gold setting at the exact middle of each of the four sides, and a round gold rivet in each of the four corners
+Look: premium painted game art, crisp and solid; soft even frontal light; antique polished gold with slight wear; muted jade green; same gold, same meander, same jade inlays and same rivets as Image 1
+Composition: strictly front view, no perspective; the frame fills the square image with a thin even margin of plain dark #0d0b0a; gold band about 6 percent of the image width, identical thickness on all four sides, perfect square outline; the corners are plain square gold blocks with one rivet; the inner field is plain flat black with no ornaments
+Image 1: style and material reference — match its gold, meander, jade inlay and rivets exactly; do not copy its rectangular proportion
+Constraints: no text, no letters, no numbers, no icons, no glow, no fire, no scenery

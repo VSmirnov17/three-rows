@@ -1,0 +1,7 @@
+$imagegen
+Asset: seamless tileable texture, square 1:1, one image
+Request: polished black obsidian stone surface, a flat top-down view of the stone itself, filling the whole frame edge to edge
+Look: premium painted game art; deep glossy black, nearly pure black with very faint soft grey reflections, a few fine thin natural hairline fractures; very low contrast so light text on it stays readable; the same material as the central area of Image 1
+Composition: strictly front view, no perspective, no border, no frame, no vignette; the lighting and the pattern must be even and continue across all four edges so the image tiles seamlessly; no feature, crack or reflection should end abruptly at an edge
+Image 1: material reference only (the plain black obsidian in the centre of the plaque)
+Constraints: no text, no letters, no numbers, no icons, no gold, no glow, no fire, no objects
