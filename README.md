@@ -166,6 +166,29 @@ python3 tools/finish_specials.py art-src/specials assets/gems   # нужен Pil
 
 `assets/gems/_preview_all.png` — контрольный лист со всеми шестью камнями в одном масштабе.
 
+## Огонь жаровен
+
+Над боковыми колонками игрового экрана горят две жаровни (`css/fire.css`, `js/visuals-fire.js`, логика — `js/fire-core.js`). Огонь — спрайт-лист `assets/fire/fire-calm.webp` (48 кадров 224×219, сетка 8×6, 24 к/с, цикл 2 с), отрендеренный в Blender из готовой симуляции EmberGen «Small Camp Fire» (JangaFX, CC0, см. `assets/fire/LICENSE-EmberGen-CC0.txt`). Чаша — картинка Codex `assets/ui/brazier.webp`. Свет от огня — слой `.fire-light` (меняется только прозрачность), искры — один canvas.
+
+Огонь отзывается на игру: от обычного ряда колышется, от каскада, спецкамня и победы вспыхивает (растёт, ярче, быстрее, сноп искр), при нехватке времени горит быстрее. Пределы яркости и частоты — `FireCore.LIMITS`. На «Спокойно» вспышки мягче. При `prefers-reduced-motion` огонь стоит, искр нет. На слабом компьютере (3 с кадров дольше 45 мс) включается `body[data-fx="low"]`: без искр и мерцания. Вручную: `localStorage['sun-keeper-fx'] = 'low'` или `'full'` (не определять самому). На телефоне чаш нет, свет и искры идут от верхних углов рамки поля.
+
+Пересборка огня (VDB около 400 МБ, в проект не кладутся):
+
+```bash
+# 1. скачать SmallCampfireVDB.zip со страницы JangaFX и распаковать вне проекта
+# 2. рендер кадров (5 мин на Apple M4)
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+    --python blender/fire_vdb.py -- --vdb <папка>/smallCampfire/smallCampfireVDB --out <кадры> \
+    --render 40-199 --center 0.0x-1.04 --scale 1.32 --size 448x384 --samples 64 --view Standard --glow 1.4 --range 1.6
+# 3. цикл, прозрачность, лист и fire.json
+python3 tools/pack_fire.py <кадры> assets/fire/fire-calm.webp --loop 48 --fade 12 --start auto \
+    --crop --width 224 --q 76 --json assets/fire/fire.json
+# 4. проверка шва и каймы
+python3 art-src/phase2/fire/check.py assets/fire/fire-calm.webp /tmp/seam.png
+```
+
+Если изменились числа в `assets/fire/fire.json`, перенесите их в `FireCore.SHEET` (`js/fire-core.js`) — тест `tests/fire-core.test.js` следит за совпадением. Своя симуляция Mantaflow `blender/fire.py` осталась запасным путём (пользователь счёл её «дешёвой»).
+
 ## Визуальные слои
 
 Игра сама ничего не рисует поверх логики: `js/game.js` выставляет на `<body>` атрибуты `data-land`, `data-combo`, `data-urgency` (`tense`/`urgent`), `data-outcome` (`win`/`lose`) и шлёт события `sun:special`, `sun:blast`, `sun:match`. Фоны, эффекты комбо, тревога таймера и экраны подписываются на них из `css/*.css` и `js/visuals*.js`, поэтому оформление можно менять, не трогая правила игры.
@@ -206,6 +229,13 @@ css/screens.css   — значок серии, тревога таймера, б
 js/visuals.js     — загрузка и смена фона уровня
 js/sun-stone.js   — круг Солнечного Камня: осколки уровней главы (логика + SVG)
 js/visuals-screens.js — эффекты комбо, баннер уровня, конфетти
+js/fire-core.js   — огонь жаровен: реакции на игру, вспышка, кадры, пределы яркости (без DOM)
+js/visuals-fire.js — жаровни: кадры огня, вспышка, свет, искры
+css/fire.css      — раскладка жаровен, слой света и искр
+assets/fire/      — спрайт-лист огня, fire.json, лицензия EmberGen CC0
+blender/fire_vdb.py — рендер огня из VDB EmberGen
+blender/fire.py   — своя симуляция огня Mantaflow (запасной путь)
+tools/pack_fire.py — кадры → цикл, прозрачность, спрайт-лист
 js/sfx-sa3.js     — новые звуки (Stable Audio 3) и привязка к событиям
 assets/gems/      — PNG камней и оверлеев (tiles-v1/, classic/ — прежние наборы)
 art-src/          — исходный лист камней и промпт для Codex

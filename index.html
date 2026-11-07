@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="css/hud.css">
+<link rel="stylesheet" href="css/fire.css">
 <link rel="stylesheet" href="css/specials.css">
 <link rel="stylesheet" href="css/themes.css">
 <link rel="stylesheet" href="css/screens.css">
@@ -32,6 +33,10 @@
     <!-- Игровой экран «Обсидиан и огонь». Десктоп: колонка | поле | колонка.
          Телефон: таблички и цели над полем, кнопки — панелью снизу. -->
     <aside class="left-panel">
+      <div class="brazier brazier-left" aria-hidden="true">
+        <div class="brazier-fire"><i class="fire-calm"></i><i class="fire-flare"></i></div>
+        <img class="brazier-bowl" src="assets/ui/brazier.webp" alt="">
+      </div>
       <div class="hud-plaque score-plaque">
         <span class="plaque-label">Счёт</span>
         <span id="scoreValue" class="score-value">0</span>
@@ -62,6 +67,10 @@
     </section>
 
     <aside class="right-panel">
+      <div class="brazier brazier-right" aria-hidden="true">
+        <div class="brazier-fire"><i class="fire-calm"></i><i class="fire-flare"></i></div>
+        <img class="brazier-bowl" src="assets/ui/brazier.webp" alt="">
+      </div>
       <button id="menuBtn" class="plate-btn menu-btn">
         <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#icon-menu"></use></svg>
         <span class="btn-label">Меню</span>
@@ -299,5 +308,7 @@
 <script src="js/screens/transfer.js"></script>
 <script src="js/visuals.js"></script>
 <script src="js/visuals-screens.js"></script>
+<script src="js/fire-core.js"></script>
+<script src="js/visuals-fire.js"></script>
 </body>
 </html>

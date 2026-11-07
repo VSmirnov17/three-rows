@@ -26,9 +26,9 @@
     cols: 8,
     rows: 6,
     fw: 224,
-    fh: 196,
+    fh: 219,
     fps: 24,
-    mouth: Object.freeze({ x: 0.498, y: 0.934 })
+    mouth: Object.freeze({ x: 0.507, y: 0.936 })
   });
 
   const LIMITS = Object.freeze({

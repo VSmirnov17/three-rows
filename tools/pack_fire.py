@@ -17,6 +17,7 @@
 """
 import argparse
 import glob
+import json
 import os
 import subprocess
 import sys
@@ -89,6 +90,26 @@ def crop_union(frames, pad=4, thr=8):
     return [f.crop(box) for f in frames], box
 
 
+def mouth_of(frames, thr=40):
+    """Середина основания пламени в долях кадра (медиана по кадрам).
+
+    Основание — нижняя строка, где альфа больше thr; середина — центр
+    рамки пламени в нижних 15 % его высоты."""
+    fw, fh = frames[0].size
+    xs, ys = [], []
+    for f in frames:
+        m = f.getchannel("A").point(lambda v: 255 if v > thr else 0)
+        b = m.getbbox()
+        if not b:
+            continue
+        band = m.crop((0, max(b[1], b[3] - int(0.15 * fh)), fw, b[3])).getbbox()
+        xs.append((band[0] + band[2]) / 2 if band else (b[0] + b[2]) / 2)
+        ys.append(b[3])
+    xs.sort()
+    ys.sort()
+    return {"x": round(xs[len(xs) // 2] / fw, 3), "y": round(ys[len(ys) // 2] / fh, 3)}
+
+
 def sheet(frames, cols):
     fw, fh = frames[0].size
     rows = (len(frames) + cols - 1) // cols
@@ -119,6 +140,8 @@ def main():
     p.add_argument("--preview", help="анимированный GIF/WebP на фоне игры")
     p.add_argument("--crop", action="store_true", help="обрезать по общей рамке пламени")
     p.add_argument("--width", type=int, help="ширина кадра после обрезки")
+    p.add_argument("--json", help="записать метаданные листа")
+    p.add_argument("--source", default="EmberGen Small Camp Fire (JangaFX), CC0")
     a = p.parse_args()
 
     frames = load_frames(a.src)
@@ -154,6 +177,14 @@ def main():
         subprocess.run(["cwebp", "-quiet", "-q", str(a.q), "-alpha_q", "85", "-m", "6",
                         png, "-o", a.out], check=True)
     fw, fh = rgba[0].size
+    if a.json:
+        meta = {"src": os.path.basename(a.out), "frames": len(rgba), "cols": a.cols,
+                "rows": (len(rgba) + a.cols - 1) // a.cols, "fw": fw, "fh": fh,
+                "fps": a.fps, "mouth": mouth_of(rgba), "source": a.source}
+        with open(a.json, "w", encoding="utf-8") as fp:
+            json.dump(meta, fp, ensure_ascii=False, indent=2)
+            fp.write("\n")
+        print("json:", json.dumps(meta, ensure_ascii=False))
     print("%s: %d кадров %dx%d, сетка %d×%d, лист %dx%d, %.0f КБ" % (
         a.out, len(rgba), fw, fh, a.cols, (len(rgba) + a.cols - 1) // a.cols,
         sh.size[0], sh.size[1], os.path.getsize(a.out) / 1024))

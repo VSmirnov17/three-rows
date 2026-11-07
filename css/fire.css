@@ -1,0 +1,131 @@
+/* Жаровни с живым огнём, тёплый свет и искры (этап 2, шаг 2).
+   Кадры огня переключает js/visuals-fire.js через background-position,
+   здесь только раскладка и слои. Огонь: EmberGen «Small Camp Fire»
+   (JangaFX, CC0), см. assets/fire/LICENSE-EmberGen-CC0.txt.
+
+   Геометрия — в долях высоты жаровни --bh (утверждено на образце,
+   art-src/phase2/PROMPTS.md, «Шаг 2 — жаровни»). */
+
+/* ---------- Десктоп: жаровня венчает боковую колонку ---------- */
+.brazier {
+  --bh: clamp(84px, 20vh, 200px);
+  position: relative;
+  z-index: 0;
+  flex: 0 0 auto;
+  height: var(--bh);
+  /* жаровня заходит на табличку под ней: ножка чаши — за табличкой */
+  margin-bottom: calc(var(--bh) * -0.22);
+  /* запас сверху: пламя при вспышке растёт и не должно упираться в край окна */
+  margin-top: calc(var(--bh) * 0.12);
+  pointer-events: none;
+}
+/* Табличка под жаровней лежит поверх неё (только на десктопе: на телефоне
+   жаровен нет, а нижняя панель кнопок там закреплена position: fixed) */
+@media (min-width: 901px) and (min-height: 501px) {
+  .brazier + * { position: relative; z-index: 1; }
+}
+
+.brazier-bowl {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--bh) * 0.066);
+  z-index: 2;
+  width: calc(var(--bh) * 0.77);
+  height: auto;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55));
+}
+
+.brazier-fire {
+  --flare-scale: 1;
+  position: absolute;
+  left: calc(50% - var(--bh) * 0.36);
+  bottom: calc(var(--bh) * 0.40);
+  z-index: 1;
+  width: calc(var(--bh) * 0.72);
+  aspect-ratio: 224 / 219;
+  transform-origin: var(--mouth-x, 50%) var(--mouth-y, 93%);
+  transform: scale(var(--flare-scale));
+}
+
+/* Кадр листа 8×6: размер фона в долях листа, поэтому кадры не плывут
+   при любом размере жаровни. Позицию кадра ставит JS. */
+.fire-calm,
+.fire-flare {
+  position: absolute;
+  inset: 0;
+  background: url("../assets/fire/fire-calm.webp") 0 0 / 800% 600% no-repeat;
+}
+/* Вспышка — вторая копия того же кадра поверх: огонь ярче */
+.fire-flare { opacity: 0; mix-blend-mode: screen; }
+/* Правая жаровня отражена, чтобы огни не были одинаковыми */
+.brazier-right .fire-calm,
+.brazier-right .fire-flare { transform: scaleX(-1); }
+
+/* Колыхание от обычного ряда: лёгкий наклон и растяжение от основания */
+.brazier-fire.sway .fire-calm,
+.brazier-fire.sway .fire-flare { animation: fireSway 600ms ease-in-out; }
+.brazier-right .brazier-fire.sway .fire-calm,
+.brazier-right .brazier-fire.sway .fire-flare { animation-name: fireSwayMirror; }
+@keyframes fireSway {
+  0%, 100% { transform: none; }
+  35% { transform: skewX(-3deg) scaleY(1.04); }
+  70% { transform: skewX(2deg) scaleY(.99); }
+}
+@keyframes fireSwayMirror {
+  0%, 100% { transform: scaleX(-1); }
+  35% { transform: scaleX(-1) skewX(-3deg) scaleY(1.04); }
+  70% { transform: scaleX(-1) skewX(2deg) scaleY(.99); }
+}
+.fire-calm, .fire-flare { transform-origin: 50% 93%; }
+
+/* Невысокое окно: жаровня меньше, чтобы колонки не выходили за край */
+@media (max-height: 720px) and (min-width: 901px) {
+  .brazier { --bh: clamp(70px, 15vh, 110px); }
+}
+
+/* ---------- Тёплый свет от огня ----------
+   Две радиальные заливки из точек огня (на телефоне — из верхних углов
+   рамки поля). Точки ставит JS в --l1x/--l1y/--l2x/--l2y. Мерцание —
+   только opacity, без мигания (пределы — FireCore.LIMITS). */
+.fire-light {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+  opacity: .28;
+  mix-blend-mode: screen;
+  --lk: .6;   /* сила заливки в центре (на телефоне сильнее: там это весь огонь) */
+  background:
+    radial-gradient(circle var(--lr, 260px) at var(--l1x, -999px) var(--l1y, -999px), rgba(255, 150, 60, var(--lk)), rgba(255, 120, 40, calc(var(--lk) * .35)) 45%, transparent 75%),
+    radial-gradient(circle var(--lr, 260px) at var(--l2x, -999px) var(--l2y, -999px), rgba(255, 150, 60, var(--lk)), rgba(255, 120, 40, calc(var(--lk) * .35)) 45%, transparent 75%);
+}
+
+/* Искры — один canvas поверх экрана */
+.fire-sparks {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ---------- Телефон и альбомный телефон: чаш нет (вариант П2) ---------- */
+@media (max-width: 900px) and (orientation: portrait), (max-width: 900px) and (min-height: 501px) {
+  .brazier { display: none; }
+  .fire-light { --lk: .9; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .brazier { display: none; }
+  .fire-light { --lk: .9; }
+}
+
+/* Слабый компьютер: без искр и мерцания (флаг ставит JS) */
+body[data-fx="low"] .fire-sparks { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .brazier-fire.sway .fire-calm,
+  .brazier-fire.sway .fire-flare { animation: none; }
+  .fire-sparks { display: none; }
+}
