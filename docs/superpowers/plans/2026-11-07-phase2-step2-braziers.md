@@ -187,23 +187,23 @@
 **Files:**
 - Modify: `tools/e2e/run.js`, `tools/e2e/README.md`
 
-- [ ] **Шаг 1: сценарий «жаровни»** на четырёх окнах (1366×768, 1366×650, 390×844, 360×740):
+- [x] **Шаг 1: сценарий «жаровни»** на четырёх окнах (1366×768, 1366×650, 390×844, 360×740):
   - на десктопе видимые `.brazier` (на телефоне их нет, есть `.fire-light`) не пересекаются с `button`, `.hud-plaque`, `.goal-card`, `.board-frame` (пересечение прямоугольников больше 2 px — ошибка);
   - у `.brazier` есть `aria-hidden` и вычисленный `pointer-events: none`;
   - все кнопки по-прежнему не ниже 56 px;
   - при 1366×650 нет вертикальной прокрутки.
-- [ ] **Шаг 2: сценарий «огонь отзывается»:** `window.dispatchEvent(new CustomEvent('sun:match', {detail:{chain:5, mult:6}}))` → в течение 300 мс у `.brazier` есть `data-flare`; через 2,2 с его нет. На стартовом экране за 1 с `__FIRE.frames` не меняется. На уровне за 1 с растёт.
-- [ ] **Шаг 3: сценарий «спокойный режим движения»:** контекст с `reducedMotion: 'reduce'` → `__FIRE.state().running === false`, `.fire-sparks` пустой.
-- [ ] **Шаг 4: `file://`:** в существующей file://-проверке `.fire-calm` получил загруженный фон: `new Image()` с тем же URL, `complete && naturalWidth > 0`.
-- [ ] **Шаг 5:** прогон `NODE_PATH=/tmp/pw/node_modules node tools/e2e/run.js` (все три браузера, по очереди). Все сценарии PASS, код выхода 0. Скриншоты `desktop-L4-level.png` и `mobile-L4-level.png` посмотреть глазами в каждом браузере, особенно в WebKit (`mix-blend-mode`, альфа WebP).
-- [ ] **Шаг 6:** обновить число сценариев и описание в `tools/e2e/README.md`. Коммит: `Браузерные проверки жаровен и огня`.
+- [x] **Шаг 2: сценарий «огонь отзывается»:** `window.dispatchEvent(new CustomEvent('sun:match', {detail:{chain:5, mult:6}}))` → в течение 300 мс у `.brazier` есть `data-flare`; через 2,2 с его нет. На стартовом экране за 1 с `__FIRE.frames` не меняется. На уровне за 1 с растёт.
+- [x] **Шаг 3: сценарий «спокойный режим движения»:** контекст с `reducedMotion: 'reduce'` → `__FIRE.state().running === false`, `.fire-sparks` пустой.
+- [x] **Шаг 4: `file://`:** в существующей file://-проверке `.fire-calm` получил загруженный фон: `new Image()` с тем же URL, `complete && naturalWidth > 0`.
+- [x] **Шаг 5:** прогон `NODE_PATH=/tmp/pw/node_modules node tools/e2e/run.js` (все три браузера, по очереди). Все сценарии PASS, код выхода 0. Скриншоты `desktop-L4-level.png` и `mobile-L4-level.png` посмотреть глазами в каждом браузере, особенно в WebKit (`mix-blend-mode`, альфа WebP).
+- [x] **Шаг 6:** обновить число сценариев и описание в `tools/e2e/README.md`. Коммит: `Браузерные проверки жаровен и огня`.
 
 ### Задача 7: Итог шага
 
 **Files:**
 - Modify: `docs/superpowers/STATUS.md`, `README.md`
 
-- [ ] **Шаг 1:** STATUS: шаг 1 влит в `main` (сейчас там написано «пока не влит»), шаг 2 сделан, что вошло, что отложено, следующий шаг — живой фон. В README — раздел про огонь и флаг `sun-keeper-fx`.
-- [ ] **Шаг 2:** `node --test tests/` и полный e2e — PASS.
-- [ ] **Шаг 3:** итоговое ревью (`superpowers:requesting-code-review`), правки по нему.
+- [x] **Шаг 1:** STATUS: шаг 1 влит в `main` (сейчас там написано «пока не влит»), шаг 2 сделан, что вошло, что отложено, следующий шаг — живой фон. В README — раздел про огонь и флаг `sun-keeper-fx`.
+- [x] **Шаг 2:** `node --test tests/` и полный e2e — PASS.
+- [x] **Шаг 3:** итоговое ревью (`superpowers:requesting-code-review`), правки по нему.
 - [ ] **Шаг 4:** показать пользователю скриншоты десктопа и телефона и короткую запись вспышки. Слить в `main` и запушить в `origin` — после его «да».
