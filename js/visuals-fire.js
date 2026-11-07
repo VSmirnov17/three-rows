@@ -114,12 +114,10 @@
       document.scrollingElement ? document.scrollingElement.scrollHeight - window.innerHeight : 0);
     if (over > 0) {
       const bh = Math.floor(bh0 - over / G.cost - 1);
-      if (bh < BH_MIN) {
-        body.dataset.braziers = 'off';
-        return;
-      }
-      braziers.forEach(b => b.el.style.setProperty('--bh', bh + 'px'));
+      if (bh < BH_MIN) body.dataset.braziers = 'off';
+      else braziers.forEach(b => b.el.style.setProperty('--bh', bh + 'px'));
     }
+    // И без жаровен (низкое окно) колонка может заходить на полосу подсказки
     const frame = document.querySelector('.board-frame');
     if (frame && lastOf() > frame.getBoundingClientRect().bottom + 1) body.dataset.hintNarrow = '1';
     placeHint();
