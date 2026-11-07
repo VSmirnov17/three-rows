@@ -43,7 +43,8 @@
   bottom: calc(var(--bh) * 0.40);
   z-index: 1;
   width: calc(var(--bh) * 0.72);
-  aspect-ratio: 224 / 219;
+  /* кадр 224×219; явная высота, а не aspect-ratio (Safari до 15) */
+  height: calc(var(--bh) * 0.72 * 219 / 224);
   transform-origin: var(--mouth-x, 50%) var(--mouth-y, 93%);
   transform: scale(var(--flare-scale));
 }
@@ -79,10 +80,18 @@
 }
 .fire-calm, .fire-flare { transform-origin: 50% 93%; }
 
-/* Невысокое окно: жаровня меньше, чтобы колонки не выходили за край */
+/* Невысокое окно: жаровня меньше. Точный размер под свободное место
+   подгоняет js/visuals-fire.js (--bh на элементе); если места нет совсем,
+   жаровни прячутся, а свет идёт от углов рамки поля, как на телефоне. */
 @media (max-height: 720px) and (min-width: 901px) {
   .brazier { --bh: clamp(70px, 15vh, 110px); }
 }
+body[data-braziers="off"] .brazier { display: none; }
+/* Колонка с жаровней зашла на полосу подсказки справа. Длинная подсказка
+   (шире поля) прижимается к правому краю поля и растёт влево, под левую
+   колонку — там внизу свободно. Класс hint-shift ставит js/visuals-fire.js. */
+body[data-hint-narrow] .game-shell .hint-bar { max-width: calc(var(--frame) + var(--side) + var(--gap) - 12px); }
+body[data-hint-narrow] .game-shell .hint-bar.hint-shift { align-self: flex-end; }
 
 /* ---------- Тёплый свет от огня ----------
    Две радиальные заливки из точек огня (на телефоне — из верхних углов
@@ -114,11 +123,11 @@
 /* ---------- Телефон и альбомный телефон: чаш нет (вариант П2) ---------- */
 @media (max-width: 900px) and (orientation: portrait), (max-width: 900px) and (min-height: 501px) {
   .brazier { display: none; }
-  .fire-light { --lk: .9; }
+  .fire-light { --lk: .75; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
   .brazier { display: none; }
-  .fire-light { --lk: .9; }
+  .fire-light { --lk: .75; }
 }
 
 /* Слабый компьютер: без искр и мерцания (флаг ставит JS) */

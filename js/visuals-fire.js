@@ -5,12 +5,21 @@
    здесь только DOM: один цикл requestAnimationFrame на всё.
 
    Пауза: скрытая вкладка или любой .overlay.show (старт, карта, сцена…).
+   На паузе огонь возвращается к спокойному горению, искры гаснут —
+   под оверлеем ничего не замирает на полпути.
+   Свет и искры лежат внутри #app под оверлеями (#app — свой контекст
+   наложения, поэтому слой на <body> лёг бы поверх всех экранов).
    prefers-reduced-motion: стоит кадр 0, свет ровный, искр и вспышек нет.
    Слабый компьютер: body[data-fx="low"] — сам, если 3 с подряд кадр дольше
    45 мс (первые 2 с после запуска цикла не считаются: там строится поле),
    или вручную localStorage['sun-keeper-fx'] = 'low'. Тогда без искр и
-   мерцания, огонь обновляется 12 раз в секунду. Значение 'full' отключает
-   автоопределение (для тестов и для тех, кому огонь важнее плавности). */
+   мерцания, цикл идёт 12 раз в секунду. Значение 'full' отключает
+   автоопределение (для тестов и для тех, кому огонь важнее плавности).
+
+   Размер жаровни подгоняется под свободное место в правой колонке
+   (fitBraziers). Если места меньше чем на 70 px, жаровни прячутся
+   (body[data-braziers="off"]), свет и искры идут от углов рамки поля,
+   как на телефоне. */
 (function () {
   "use strict";
 
@@ -26,6 +35,12 @@
 
   const GLOW_BASE = 0.28;
   const LOW_STEP_MS = 1000 / 12;
+  const BH_MIN = 70;
+  // Геометрия жаровни в долях её высоты bh — как в css/fire.css
+  const G = { fireW: 0.72, fireBottom: 0.40, cost: 0.9 };
+  const FIRE_ASPECT = S.fh / S.fw;
+  // Языки пламени в самых высоких кадрах доходят почти до верха кадра
+  const FLAME_TOP = 0.01;
 
   /* ---------- Элементы ---------- */
   const braziers = Array.from(document.querySelectorAll('.brazier')).map((el, i) => ({
@@ -34,7 +49,9 @@
     layers: [el.querySelector('.fire-calm'), el.querySelector('.fire-flare')].filter(Boolean),
     flareLayer: el.querySelector('.fire-flare'),
     phase: i === 0 ? 0 : 23,   // правая жаровня горит не в такт левой
-    shown: -1
+    shown: -1,
+    op: '',
+    sc: ''
   }));
   braziers.forEach(b => {
     if (!b.fire) return;
@@ -48,7 +65,9 @@
   const canvas = document.createElement('canvas');
   canvas.className = 'fire-sparks';
   canvas.setAttribute('aria-hidden', 'true');
-  body.append(light, canvas);
+  const shell = document.querySelector('.game-shell');
+  if (shell) shell.after(light, canvas);
+  else body.append(light, canvas);
   const ctx2d = canvas.getContext('2d');
 
   /* ---------- Слабый режим ---------- */
@@ -68,23 +87,84 @@
   }
   setLow(low);
 
+  /* ---------- Размер жаровни под свободное место ----------
+     Левая колонка гибкая (круг Камня ужимается), правая — нет: меню,
+     уровень, таймер и три кнопки. Жаровня стоит в ней ~0.9·bh, поэтому
+     bh уменьшаем на нехватку / 0.9. */
+  function desktopLayout() {
+    return braziers.some(b => b.el.offsetParent !== null) || body.dataset.braziers === 'off';
+  }
+  /* Правая колонка может заходить на полосу подсказки под полем (до низа
+     окна) — тогда подсказка не шире поля (body[data-hint-narrow]), чтобы
+     не наехать на нижнюю кнопку. */
+  const PAD_BOTTOM = 8;
+  function fitBraziers() {
+    braziers.forEach(b => b.el.style.removeProperty('--bh'));
+    delete body.dataset.braziers;
+    delete body.dataset.hintNarrow;
+    const panel = document.querySelector('.right-panel');
+    const first = braziers[0];
+    if (!panel || !first || first.el.offsetParent === null) return;  // телефон
+    const lastOf = () => {
+      const kids = Array.from(panel.children).filter(k => k.offsetParent !== null);
+      return kids.length ? kids[kids.length - 1].getBoundingClientRect().bottom : 0;
+    };
+    const bh0 = first.el.getBoundingClientRect().height;
+    const over = Math.max(lastOf() - (window.innerHeight - PAD_BOTTOM),
+      document.scrollingElement ? document.scrollingElement.scrollHeight - window.innerHeight : 0);
+    if (over > 0) {
+      const bh = Math.floor(bh0 - over / G.cost - 1);
+      if (bh < BH_MIN) {
+        body.dataset.braziers = 'off';
+        return;
+      }
+      braziers.forEach(b => b.el.style.setProperty('--bh', bh + 'px'));
+    }
+    const frame = document.querySelector('.board-frame');
+    if (frame && lastOf() > frame.getBoundingClientRect().bottom + 1) body.dataset.hintNarrow = '1';
+    placeHint();
+  }
+
+  const hintBar = document.getElementById('hintBar');
+  function placeHint() {
+    if (!hintBar) return;
+    hintBar.classList.remove('hint-shift');
+    if (!body.dataset.hintNarrow) return;
+    const frame = document.querySelector('.board-frame');
+    if (frame && hintBar.offsetWidth > frame.getBoundingClientRect().width - 24) hintBar.classList.add('hint-shift');
+  }
+  if (hintBar) new MutationObserver(placeHint).observe(hintBar, { childList: true, characterData: true, subtree: true });
+
   /* ---------- Точки огня: откуда свет и искры ----------
-     Десктоп — основание пламени в каждой жаровне. Телефон (жаровен нет) —
-     верхние углы рамки поля. */
+     Десктоп — основание пламени в каждой жаровне (считается по коробке
+     жаровни, без учёта вспышки и колыхания). Телефон и низкое окно без
+     жаровен — верхние углы рамки поля. */
   let sources = [];
-  let lightRadius = 260;
+  let maxScale = L.scaleMax;
   function measure() {
     const pts = [];
     let bh = 0;
+    let minScale = L.scaleMax;
     braziers.forEach(b => {
-      if (!b.fire) return;
-      const r = b.fire.getBoundingClientRect();
-      if (r.width < 2) return;  // скрыта (телефон)
-      pts.push({ x: r.left + r.width * S.mouth.x, y: r.top + r.height * S.mouth.y - r.height * 0.25, w: r.width * 0.5 });
-      bh = Math.max(bh, b.el.getBoundingClientRect().height);
+      const r = b.el.getBoundingClientRect();
+      if (r.width < 2 || b.el.offsetParent === null) return;  // скрыта
+      const h = r.height;
+      const fw = h * G.fireW;
+      const fh = fw * FIRE_ASPECT;
+      const bottom = r.bottom - h * G.fireBottom;
+      const top = bottom - fh;
+      const mouthY = top + fh * S.mouth.y;
+      pts.push({ x: r.left + r.width / 2 + (S.mouth.x - 0.5) * fw, y: mouthY - fh * 0.25, w: fw * 0.5 });
+      // Вспышка растёт от основания: кончики не должны уйти за верх окна
+      const flameTop = top + fh * FLAME_TOP;
+      const room = (mouthY - 2) / Math.max(1, mouthY - flameTop);
+      minScale = Math.min(minScale, Math.max(1, room));
+      bh = Math.max(bh, h);
     });
+    maxScale = minScale;
+    let radius;
     if (pts.length) {
-      lightRadius = Math.round(Math.max(160, bh * 1.9));
+      radius = Math.round(Math.max(160, bh * 1.9));
     } else {
       const fr = document.querySelector('.board-frame');
       const r = fr ? fr.getBoundingClientRect() : null;
@@ -92,7 +172,7 @@
         // чуть внутрь от углов: у края экрана половина свечения пропала бы
         pts.push({ x: r.left + 46, y: r.top + 6, w: 22 }, { x: r.right - 46, y: r.top + 6, w: 22 });
       }
-      lightRadius = 170;
+      radius = 170;
     }
     sources = pts;
     const a = pts[0] || { x: -999, y: -999 };
@@ -101,16 +181,23 @@
     light.style.setProperty('--l1y', a.y + 'px');
     light.style.setProperty('--l2x', b.x + 'px');
     light.style.setProperty('--l2y', b.y + 'px');
-    light.style.setProperty('--lr', lightRadius + 'px');
+    light.style.setProperty('--lr', radius + 'px');
 
+    // Холст — по видимой области без полосы прокрутки
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.round(window.innerWidth * dpr);
-    const h = Math.round(window.innerHeight * dpr);
+    const de = document.documentElement;
+    const w = Math.round((de.clientWidth || window.innerWidth) * dpr);
+    const h = Math.round((de.clientHeight || window.innerHeight) * dpr);
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
     }
     ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function relayout() {
+    fitBraziers();
+    measure();
   }
 
   /* ---------- Кадры огня ---------- */
@@ -123,29 +210,38 @@
     b.layers.forEach(el => { el.style.backgroundPosition = pos; });
   }
 
-  /* ---------- Вспышка ---------- */
+  function setFlareLook(b, op, sc) {
+    if (b.flareLayer && b.op !== op) { b.op = op; b.flareLayer.style.opacity = op; }
+    if (b.fire && b.sc !== sc) { b.sc = sc; b.fire.style.setProperty('--flare-scale', sc); }
+  }
+
+  /* ---------- Вспышка ----------
+     Время вспышки, искр и мерцания — свои часы `clock`, они идут только
+     пока цикл работает. */
+  let clock = 0;
   let flareStart = -1e9;
   let flareStrength = 0;
   let lastFlareAt = -1e9;
-  let now = 0;
   const flareTotal = L.attackMs + L.holdMs + L.releaseMs;
 
-  function flareLevel(t) {
-    return FC.envelope(t - flareStart, flareStrength);
+  function flareLevel() {
+    return FC.envelope(clock - flareStart, flareStrength);
   }
 
   function triggerFlare(strength) {
     if (!(strength > 0)) return;
-    const t = performance.now();
-    if (t - lastFlareAt < L.throttleMs) return;
-    const cur = flareLevel(t);
-    if (cur >= strength) return;  // идущая вспышка сильнее — не трогаем
-    lastFlareAt = t;
+    const cur = flareLevel();
+    if (cur >= strength) return;  // идущая вспышка не слабее — не трогаем
+    // Не чаще одной вспышки в 250 мс; более сильная (спецкамень в том же
+    // шаге каскада) всё равно проходит — она только поднимает яркость
+    const active = clock - flareStart < flareTotal;
+    if (clock - lastFlareAt < L.throttleMs && !(active && strength > flareStrength)) return;
+    lastFlareAt = clock;
     flareStrength = strength;
     // Начинаем с того места проявления, где огибающая уже равна текущей,
     // чтобы яркость не прыгала вниз
     const k = Math.min(1, cur / strength);
-    flareStart = t - L.attackMs * Math.acos(1 - 2 * k) / Math.PI;
+    flareStart = clock - L.attackMs * Math.acos(1 - 2 * k) / Math.PI;
     wake();
   }
 
@@ -166,6 +262,8 @@
   const sparks = [];
   const SPARKS_ALIVE_MAX = 48;
   let nextIdle = [];
+  let burstWindowAt = -1e9;
+  let burstInWindow = 0;
 
   function spawn(src, burst) {
     if (sparks.length >= SPARKS_ALIVE_MAX) return;
@@ -183,17 +281,23 @@
 
   function burst(n) {
     if (low || isReduced() || !sources.length) return;
-    for (let i = 0; i < n; i++) spawn(sources[i % sources.length], true);
+    // Не больше sparksMax искр на одно окно 250 мс (ряд, удар и спецкамень
+    // одного шага каскада приходят вместе)
+    if (clock - burstWindowAt >= L.throttleMs) { burstWindowAt = clock; burstInWindow = 0; }
+    const k = Math.min(n, L.sparksMax - burstInWindow);
+    if (k <= 0) return;
+    burstInWindow += k;
+    for (let i = 0; i < k; i++) spawn(sources[i % sources.length], true);
     wake();
   }
 
-  function stepSparks(dt, t) {
+  function stepSparks(dt) {
     if (!low && sources.length) {
-      if (nextIdle.length !== sources.length) nextIdle = sources.map(() => t + rand(400, 2500));
+      if (nextIdle.length !== sources.length) nextIdle = sources.map(() => clock + rand(400, 2500));
       sources.forEach((src, i) => {
-        if (t >= nextIdle[i]) {
+        if (clock >= nextIdle[i]) {
           spawn(src, false);
-          nextIdle[i] = t + rand(1500, 3000);
+          nextIdle[i] = clock + rand(1500, 3000);
         }
       });
     }
@@ -210,6 +314,11 @@
   }
 
   let canvasDirty = false;
+  function clearSparks() {
+    sparks.length = 0;
+    if (canvasDirty) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+    canvasDirty = false;
+  }
   function drawSparks() {
     if (!sparks.length && !canvasDirty) return;
     ctx2d.clearRect(0, 0, canvas.width, canvas.height);
@@ -229,16 +338,35 @@
     ctx2d.globalCompositeOperation = 'source-over';
   }
 
+  /* ---------- Спокойное состояние (пауза, reduced motion) ---------- */
+  let flaring = false;
+  let lightOp = '';
+  function setLight(v) {
+    const s = v.toFixed(3);
+    if (s !== lightOp) { lightOp = s; light.style.opacity = s; }
+  }
+  function settle() {
+    flareStrength = 0;
+    flareStart = -1e9;
+    braziers.forEach(b => {
+      setFlareLook(b, '0', '1');
+      delete b.el.dataset.flare;
+    });
+    flaring = false;
+    clearSparks();
+    setLight(GLOW_BASE);
+  }
+
   /* ---------- Цикл ---------- */
   let raf = 0;
   let lastTs = 0;
   let fireT = 0;
   let urgSpeed = 1;
   let frames = 0;
-  let lastApply = 0;
-  let flaring = false;
   let frameTimes = [];
   let lowCheckAt = 0;
+  // Мерцание по тревоге: спокойно — мягче, при нехватке времени — до предела
+  const FLICKER_GAIN = { '': 0.6, tense: 0.8, urgent: 1 };
 
   function paused() {
     return document.hidden || !!document.querySelector('.overlay.show');
@@ -246,10 +374,19 @@
 
   function tick(ts) {
     raf = 0;
-    if (paused() || isReduced()) { lastTs = 0; return; }
+    if (paused() || isReduced()) {
+      lastTs = 0;
+      settle();
+      return;
+    }
+    // Слабый режим: цикл 12 раз в секунду
+    if (low && lastTs && ts - lastTs < LOW_STEP_MS) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
     const dt = lastTs ? Math.min(100, ts - lastTs) : 0;
     lastTs = ts;
-    now = ts;
+    clock += dt;
     frames++;
 
     // Признак слабого компьютера: кадры по 45+ мс три секунды подряд
@@ -262,21 +399,18 @@
       }
     }
 
-    const target = FC.speedFor(body.dataset.urgency || '');
+    const urgency = body.dataset.urgency || '';
+    const target = FC.speedFor(urgency);
     urgSpeed += (target - urgSpeed) * Math.min(1, dt / 270);
-    const e = flareLevel(ts);
-    const speed = urgSpeed * FC.flareSpeed(e);
-    fireT += dt * speed;
-
-    if (!low || ts - lastApply >= LOW_STEP_MS) {
-      lastApply = ts;
-      braziers.forEach(b => showFrame(b, FC.frameAt(fireT, S, 1, b.phase)));
-    }
+    const e = flareLevel();
+    fireT += dt * urgSpeed * FC.flareSpeed(e);
+    braziers.forEach(b => showFrame(b, FC.frameAt(fireT, S, 1, b.phase)));
 
     const on = e > 0.01;
+    const op = on ? e.toFixed(3) : '0';
+    const sc = on ? (1 + (maxScale - 1) * e).toFixed(4) : '1';
     braziers.forEach(b => {
-      if (b.flareLayer) b.flareLayer.style.opacity = on ? e.toFixed(3) : '0';
-      if (b.fire) b.fire.style.setProperty('--flare-scale', on ? (1 + (L.scaleMax - 1) * e).toFixed(4) : '1');
+      setFlareLook(b, op, sc);
       if (on !== flaring) {
         if (on) b.el.dataset.flare = '1';
         else delete b.el.dataset.flare;
@@ -284,10 +418,10 @@
     });
     flaring = on;
 
-    const fl = low ? 0 : FC.flicker(ts / 1000, 1);
-    light.style.opacity = FC.glow(GLOW_BASE, e, fl).toFixed(3);
+    const fl = low ? 0 : FC.flicker(clock / 1000, 1) * (FLICKER_GAIN[urgency] || FLICKER_GAIN['']);
+    setLight(FC.glow(GLOW_BASE, e, fl));
 
-    stepSparks(dt, ts);
+    stepSparks(dt);
     drawSparks();
     raf = requestAnimationFrame(tick);
   }
@@ -302,15 +436,8 @@
 
   function applyReduced() {
     if (isReduced()) {
-      braziers.forEach(b => {
-        showFrame(b, 0);
-        if (b.flareLayer) b.flareLayer.style.opacity = '0';
-        if (b.fire) b.fire.style.setProperty('--flare-scale', '1');
-        delete b.el.dataset.flare;
-      });
-      sparks.length = 0;
-      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-      light.style.opacity = String(GLOW_BASE);
+      settle();
+      braziers.forEach(b => showFrame(b, 0));
     } else {
       wake();
     }
@@ -344,19 +471,27 @@
   const overlayObs = new MutationObserver(() => { measure(); wake(); });
   document.querySelectorAll('.overlay').forEach(o => overlayObs.observe(o, { attributes: true, attributeFilter: ['class'] }));
   document.addEventListener('visibilitychange', wake);
-  window.addEventListener('resize', () => { measure(); wake(); });
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    measure();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { relayout(); wake(); }, 120);
+  });
+  // Высота табличек зависит от шрифта: подогнать ещё раз, когда он загрузится
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+  // Цели уровня меняют высоту левой колонки — точки света пересчитать
   if (window.ResizeObserver) {
-    const shell = document.querySelector('.game-shell');
-    if (shell) new ResizeObserver(measure).observe(shell);
+    const left = document.querySelector('.left-panel');
+    if (left) new ResizeObserver(() => measure()).observe(left);
   }
   if (reduceMq) {
     if (reduceMq.addEventListener) reduceMq.addEventListener('change', applyReduced);
     else if (reduceMq.addListener) reduceMq.addListener(applyReduced);
   }
 
-  measure();
+  relayout();
   braziers.forEach(b => showFrame(b, FC.frameAt(0, S, 1, b.phase)));
-  light.style.opacity = String(GLOW_BASE);
+  setLight(GLOW_BASE);
   applyReduced();
 
   /* ---------- Отладка (для тестов, только с ?debug) ---------- */
@@ -364,13 +499,16 @@
     window.__FIRE = {
       get frames() { return frames; },
       flare: s => { lastFlareAt = -1e9; triggerFlare(s); },
+      relayout,
       state: () => ({
         running: !!raf,
         speed: urgSpeed,
-        flare: flareLevel(now || performance.now()),
+        flare: flareLevel(),
+        maxScale,
         low,
         reduced: isReduced(),
         sparks: sparks.length,
+        braziers: body.dataset.braziers !== 'off',
         flareTotal
       })
     };

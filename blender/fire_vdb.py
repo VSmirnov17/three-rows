@@ -12,11 +12,10 @@ https://jangafx.com/software/embergen/download/free-vdb-animations/
   /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
       --python blender/fire_vdb.py -- --vdb <папка с smallCampfire_*.vdb> \
       --out <папка кадров> [--render 60-131] [--size 448x384] [--samples 64] \
-      [--center 0x-1.2] [--scale 1.3] [--glow 6] [--speed 1]
+      [--center 0x-1.2] [--scale 1.3] [--glow 6] [--range 1.0] [--view Standard] [--only N]
 
 --center и --scale задают кадр ортокамеры (в метрах после масштаба 0.01):
-центр по X и Z и ширину кадра. --speed > 1 берёт каждый n-й кадр VDB
-(огонь быстрее), < 1 не поддерживается.
+центр по X и Z и ширину кадра. --only N — отрендерить один кадр VDB.
 """
 import argparse
 import glob
