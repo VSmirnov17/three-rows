@@ -1,0 +1,62 @@
+/* ПРОБНИК (выбрасывается) */
+.light-shaft, #fireflies, #leaves, .theme-bg, .jungle::before { display: none !important; }
+.vignette { opacity: .55; }
+
+.bd-stage {
+  position: absolute; left: 0; top: 50%;
+  width: max(100vw, 177.78vh); height: max(100vh, 56.25vw);
+  transform: translateY(-50%);
+}
+.bd-plate { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.bd-wf {
+  position: absolute; overflow: hidden;
+  -webkit-mask: var(--bd-mask) 0 0 / 100% 100% no-repeat;
+  mask: var(--bd-mask) 0 0 / 100% 100% no-repeat;
+}
+.bd-water {
+  position: absolute; left: 0; top: 0; width: 100%;
+  height: calc(100% + var(--tile));
+  background: var(--bd-tex) 0 0 / 100% var(--tile) repeat-y;
+  will-change: transform;
+  animation: bdFall var(--dur) linear infinite;
+  mix-blend-mode: screen;
+}
+.bd-water-a { --dur: 3.2s; opacity: .55; }
+.bd-water-b { --dur: 5.4s; opacity: .35; background-position: 37% 41%; animation-delay: -2s; }
+@keyframes bdFall { from { transform: translateY(calc(-1 * var(--tile))); } to { transform: translateY(0); } }
+
+.bd-mist {
+  position: absolute; pointer-events: none;
+  background: radial-gradient(ellipse 50% 45% at 50% 60%, rgba(190, 215, 225, .32), transparent 70%);
+  animation: bdMist 7s ease-in-out infinite alternate;
+}
+@keyframes bdMist { from { transform: translateX(-4%) scale(1); opacity: .55; } to { transform: translateX(5%) scale(1.08); opacity: .9; } }
+
+.bd-sky { position: absolute; inset: 0; pointer-events: none; }
+.bd-moon-wrap {
+  position: absolute; top: max(10px, 3vh); right: max(8px, 2.2vw);
+  width: clamp(64px, 10vh, 130px); aspect-ratio: 1;
+}
+.bd-moon { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .8; filter: blur(.6px) brightness(.92); }
+.bd-halo {
+  position: absolute; inset: -90%;
+  background: radial-gradient(circle, rgba(215, 230, 255, .30) 0%, rgba(170, 200, 240, .14) 32%, transparent 64%);
+  animation: bdBreath 9s ease-in-out infinite;
+}
+@keyframes bdBreath { 0%, 100% { opacity: .62; transform: scale(.97); } 50% { opacity: .9; transform: scale(1.03); } }
+
+.bd-clouds {
+  position: absolute; top: 0; right: 0; width: min(46vw, 700px); height: max(150px, 26vh); overflow: hidden;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 85%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 18%, #000 85%, transparent);
+}
+.bd-cloud-track {
+  position: absolute; top: 0; left: 0; height: 100%; width: 200%;
+  background: url("clouds.webp") 0 30% / 50% auto repeat-x;
+  opacity: .38;
+  animation: bdDrift 140s linear -100s infinite;
+}
+@keyframes bdDrift { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+.bd-flies { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

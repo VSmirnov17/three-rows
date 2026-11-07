@@ -1,0 +1,6 @@
+$imagegen
+Asset: game sprite, one isolated object on a transparent background, square 1:1
+Request: a full moon disc seen through clear night air: pale silver-cream surface with soft realistic grey maria and faint craters
+Look: premium painterly game art matching the realism of Image 1's moon (ignore everything else in Image 1); gentle, slightly soft edge; calm, not glowing
+Composition: perfectly round disc centered, fills about 80% of the frame
+Constraints: no halo, no glow, no clouds, no stars, no sky, no text; fully transparent background around the disc

@@ -1,0 +1,6 @@
+$imagegen
+Asset: game background plate, landscape 16:9, one image, no game interface
+Request: a quiet moonlit night in a deep Mesoamerican jungle valley. At the far LEFT edge of the frame a tall narrow waterfall falls the full height of the picture from a dark mossy cliff into a misty pool at the bottom-left corner; the waterfall occupies only the leftmost 3–7% of the width. In the right third, small and distant, a stepped stone pyramid temple silhouette above the treeline. Large dark tropical leaves and vines frame the left and right edges. The center of the frame is calm, dark, low-detail jungle haze (it will be hidden behind the game board).
+Look: premium painterly game art, realistic like Image 1's scenery (ignore its game interface); cool deep blue-teal moonlight, soft bluish mist; muted, low contrast, slightly soft focus, dark overall so bright game pieces stand out in front
+Composition: the TOP-RIGHT corner is open clear night sky with a few faint stars and NO moon (a moon will be added as a separate layer); horizon low
+Constraints: no moon, no text, no people, no animals, no fire, no torches, no border, no game UI

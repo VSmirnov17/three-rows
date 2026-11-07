@@ -1,0 +1,6 @@
+$imagegen
+Asset: game overlay texture, wide landscape 3:1, one image
+Request: three thin, wispy, delicate night cloud streaks drifting horizontally, softly lit by moonlight from above, on a PURE BLACK background
+Look: realistic, soft and airy like fine mist; pale blue-grey with faint silver upper edges; very gradual feathered edges that fade smoothly into black, no hard outlines; dim overall
+Composition: clouds spread left to right with dark gaps between them; each one long and thin; nothing touches the image edges
+Constraints: background is pure flat black (#000000) everywhere outside the clouds; no stars, no moon, no landscape, no text

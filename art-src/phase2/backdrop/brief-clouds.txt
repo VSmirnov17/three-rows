@@ -1,0 +1,6 @@
+$imagegen
+Asset: game overlay sprite on a transparent background, wide landscape 3:1
+Request: three thin, wispy, semi-transparent night clouds drifting horizontally, separated by empty gaps, lit softly from above by moonlight
+Look: premium painterly game art; pale blue-grey with soft silver upper edges; very soft feathered edges, delicate and airy, low opacity
+Composition: clouds spread left to right across the frame, each thin and elongated
+Constraints: no sky, no background, no moon, no stars, no text; fully transparent background everywhere outside the clouds
