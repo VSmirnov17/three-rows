@@ -189,7 +189,10 @@
   /* ---------- Счёт, цели, комбо, звук ---------- */
   function setScore(value, animate) {
     state.score = value;
-    dom.score.textContent = fmtNum(value);
+    const text = fmtNum(value);
+    dom.score.textContent = text;
+    // Длина строки — для CSS: длинный счёт («1 234 567») набирается мельче
+    dom.score.dataset.len = String(text.length);
     if (animate) {
       dom.score.classList.remove('bump');
       void dom.score.offsetWidth;
