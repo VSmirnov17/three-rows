@@ -1,0 +1,7 @@
+$imagegen
+Asset: game sprite, one isolated object on a transparent background, portrait 4:5
+Request: an empty carved stone Aztec fire brazier: a wide shallow bowl on a short thick pedestal; dark warm basalt carved with an engraved gold stepped-meander (greca) band around the bowl rim; one small square polished jade inlay in the center front of the bowl
+Look: premium painted game art matching Image 1 materials, crisp and solid; soft even frontal light from slightly above; antique polished gold with slight wear; muted jade green; dark stone with fine carved detail
+Composition: front view, camera slightly above so the rim opening reads as a thin dark ellipse; object centered, fills about 85% of the frame width; bowl is empty and dark inside
+Image 1: material reference only (obsidian, gold, jade). Image 2: shape idea only (do not copy its fire or background)
+Constraints: no fire, no flames, no embers, no glow, no smoke, no text, no background scenery; fully transparent background around the object
