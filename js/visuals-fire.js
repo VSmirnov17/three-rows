@@ -382,7 +382,9 @@
       raf = requestAnimationFrame(tick);
       return;
     }
-    const dt = lastTs ? Math.min(100, ts - lastTs) : 0;
+    // Шаг не больше 250 мс: при редких кадрах (слабый компьютер) часы
+    // не отстают, а после зависания огонь не прыгает далеко вперёд
+    const dt = lastTs ? Math.min(250, ts - lastTs) : 0;
     lastTs = ts;
     clock += dt;
     frames++;
