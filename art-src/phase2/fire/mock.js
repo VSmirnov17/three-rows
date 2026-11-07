@@ -4,8 +4,9 @@ const CSS_DESK = `
 .mk-brazier{--bh:clamp(84px,20vh,200px)!important;height:var(--bh)!important;margin-bottom:calc(var(--bh) * -0.22)!important;z-index:0!important}
 .left-panel>.hud-plaque,.right-panel>.plate-btn,.right-panel>.info-pair{position:relative;z-index:2}
 .mk-bowl{width:calc(var(--bh) * 0.82)!important}
-.mk-fl{position:absolute;bottom:calc(var(--bh) * 0.42);left:50%;z-index:1;mix-blend-mode:screen}
-.mk-fl.c{height:calc(var(--bh) * 0.64);transform:translateX(-50%)}
+.mk-fl{position:absolute;bottom:calc(var(--bh) * 0.44);left:50%;z-index:1;mix-blend-mode:screen}
+.mk-fl.c{width:calc(var(--bh) * 0.72);transform:translateX(-50%)}
+.right-panel .mk-fl.c{transform:translateX(-50%) scaleX(-1)}
 .mk-fl.s1{height:calc(var(--bh) * 0.5);transform:translateX(-105%) scaleX(-1)}
 .mk-fl.s2{height:calc(var(--bh) * 0.5);transform:translateX(5%)}
 .mk-brazier{position:relative;flex:0 0 auto;height:clamp(84px,17vh,190px);margin-bottom:-22px;z-index:3;pointer-events:none}
@@ -45,8 +46,8 @@ async function open(b, w, h) {
   await p.waitForTimeout(1200);
   return p;
 }
-const bowl = 'art-src/phase2/fire/mock-bowl.png', flame = 'art-src/phase2/fire/mock-flame-21.png';
-const F = [21,5,37].map(i => 'art-src/phase2/fire/mock-flame-' + i + '.png');
+const bowl = 'art-src/phase2/fire/mock-bowl.png', flame = 'art-src/phase2/fire/mock-flame.png';
+const F = ['art-src/phase2/fire/mock-flame.png'];
 (async () => {
   const b = await firefox.launch();
   for (const [w,h] of [[1366,768],[1366,650],[1920,1080]]) {
@@ -56,7 +57,7 @@ const F = [21,5,37].map(i => 'art-src/phase2/fire/mock-flame-' + i + '.png');
       for (const sel of ['.left-panel','.right-panel']) {
         const col = document.querySelector(sel);
         const d = document.createElement('div'); d.className='mk-brazier';
-        d.innerHTML = `<img class="mk-fl s1" src="${F[1]}"><img class="mk-fl s2" src="${F[2]}"><img class="mk-fl c" src="${F[0]}"><img class="mk-bowl" src="${bowl}">`;
+        d.innerHTML = `<img class="mk-fl c" src="${F[0]}"><img class="mk-bowl" src="${bowl}">`;
         col.prepend(d);
       }
       const shell = document.querySelector('.game-shell');

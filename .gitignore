@@ -6,3 +6,4 @@ __pycache__/
 
 # Огонь: кадры и кэши симуляций Blender (пересобираются blender/fire.py)
 art-src/phase2/fire/*/
+waveletNoiseTile.bin

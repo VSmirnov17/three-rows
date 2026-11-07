@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 
-from PIL import Image, ImageChops, ImageMath
+from PIL import Image, ImageChops, ImageMath, ImageStat
 
 ALPHA_GAMMA = 0.85
 PREVIEW_BG = (15, 26, 20)  # тёмно-зелёный фон игры
@@ -33,6 +33,22 @@ def load_frames(src):
     if not files:
         sys.exit("нет кадров f_*.png в " + src)
     return [Image.open(f).convert("RGB") for f in files]
+
+
+def frame_diff(a, b):
+    """Средняя разность двух кадров (по уменьшенной яркости)."""
+    sa, sb = (im.convert("L").resize((64, 64)) for im in (a, b))
+    return ImageStat.Stat(ImageChops.difference(sa, sb)).mean[0]
+
+
+def best_start(frames, n, k):
+    """Начало цикла, при котором хвост больше всего похож на начало."""
+    best = None
+    for s in range(0, len(frames) - n - k + 1):
+        d = sum(frame_diff(frames[s + n + i], frames[s + i]) for i in range(0, k, 3))
+        if best is None or d < best[0]:
+            best = (d, s)
+    return best[1]
 
 
 def make_loop(frames, n, k):
@@ -95,6 +111,7 @@ def main():
     p.add_argument("out")
     p.add_argument("--loop", type=int, help="длина цикла N")
     p.add_argument("--fade", type=int, default=12, help="кадров на склейку K")
+    p.add_argument("--start", default="0", help="первый кадр (номер в папке) или auto")
     p.add_argument("--frames", type=int, help="без цикла: взять первые N кадров")
     p.add_argument("--cols", type=int, default=8)
     p.add_argument("--q", type=int, default=80)
@@ -105,6 +122,14 @@ def main():
     a = p.parse_args()
 
     frames = load_frames(a.src)
+    if a.start == "auto":
+        if not a.loop:
+            sys.exit("--start auto работает только с --loop")
+        start = best_start(frames, a.loop, a.fade)
+        print("начало цикла:", start)
+    else:
+        start = int(a.start)
+    frames = frames[start:]
     if a.loop:
         frames = make_loop(frames, a.loop, a.fade)
     elif a.frames:
