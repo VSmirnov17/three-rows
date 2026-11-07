@@ -254,7 +254,12 @@
 .plate-btn:active:not(:disabled)::after,
 .plate-btn:focus-visible::after { opacity: 1; }
 .plate-btn:focus-visible { outline: none; }
-.plate-btn:disabled { cursor: default; opacity: .5; filter: grayscale(.4); }
+/* На перезарядке притушены значок и подпись; значок с секундами
+   (.btn-badge) остаётся ярким и читаемым */
+.plate-btn:disabled { cursor: default; }
+.plate-btn:disabled svg,
+.plate-btn:disabled .tool-label,
+.plate-btn:disabled .btn-label { opacity: .5; filter: grayscale(.4); }
 
 .menu-btn { justify-content: center; height: 64px; flex: 0 0 auto; }
 .menu-btn svg { width: 26px; height: 26px; }
@@ -526,7 +531,8 @@
   .tiles, .fx-layer, .board-bg { inset: 0; }
   .gem-inner { inset: 1%; }
   .gem.selected::after { border-width: 3px; }
-  .combo-badge { top: 5px; font-size: 20px; padding: 2px 14px 3px; }
+  /* Нижний край значка — на внутренней кромке рамки (10 px), камни верхнего ряда не закрыты */
+  .combo-badge { top: -4px; font-size: 20px; line-height: 1.1; padding: 0 14px 1px; }
   .game-shell .hint-bar {
     width: auto;
     max-width: calc(100% - 12px);

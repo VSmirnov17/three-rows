@@ -243,6 +243,16 @@ async function suite(bt, bname, url) {
       const d0 = await dbg(page);
       assert(d0.timeLeft > 0, 'timed');
       const before = await ev(page, () => localStorage.getItem('sun-keeper-save'));
+      // Тревога у таймера: 30 с — «напряжённо», 10 с — «срочно» (табличка и body[data-urgency])
+      const urg = async (left, cls) => {
+        await ev(page, (v) => { __SUN.state.timeLeft = v; }, left);
+        await page.waitForFunction((c) => document.getElementById('timePlaque').classList.contains(c), cls, { timeout: 3000 });
+        return ev(page, () => ({ cls: document.getElementById('timePlaque').className, urgency: document.body.dataset.urgency }));
+      };
+      const tenseState = await urg(30, 'tense');
+      assert(/\btense\b/.test(tenseState.cls) && tenseState.urgency === 'tense', 'tense at 30s: ' + JSON.stringify(tenseState));
+      const urgentState = await urg(10, 'urgent');
+      assert(/\burgent\b/.test(urgentState.cls) && urgentState.urgency === 'urgent', 'urgent at 10s: ' + JSON.stringify(urgentState));
       await ev(page, () => { __SUN.state.timeLeft = 0.2; });
       await page.waitForSelector('#endScreen.show', { timeout: 10000 });
       await page.waitForTimeout(500);
@@ -746,5 +756,6 @@ async function smokeFile(bt, bname) {
   console.log('\n=== SUMMARY ===');
   results.forEach(r => console.log(`${r.ok ? 'PASS' : 'FAIL'} [${r.browser}] ${r.scenario} :: ${r.notes}`));
   // Любой упавший сценарий — ненулевой код выхода (для скриптов и CI)
-  process.exitCode = results.some(r => !r.ok) ? 1 : 0;
+  // Пустой список результатов (не запустилось ни одного сценария) — тоже провал
+  process.exitCode = (results.length === 0 || results.some(r => !r.ok)) ? 1 : 0;
 })();
