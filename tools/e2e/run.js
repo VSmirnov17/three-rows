@@ -712,9 +712,11 @@ async function smokeFile(bt, bname) {
       const fontOk = await ev(page, async () => {
         await document.fonts.load('20px "Philosopher"', 'Хранитель');
         await document.fonts.ready;
-        return document.fonts.check('20px "Philosopher"', 'Хранитель');
+        // check() даёт true и когда такого шрифта вовсе нет, поэтому ещё смотрим, что лицо объявлено и загружено
+        const faceLoaded = [...document.fonts].some(f => f.family.replace(/"/g, '') === 'Philosopher' && f.status === 'loaded');
+        return faceLoaded && document.fonts.check('20px "Philosopher"', 'Хранитель');
       });
-      assert(fontOk === true, 'Philosopher (cyrillic) not loaded from file://');
+      assert(fontOk === true, 'Philosopher face not loaded from file:// (or check failed)');
       await playRealMove(page);
       await forceWin(page);
       const saved = await ev(page, () => localStorage.getItem('sun-keeper-save'));
@@ -743,4 +745,6 @@ async function smokeFile(bt, bname) {
   for (const [k, v] of Object.entries(consoleLog)) if (v.length) console.log(k, '\n  ' + v.join('\n  '));
   console.log('\n=== SUMMARY ===');
   results.forEach(r => console.log(`${r.ok ? 'PASS' : 'FAIL'} [${r.browser}] ${r.scenario} :: ${r.notes}`));
+  // Любой упавший сценарий — ненулевой код выхода (для скриптов и CI)
+  process.exitCode = results.some(r => !r.ok) ? 1 : 0;
 })();
