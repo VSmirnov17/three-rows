@@ -46,8 +46,21 @@
     id: 1,
     key: 'jaguar',
     name: 'Джунгли Ягуара',
-    bg: 'assets/art/bg-jaguar.webp',
+    bg: 'assets/backdrop/land1/plate.webp',
     mosaic: 'assets/art/bg-jaguar.webp',
+    /* Живой фон (js/visuals-backdrop.js). Пути от корня игры; wf — водопад
+       в долях плиты, tile — высота плитки струй в долях высоты плиты
+       (числа из assets/backdrop/land1/backdrop.json, tools/pack_backdrop.py) */
+    backdrop: {
+      plate: 'assets/backdrop/land1/plate.webp',
+      water: 'assets/backdrop/land1/water.webp',
+      mask: 'assets/backdrop/land1/water-mask.webp',
+      moon: 'assets/backdrop/land1/moon.webp',
+      clouds: 'assets/backdrop/land1/clouds.webp',
+      wf: { x: 0.011962, y: 0.0, w: 0.089713, h: 0.961743 },
+      tile: 0.701382,
+      waterfall: true
+    },
     mechanic: null,
     scenes: {
       intro: [

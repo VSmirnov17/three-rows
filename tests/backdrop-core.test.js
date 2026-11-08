@@ -84,3 +84,68 @@ test('isFree и spawnPoint обходят прямоугольники', () => {
   const all = [{ left: 0, top: 0, right: w, bottom: h }];
   assert.equal(BC.spawnPoint(all, w, h, lcg(1)), null);
 });
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+test('числа анимаций в css/backdrop.css не выходят за LIMITS', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'backdrop.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const secs = (re, what) => {
+    const m = re.exec(css);
+    assert.ok(m, `не найдено: ${what}`);
+    return parseFloat(m[1]);
+  };
+  const breath = secs(/animation:\s*bdBreath\s+([\d.]+)s/, 'animation bdBreath');
+  assert.ok(breath >= LIMITS.moonBreathMinS, `bdBreath ${breath}s`);
+  const drift = secs(/animation:\s*bdDrift\s+([\d.]+)s/, 'animation bdDrift');
+  assert.ok(drift >= LIMITS.cloudCrossMinS, `bdDrift ${drift}s`);
+  for (const cls of ['bd-water-a', 'bd-water-b']) {
+    const dur = secs(new RegExp('\\.' + cls + '\\s*\\{[^}]*--dur:\\s*([\\d.]+)s'), cls + ' --dur');
+    assert.ok(dur >= LIMITS.waterMinS, `${cls} --dur ${dur}s`);
+  }
+
+  const kf = /@keyframes\s+bdBreath\s*\{([\s\S]*?\})\s*\}/.exec(css);
+  assert.ok(kf, '@keyframes bdBreath');
+  const ops = [...kf[1].matchAll(/opacity:\s*([\d.]+)/g)].map(m => parseFloat(m[1]));
+  assert.ok(ops.length >= 2, `в bdBreath ${ops.length} значений opacity`);
+  const swing = Math.max(...ops) - Math.min(...ops);
+  assert.ok(swing <= LIMITS.haloSwingMax + 1e-9, `размах ореола ${swing}`);
+});
+
+test('геометрия land-01 совпадает с assets/backdrop/land1/backdrop.json', () => {
+  const land = require('../js/campaign/land-01.js');
+  const json = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'assets', 'backdrop', 'land1', 'backdrop.json'), 'utf8'));
+  const bd = land.backdrop;
+  assert.ok(bd, 'у земли 1 нет backdrop');
+  for (const k of ['x', 'y', 'w', 'h']) {
+    assert.ok(Math.abs(bd.wf[k] - json.wf[k]) <= 1e-6, `wf.${k}: ${bd.wf[k]} != ${json.wf[k]}`);
+  }
+  assert.ok(Math.abs(bd.tile - json.tile) <= 1e-6, `tile: ${bd.tile} != ${json.tile}`);
+  assert.equal(bd.waterfall, true);
+  /* пути от корня игры, файлы на месте */
+  for (const k of ['plate', 'water', 'mask', 'moon', 'clouds']) {
+    assert.ok(fs.existsSync(path.join(__dirname, '..', bd[k])), `${k}: нет файла ${bd[k]}`);
+  }
+  assert.equal(land.bg, bd.plate);
+  assert.equal(land.mosaic, 'assets/art/bg-jaguar.webp');
+});
+
+test('маска воды в water-mask.js — те же байты, что water-mask.webp', () => {
+  const land = require('../js/campaign/land-01.js');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'assets', 'backdrop', 'land1', 'water-mask.js'), 'utf8');
+  const win = {};
+  new Function('window', src)(win);
+  const uri = win.BACKDROP_DATA && win.BACKDROP_DATA[land.backdrop.mask];
+  assert.ok(uri, 'нет маски по пути ' + land.backdrop.mask);
+  const prefix = 'data:image/webp;base64,';
+  assert.ok(uri.startsWith(prefix), uri.slice(0, 30));
+  const bytes = Buffer.from(uri.slice(prefix.length), 'base64');
+  assert.ok(bytes.equals(fs.readFileSync(path.join(__dirname, '..', land.backdrop.mask))), 'байты маски разошлись с .webp');
+});
+
+test('все файлы assets/backdrop/land1 вместе не больше 450 КБ', () => {
+  const dir = path.join(__dirname, '..', 'assets', 'backdrop', 'land1');
+  const total = fs.readdirSync(dir).reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
+  assert.ok(total <= 450 * 1024, `${total} байт`);
+});

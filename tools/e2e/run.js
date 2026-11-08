@@ -897,9 +897,185 @@ async function suite(bt, bname, url) {
       assert(r.st.sparks === 0 && r.painted === 0, `искры есть: sparks=${r.st.sparks} painted=${r.painted}`);
       assert(!r.flare, 'data-flare при reduced-motion');
       assert(r.frames === f0, `кадры идут: ${f0} -> ${r.frames}`);
+      // Живой фон стоит: режим still, холст светлячков пуст, у струй нет анимации
+      await page.waitForFunction(() => document.body.classList.contains('has-backdrop'));
+      const bd = await ev(page, () => {
+        const cv = document.querySelector('canvas.bd-flies');
+        const px = cv.width && cv.height ? cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data : [];
+        let painted = 0;
+        for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) painted++;
+        return { mode: document.body.dataset.bd, painted, flies: __BD.flies().length, anim: getComputedStyle(document.querySelector('.bd-water')).animationName };
+      });
+      assert(bd.mode === 'still', 'data-bd при reduced-motion: ' + bd.mode);
+      assert(bd.painted === 0 && bd.flies === 0, `светлячки при reduced-motion: painted=${bd.painted} flies=${bd.flies}`);
+      assert(bd.anim === 'none', 'струи воды движутся: ' + bd.anim);
       await shot(page, bname, 'desktop-L4-reduced');
       await ctx.close();
-      return `reduced=true running=false sparks=0 canvasPainted=0 frames ${f0}->${r.frames}`;
+      return `reduced=true running=false sparks=0 canvasPainted=0 frames ${f0}->${r.frames}; backdrop data-bd=${bd.mode} fliesPainted=${bd.painted} water=${bd.anim}`;
+    });
+
+    // ---- 12 backdrop ----
+    // Открыта ли точка фона: идём по elementsFromPoint сверху вниз. Слои фона
+    // pointer-events: none, а .game-shell занимает всё окно и ловит точку,
+    // поэтому прозрачные обёртки пропускаем: точку закрывает только то, что
+    // рисует (фон, рамка, картинка, кнопка, текст). Жаровни pointer-events: none —
+    // их чаши проверяем по прямоугольнику.
+    const bdOpen = (page, pts) => ev(page, (pts) => {
+      const jungle = document.querySelector('.jungle');
+      const clear = c => !c || c === 'transparent' || /^rgba\(.*,\s*0\)$/.test(c);
+      const name = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).join('.') : '');
+      const paints = e => {
+        if (/^(img|canvas|svg|button|video|input)$/i.test(e.tagName) || e instanceof SVGElement) return true;
+        const cs = getComputedStyle(e);
+        if (cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return false;
+        if (!clear(cs.backgroundColor) || cs.backgroundImage !== 'none') return true;
+        if (['Top', 'Right', 'Bottom', 'Left'].some(s => parseFloat(cs['border' + s + 'Width']) > 0 && cs['border' + s + 'Style'] !== 'none' && !clear(cs['border' + s + 'Color']))) return true;
+        return [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+      };
+      const bowls = [...document.querySelectorAll('.brazier-bowl')].map(b => b.getBoundingClientRect()).filter(r => r.width > 0);
+      return pts.map(([x, y]) => {
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return 'outside';
+        if (bowls.some(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) return 'brazier-bowl';
+        for (const e of document.elementsFromPoint(x, y)) {
+          if (jungle.contains(e)) return '';
+          if (paints(e)) return name(e);
+        }
+        return 'nothing';
+      });
+    }, pts);
+    const BUSY_SEL = '.hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .hint-bar, .combo-badge';
+    // Светлячки вне занятых мест (по __BD.busy() и по свежим прямоугольникам) с отступом 10 px
+    const fliesCheck = (page) => ev(page, (sel) => {
+      const pad = 10;
+      const fresh = [...document.querySelectorAll(sel)].map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
+      const rects = __BD.busy().concat(fresh.map(r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })));
+      const flies = __BD.flies();
+      const bad = flies.filter(p => rects.some(r => p.x > r.left - pad && p.x < r.right + pad && p.y > r.top - pad && p.y < r.bottom + pad));
+      return { n: flies.length, bad: bad.map(p => Math.round(p.x) + ',' + Math.round(p.y)) };
+    }, BUSY_SEL);
+    const VPS12 = [
+      { width: 1366, height: 768, n: 'desktop', moonMin: 0.6, wfMin: 0.25, next: [1920, 1080] },
+      { width: 1366, height: 650, n: 'desktop-short', moonMin: 0.6, next: [1024, 768] },
+      { width: 1920, height: 1080, n: 'desktop-1920', moonMin: 0.6, wfMin: 0.25, next: [1366, 650] },
+      { width: 1024, height: 768, n: 'desktop-1024', next: [1366, 768] },
+      { width: 390, height: 844, n: 'mobile', phone: true, next: [1366, 768] }
+    ];
+    for (const vp of VPS12) {
+      await scenario(bname, `12 backdrop ${vp.width}x${vp.height}`, async () => {
+        const { ctx, page } = await newPage(browser, bname, 's12' + vp.n, { width: vp.width, height: vp.height }, { fxFull: true });
+        await startFresh(page, url);
+        assert(await ev(page, () => !!window.__BD), '__BD missing (need ?debug)');
+        await page.waitForFunction(() => document.body.classList.contains('has-backdrop') && document.querySelector('.theme-bg.on .bd-stage'), null, { timeout: 15000 });
+        const notes = [];
+        // Доступность: слои фона скрыты от чтения с экрана и не ловят мышь
+        const a11y = await ev(page, () => ['.bd-stage', '.bd-sky', '.bd-flies'].map(s => {
+          const e = document.querySelector(s);
+          return e ? { s, aria: e.getAttribute('aria-hidden'), pe: getComputedStyle(e).pointerEvents } : { s, missing: true };
+        }));
+        a11y.forEach(a => assert(!a.missing && a.aria === 'true' && a.pe === 'none', 'слой фона: ' + JSON.stringify(a)));
+        // Стартовый экран — оверлей: фон на паузе (на телефоне стоит всегда)
+        await page.waitForTimeout(300);
+        const s0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.bd-water')).animationName }));
+        await page.waitForTimeout(1000);
+        const s1 = await ev(page, () => __BD.frames);
+        assert(s0.mode === (vp.phone ? 'still' : 'paused'), 'режим на стартовом экране: ' + s0.mode);
+        assert(s1 === s0.f, `на стартовом экране кадры светлячков идут: ${s0.f} -> ${s1}`);
+        if (vp.phone) assert(s0.an === 'none', 'на телефоне струи движутся: ' + s0.an);
+        else assert(s0.ps === 'paused', 'на стартовом экране струи не на паузе: ' + s0.ps);
+        notes.push(`start ${s0.mode} frames ${s0.f}->${s1}`);
+        // Уровень 1-01
+        await page.click('#playBtn');
+        await waitStarted(page);
+        await page.waitForTimeout(2000);
+        const g0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.bd-water')).animationName }));
+        await page.waitForTimeout(1000);
+        const g1 = await ev(page, () => __BD.frames);
+        if (vp.phone) {
+          assert(g0.mode === 'still', 'на телефоне режим ' + g0.mode);
+          assert(g0.an === 'none', 'на телефоне у струй анимация ' + g0.an);
+          assert(g1 === g0.f, `на телефоне кадры светлячков идут: ${g0.f} -> ${g1}`);
+        } else {
+          assert(g0.mode === 'run', 'на уровне режим ' + g0.mode);
+          assert(g0.ps === 'running' && g0.an === 'bdFall', `струи на уровне: ${g0.an} ${g0.ps}`);
+          assert(g1 > g0.f, `на уровне кадры светлячков не идут: ${g0.f} -> ${g1}`);
+        }
+        notes.push(`level ${g0.mode} frames ${g0.f}->${g1}`);
+        await shot(page, bname, vp.n + '-L4-backdrop');
+        // Луна: 7×7 точек по рамке .bd-moon
+        const moonPts = await ev(page, () => {
+          const r = document.querySelector('.bd-moon').getBoundingClientRect();
+          const p = [];
+          for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) p.push([r.left + r.width * (i + 0.5) / 7, r.top + r.height * (j + 0.5) / 7]);
+          return p;
+        });
+        const moonHit = await bdOpen(page, moonPts);
+        const moonFrac = moonHit.filter(h => h === '').length / moonHit.length;
+        const moonBy = [...new Set(moonHit.filter(Boolean))].join(',');
+        notes.push(`moon open ${(moonFrac * 100).toFixed(0)}%${moonBy ? ' (closed by ' + moonBy + ')' : ''}`);
+        if (vp.moonMin) assert(moonFrac >= vp.moonMin, `луна открыта на ${(moonFrac * 100).toFixed(0)}% < ${vp.moonMin * 100}%: ${moonBy}`);
+        // Водопад: 20 точек по средней вертикали .bd-wf
+        const wfPts = await ev(page, () => {
+          const r = document.querySelector('.bd-wf').getBoundingClientRect();
+          const p = [];
+          for (let i = 0; i < 20; i++) p.push([r.left + r.width / 2, r.top + r.height * (i + 0.5) / 20]);
+          return p;
+        });
+        const wfHit = await bdOpen(page, wfPts);
+        const wfFrac = wfHit.filter(h => h === '').length / wfHit.length;
+        const wfBy = [...new Set(wfHit.filter(Boolean))].join(',');
+        notes.push(`waterfall open ${(wfFrac * 100).toFixed(0)}% at x=${Math.round(wfPts[0][0])}${wfBy ? ' (closed by ' + wfBy + ')' : ''}`);
+        if (vp.wfMin) assert(wfFrac >= vp.wfMin, `водопад открыт на ${(wfFrac * 100).toFixed(0)}% < ${vp.wfMin * 100}%: ${wfBy}`);
+        // Светлячки не на табличках, кнопках, рамке, жаровнях, Камне и подсказке
+        const fc = await fliesCheck(page);
+        assert(!fc.bad.length, 'светлячки на занятых местах: ' + fc.bad.join(' '));
+        if (vp.phone) assert(fc.n === 0, 'на телефоне светлячки летают: ' + fc.n);
+        notes.push(`flies ${fc.n} ok`);
+        // То же после смены окна
+        await page.setViewportSize({ width: vp.next[0], height: vp.next[1] });
+        await page.waitForTimeout(1000);
+        const fc2 = await fliesCheck(page);
+        const m2 = await ev(page, () => document.body.dataset.bd);
+        assert(!fc2.bad.length, `после смены окна на ${vp.next.join('x')} светлячки на занятых местах: ` + fc2.bad.join(' '));
+        notes.push(`resize ${vp.next.join('x')}: ${m2}, flies ${fc2.n} ok`);
+        await ctx.close();
+        return notes.join('; ');
+      });
+    }
+
+    await scenario(bname, '12 backdrop land switch 2-01, mosaic keeps bg-jaguar', async () => {
+      const key = 's12switch';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fxFull: true });
+      await startFresh(page, url);
+      await page.click('#playBtn');
+      await waitStarted(page);
+      await page.waitForFunction(() => document.body.classList.contains('has-backdrop'));
+      // Картинка-награда на карте — прежняя bg-jaguar.webp
+      await forceWin(page);
+      await page.click('#endHomeBtn');
+      await page.waitForSelector('#mapScreen.show');
+      await page.waitForTimeout(300);
+      const mosaic = await ev(page, () => [...document.querySelectorAll('.mosaic-cell')].map(c => c.style.backgroundImage).filter(Boolean));
+      assert(mosaic.length > 0 && mosaic.every(b => b.includes('bg-jaguar.webp')), 'мозаика: ' + JSON.stringify(mosaic.slice(0, 2)));
+      await ev(page, () => { window.__SUN.start('2-01'); });
+      await waitStarted(page);
+      await page.waitForFunction(() => { const l = document.querySelector('.theme-bg[data-theme="2"]'); return l && l.classList.contains('on'); }, null, { timeout: 15000 });
+      await page.waitForTimeout(1000);
+      const r = await ev(page, () => ({
+        on1: document.querySelector('.theme-bg[data-theme="1"]').classList.contains('on'),
+        hb: document.body.classList.contains('has-backdrop'),
+        want: !!Campaign.lands().find(l => l.id === 2).backdrop,
+        f: __BD.frames
+      }));
+      await page.waitForTimeout(1000);
+      const f1 = await ev(page, () => __BD.frames);
+      assert(!r.on1, 'слой земли 1 остался .on');
+      assert(r.hb === r.want, `has-backdrop=${r.hb}, а backdrop у земли 2 ${r.want}`);
+      if (!r.want) assert(f1 === r.f, `на земле без живого фона светлячки летают: ${r.f} -> ${f1}`);
+      await shot(page, bname, 'desktop-L4-land2-backdrop');
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return `mosaic ${mosaic.length} cells bg-jaguar; land2 has-backdrop=${r.hb} (backdrop ${r.want}); layer1 on=${r.on1}; frames ${r.f}->${f1}; console errors 0`;
     });
   } finally {
     await browser.close();
@@ -936,6 +1112,24 @@ async function smokeFile(bt, bname) {
       assert(fire.calm && fire.calm.startsWith('file:') && fire.calmW > 0, 'fire-calm sheet not loaded: ' + JSON.stringify(fire));
       assert(fire.flare && fire.flareW > 0, 'fire-flare sheet not loaded: ' + JSON.stringify(fire));
       assert(fire.bowlW > 0, 'brazier bowl not loaded: ' + JSON.stringify(fire));
+      // Живой фон земли 1 с диска: пять картинок грузятся, маска воды задана.
+      // Маска — data: URI (assets/backdrop/land1/water-mask.js): CSS-маску по
+      // file:// Chromium и WebKit не грузят (CORS), и струи легли бы на весь прямоугольник.
+      await page.waitForFunction(() => document.body.classList.contains('has-backdrop'));
+      const bd = await ev(page, async () => {
+        const land = Campaign.lands().find(l => l.id === 1).backdrop;
+        const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src; });
+        const sizes = {};
+        for (const k of ['plate', 'water', 'mask', 'moon', 'clouds']) sizes[k] = await load(land[k]);
+        const cs = getComputedStyle(document.querySelector('.bd-wf'));
+        const mask = cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
+        return { sizes, mask: String(mask).slice(0, 40) };
+      });
+      assert(Object.values(bd.sizes).every(w => w > 0), 'backdrop images not loaded: ' + JSON.stringify(bd.sizes));
+      assert(bd.mask && bd.mask !== 'none' && bd.mask !== 'undefined', 'no mask on .bd-wf: ' + bd.mask);
+      assert(bd.mask.startsWith('url("data:'), 'mask is not a data: URI (file:// CORS): ' + bd.mask);
+      const bdErr = (consoleLog[bname + '/file-smoke'] || []).filter(l => /assets\/backdrop\//.test(l) || /CORS|Access-Control/.test(l));
+      assert(!bdErr.length, 'backdrop load errors: ' + bdErr.join(' | '));
       await playRealMove(page);
       await forceWin(page);
       const saved = await ev(page, () => localStorage.getItem('sun-keeper-save'));
@@ -944,7 +1138,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }

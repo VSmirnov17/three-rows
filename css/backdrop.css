@@ -1,0 +1,157 @@
+/* Живой фон земли (этап 2, шаг 3): водопад, луна, облака, светлячки.
+   Слои строит js/visuals-backdrop.js внутри слоя темы .theme-bg (js/visuals.js).
+   Картинки земли CSS не знает: JS задаёт у слоя --bd-tex (струи воды),
+   --bd-mask (маска воды), --bd-clouds (облака) и --bd-tile (высота плитки струй).
+   Пределы движения (LIMITS в js/backdrop-core.js) проверяет
+   tests/backdrop-core.test.js по числам этого файла.
+
+   Режимы body[data-bd]: run — всё движется; paused — вкладка скрыта или открыт
+   оверлей; still — prefers-reduced-motion или телефон, картина стоит. */
+
+/* Сцена с отношением сторон плиты (1672×941): накрывает окно целиком,
+   прижата к левому краю (водопад слева виден и на узком экране). */
+.bd-stage {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: max(100vw, 177.7vh);
+  height: max(100vh, 56.27vw);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.bd-plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------- Водопад: две полосы струй внутри маски воды ---------- */
+.bd-wf {
+  position: absolute;
+  overflow: hidden;
+  -webkit-mask: var(--bd-mask) 0 0 / 100% 100% no-repeat;
+  mask: var(--bd-mask) 0 0 / 100% 100% no-repeat;
+}
+
+.bd-water {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(100% + var(--bd-tile));
+  background: var(--bd-tex) 0 0 / 100% var(--bd-tile) repeat-y;
+  will-change: transform;
+  animation: bdFall var(--dur) linear infinite;
+  mix-blend-mode: screen;
+}
+
+.bd-water-a { --dur: 3.2s; opacity: .55; }
+.bd-water-b { --dur: 5.4s; opacity: .35; background-position: 37% 41%; animation-delay: -2s; }
+
+@keyframes bdFall {
+  from { transform: translateY(calc(-1 * var(--bd-tile))); }
+  to { transform: translateY(0); }
+}
+
+/* Туман у подножия */
+.bd-mist {
+  position: absolute;
+  background: radial-gradient(ellipse 50% 45% at 50% 60%, rgba(190, 215, 225, .32), transparent 70%);
+  animation: bdMist 7s ease-in-out infinite alternate;
+}
+
+@keyframes bdMist {
+  from { transform: translateX(-4%) scale(1); opacity: .55; }
+  to { transform: translateX(5%) scale(1.08); opacity: .9; }
+}
+
+/* ---------- Небо: луна с ореолом и облака (по окну, не по сцене) ---------- */
+.bd-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bd-moon-wrap {
+  position: absolute;
+  top: max(10px, 3vh);
+  right: max(8px, 2.2vw);
+  width: clamp(64px, 10vh, 130px);
+  aspect-ratio: 1;
+}
+
+/* Мягкость и яркость луны уже в картинке (tools/pack_backdrop.py), фильтра нет */
+.bd-moon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: .8;
+}
+
+.bd-halo {
+  position: absolute;
+  inset: -90%;
+  background: radial-gradient(circle, rgba(215, 230, 255, .30) 0%, rgba(170, 200, 240, .14) 32%, transparent 64%);
+  animation: bdBreath 9s ease-in-out infinite;
+}
+
+@keyframes bdBreath {
+  0%, 100% { opacity: .62; transform: scale(.97); }
+  50% { opacity: .9; transform: scale(1.03); }
+}
+
+.bd-clouds {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(46vw, 700px);
+  height: max(150px, 26vh);
+  overflow: hidden;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 85%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 18%, #000 85%, transparent);
+}
+
+.bd-cloud-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 200%;
+  background: var(--bd-clouds) 0 30% / 50% auto repeat-x;
+  opacity: .38;
+  animation: bdDrift 140s linear -100s infinite;
+}
+
+@keyframes bdDrift {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+/* ---------- Светлячки: один холст на всё окно (рисует JS) ---------- */
+.bd-flies {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+body:not(.has-backdrop) .bd-flies { display: none; }
+
+/* ---------- Режимы ---------- */
+/* Невидимый (уходящий или заранее загруженный) слой не тратит кадры */
+.theme-bg:not(.on) .bd-anim { animation-play-state: paused; }
+body:not([data-bd="run"]) .bd-anim { animation-play-state: paused; }
+body[data-bd="still"] .bd-anim { animation: none; }
+
+/* ---------- Земля с живым фоном: старые слои не нужны ---------- */
+body.has-backdrop .light-shaft,
+body.has-backdrop #fireflies,
+body.has-backdrop #leaves { display: none; }
+body.has-backdrop .jungle::before { display: none; }
+body.has-backdrop .vignette { opacity: .55; }

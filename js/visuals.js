@@ -1,5 +1,7 @@
 /* Темы земель: подгружает фон нужной земли (land.bg из кампании) и плавно
-   переключает слои. Следит только за body[data-land]; игровую логику не трогает. */
+   переключает слои. Следит только за body[data-land]; игровую логику не трогает.
+   У земли с живым фоном (land.backdrop) слой заполняет Backdrop.build
+   (js/visuals-backdrop.js), а body.has-backdrop говорит, что он активен. */
 (function () {
   "use strict";
 
@@ -8,12 +10,16 @@
 
   /* Номер земли -> файл фона */
   const FILES = {};
+  const LANDS = {};
   const ORDER = [];
   window.Campaign.lands().forEach(function (land) {
     if (!land.bg) return;
     FILES[land.id] = land.bg;
+    LANDS[land.id] = land;
     ORDER.push(land.id);
   });
+
+  const live = id => !!(LANDS[id].backdrop && window.Backdrop);
   if (!ORDER.length) return;
 
   const layers = {};
@@ -31,6 +37,7 @@
     });
     const ready = layers[cur] && layers[cur].classList.contains("ready");
     document.body.classList.toggle("has-theme", !!ready);
+    document.body.classList.toggle("has-backdrop", !!ready && live(cur));
   }
 
   /* Картинку грузим только когда она нужна; слой появляется после onload,
@@ -43,11 +50,20 @@
     host.insertBefore(el, host.firstChild);
     layers[id] = el;
 
+    const ready = function () {
+      el.classList.add("ready");
+      apply();
+    };
+    /* Живой фон: слой готов, когда загрузилась плита */
+    if (live(id)) {
+      window.Backdrop.build(el, LANDS[id], ready);
+      return;
+    }
+
     const img = new Image();
     img.onload = function () {
       el.style.backgroundImage = 'url("' + FILES[id] + '")';
-      el.classList.add("ready");
-      apply();
+      ready();
     };
     img.src = FILES[id];
   }
