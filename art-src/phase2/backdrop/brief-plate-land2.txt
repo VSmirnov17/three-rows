@@ -1,0 +1,6 @@
+$imagegen
+Asset: game background plate, landscape 16:9, one image, no game interface
+Request: the same moonlit night as Image 1, now at the Temple of the Serpent: in the RIGHT third, close and large, a stepped Mesoamerican stone pyramid temple with a steep central staircase; carved feathered-serpent heads at the foot of the staircase balustrades; moss and vines on the old stone. On the LEFT edge, dark jungle trees, hanging vines and big tropical leaves frame the picture. The center of the frame is calm, dark, low-detail jungle haze (it will be hidden behind the game board).
+Look: exactly the painting style, palette and light of Image 1: premium painterly game art, realistic; cool deep blue-teal moonlight, soft bluish mist; muted, low contrast, slightly soft focus, dark overall so bright game pieces stand out in front
+Composition: the TOP-RIGHT corner is open clear night sky with a few faint stars and NO moon (a moon will be added as a separate layer); the temple top stays below the top 20% of the frame
+Constraints: no water, no waterfall, no moon, no fire, no torches, no glowing windows, no people, no animals, no text, no border, no game UI
