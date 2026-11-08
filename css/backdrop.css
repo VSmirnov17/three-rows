@@ -154,4 +154,6 @@ body.has-backdrop .light-shaft,
 body.has-backdrop #fireflies,
 body.has-backdrop #leaves { display: none; }
 body.has-backdrop .jungle::before { display: none; }
-body.has-backdrop .vignette { opacity: .55; }
+/* Виньетки нет: в одобренном образце (пробник) слои фона лежали поверх неё
+   и она не была видна; с ней луна и водопад заметно темнее эталона. */
+body.has-backdrop .vignette { display: none; }

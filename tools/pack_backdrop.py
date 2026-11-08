@@ -6,6 +6,8 @@
   plate.webp       плита (картина целиком, q 86)
   water.webp       плитка «струй»: высокие частоты водопада, бесшовная по вертикали
   water-mask.webp  белая картинка, вся информация в альфе: где вода видна
+  water-mask.js    та же маска как data: URI (CSS-маску по file:// Chromium
+                   и WebKit не грузят: запрос маски идёт с CORS)
   moon.webp        луна 256x256, круглая альфа, вшиты brightness(.92) и размытие
   clouds.webp      облака: постоянный бледно-серо-голубой цвет, альфа по яркости
   backdrop.json    размеры и геометрия для CSS/JS
@@ -16,6 +18,7 @@
   python3 tools/pack_backdrop.py --land 1 [--src DIR] [--out DIR]
 """
 import argparse
+import base64
 import json
 import os
 import sys
@@ -169,6 +172,28 @@ def save(im, path, **kw):
     return os.path.getsize(path)
 
 
+MASK_JS_HEAD = """/* Маска воды земли %(land)d как data: URI (из %(key)s).
+   Файл пишет tools/pack_backdrop.py, руками не править.
+   CSS-маску браузер грузит в режиме CORS, а с file:// Chromium и WebKit её
+   не отдают: без этого файла струи водопада легли бы на весь прямоугольник.
+   js/visuals-backdrop.js берёт отсюда маску по пути land.backdrop.mask
+   (tests/backdrop-core.test.js сверяет байты с .webp). */
+"""
+
+
+def write_mask_js(webp_path, js_path, land):
+    """water-mask.webp -> water-mask.js: window.BACKDROP_DATA[путь от корня игры] = data: URI."""
+    key = "assets/backdrop/land%d/water-mask.webp" % land
+    with open(webp_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    text = (MASK_JS_HEAD % {"land": land, "key": key}
+            + "(window.BACKDROP_DATA = window.BACKDROP_DATA || {})['%s'] =\n" % key
+            + "  'data:image/webp;base64,%s';\n" % b64)
+    with open(js_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return os.path.getsize(js_path)
+
+
 def check_sheet(out_dir, mask, tex, moon, clouds, path):
     bg = (13, 27, 46)
     pad = 16
@@ -223,6 +248,8 @@ def main():
         "moon.webp": save(moon, os.path.join(out, "moon.webp"), quality=88, alpha_quality=95),
         "clouds.webp": save(clouds, os.path.join(out, "clouds.webp"), quality=Q_CLOUDS, alpha_quality=90),
     }
+    sizes["water-mask.js"] = write_mask_js(os.path.join(out, "water-mask.webp"),
+                                           os.path.join(out, "water-mask.js"), a.land)
     cw, ch = clouds.size
     geom = {
         "plate": [W, H],
