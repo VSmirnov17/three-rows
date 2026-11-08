@@ -4,8 +4,11 @@
 Исходники: art-src/phase2/backdrop/src/{plate,moon,clouds}.png.
 Результат: assets/backdrop/land<N>/
   plate.webp       плита (картина целиком, q 86)
-  water.webp       плитка «струй»: высокие частоты водопада, бесшовная по вертикали
-  water-mask.webp  белая картинка, вся информация в альфе: где вода видна
+  water.webp       плитка «струй» RGBA: ровный бело-голубой цвет, альфа — яркость
+                   высоких частот водопада (тёмное прозрачно: слой только светлит),
+                   бесшовная по вертикали
+  water-mask.webp  белая картинка, вся информация в альфе: где вода видна;
+                   крайние столбцы вырезки — ровно 0 (затухание по 15 % ширины)
   water-mask.js    та же маска как data: URI (CSS-маску по file:// Chromium
                    и WebKit не грузят: запрос маски идёт с CORS)
   moon.webp        луна 256x256, круглая альфа, вшиты brightness(.92) и размытие
@@ -32,6 +35,12 @@ TEX_Y0, TEX_Y1 = 150, 750
 TEX_STRETCH = 1.3
 SEAM = 120            # строк на склейку «конец -> начало»
 MASK_FADE_TOP, MASK_FADE_BOTTOM = 40, 60
+MASK_FADE_SIDE = 0.15     # затухание маски слева и справа, доля ширины вырезки
+MASK_ZERO_COLS = 2        # столько крайних столбцов с каждой стороны — ровно 0
+# струи: цвет и альфа из яркости высоких частот L (в них «ровное место» = 8):
+# a = clip((L - TEX_A_LO) / TEX_A_SPAN, 0, 1) ** TEX_A_POW * 255
+TEX_COLOR = (215, 232, 245)
+TEX_A_LO, TEX_A_SPAN, TEX_A_POW = 12.0, 90.0, 1.0
 MOON_SIZE = 256
 # CSS blur(.6px) в пробнике шёл по диску ~100 px; в картинке 256 px это ~1,5 px
 MOON_BLUR = 1.5
@@ -72,6 +81,17 @@ def make_mask(plate):
         for x in range(w):
             px[x, y] = v
     m = ImageChops.multiply(m, fade)
+    # затухание по бокам: иначе у тумана внизу маска упирается в край вырезки
+    # и на экране видна прямая вертикальная граница
+    side = Image.new("L", (w, h), 0)
+    ramp_w = MASK_FADE_SIDE * w
+    row = []
+    for x in range(w):
+        d = min(x, w - 1 - x) - MASK_ZERO_COLS + 1   # 0 у последнего нулевого столбца
+        t = min(max(d / ramp_w, 0.0), 1.0)
+        row.append(int(round(255 * t * t * (3 - 2 * t))))  # smoothstep: у края почти 0
+    side.putdata(row * h)
+    m = ImageChops.multiply(m, side)
     mask = Image.new("RGBA", (w, h), (255, 255, 255, 0))
     mask.putalpha(m)
     return mask
@@ -88,20 +108,35 @@ def make_tex(plate):
             s=s.convert("F"), l=l.convert("F"))
         bands.append(hp)
     hp = Image.merge("RGB", bands)
-    tex = hp.resize((seg.width, int(seg.height * TEX_STRETCH)), Image.BICUBIC)
-    top = tex.crop((0, 0, tex.width, SEAM))
-    body = tex.crop((0, SEAM, tex.width, tex.height))
+    # Слой струй только светлит: рисунок — в альфе, цвет ровный светлый.
+    # Тёмные места высоких частот прозрачны (прежняя RGB-плитка без альфы
+    # затемняла нарисованный водопад: маска делает .bd-wf изолированной
+    # группой, и screen там работает как обычное наложение).
+    # Растяжение и склейка — на одной альфе (у RGBA Pillow портит цвет
+    # прозрачных пикселей), цвет добавляется в конце.
+    alpha = lum_mean(hp).point(
+        lambda v: int(round(min(max((v - TEX_A_LO) / TEX_A_SPAN, 0.0), 1.0) ** TEX_A_POW * 255)))
+    a = alpha.resize((seg.width, int(seg.height * TEX_STRETCH)), Image.BICUBIC)
+    top = a.crop((0, 0, a.width, SEAM))
+    body = a.crop((0, SEAM, a.width, a.height))
     # последние SEAM строк тела плавно переходят в первые SEAM строк (потом отброшенные)
-    ramp = Image.linear_gradient("L").resize((tex.width, SEAM), Image.BILINEAR)
+    ramp = Image.linear_gradient("L").resize((a.width, SEAM), Image.BILINEAR)
     tail = body.crop((0, body.height - SEAM, body.width, body.height))
     tail = Image.composite(top, tail, ramp)  # ramp 0 -> хвост, 255 -> верх
     body.paste(tail, (0, body.height - SEAM))
-    return body
+    tex = Image.new("RGBA", body.size, TEX_COLOR + (255,))
+    tex.putalpha(body)
+    return tex
+
+
+def tex_luma(im):
+    """Рисунок плитки: у RGBA — альфа (цвет ровный), иначе яркость."""
+    return im.getchannel("A") if im.mode == "RGBA" else im.convert("L")
 
 
 def row_diff(im, y0, y1):
-    """Средняя |разность| строк y0 и y1 (по яркости)."""
-    g = im.convert("L")
+    """Средняя |разность| строк y0 и y1 (по рисунку)."""
+    g = tex_luma(im)
     a = g.crop((0, y0, g.width, y0 + 1))
     b = g.crop((0, y1, g.width, y1 + 1))
     return ImageStat.Stat(ImageChops.difference(a, b)).mean[0]
@@ -109,7 +144,7 @@ def row_diff(im, y0, y1):
 
 def seam_numbers(tex):
     h = tex.height
-    g = tex.convert("L")
+    g = tex_luma(tex)
     adj = ImageChops.difference(g.crop((0, 0, g.width, h - 1)), g.crop((0, 1, g.width, h)))
     adj_mean = ImageStat.Stat(adj).mean[0]
     seam = row_diff(tex, h - 1, 0)
@@ -201,9 +236,9 @@ def check_sheet(out_dir, mask, tex, moon, clouds, path):
     mw, mh = mask.size
     mask_view = Image.new("RGB", (mw, mh), bg)
     mask_view.paste(Image.new("RGB", (mw, mh), (255, 255, 255)), (0, 0), mask.getchannel("A"))
-    tile2 = Image.new("RGB", (tex.width, tex.height * 2))
-    tile2.paste(tex, (0, 0))
-    tile2.paste(tex, (0, tex.height))
+    tile2 = Image.new("RGB", (tex.width, tex.height * 2), bg)
+    tile2.paste(tex, (0, 0), tex)
+    tile2.paste(tex, (0, tex.height), tex)
     moon_view = Image.new("RGB", moon.size, bg)
     moon_view.paste(moon, (0, 0), moon)
     cw, ch = clouds.size
@@ -222,6 +257,25 @@ def check_sheet(out_dir, mask, tex, moon, clouds, path):
     ys = pad + tex.height
     d.line([(x - pad - tex.width - 6, ys), (x - pad - tex.width - 1, ys)], fill=(255, 80, 80), width=1)
     sheet.save(path)
+
+
+def verify_outputs(out):
+    """Проверка готовых файлов (с --check): маска по краям ровно 0, плитка струй RGBA."""
+    errors = []
+    mask = Image.open(os.path.join(out, "water-mask.webp"))
+    a = mask.getchannel("A") if "A" in mask.getbands() else None
+    if a is None:
+        errors.append("water-mask.webp без альфы")
+    else:
+        w, h = a.size
+        for x in list(range(MASK_ZERO_COLS)) + list(range(w - MASK_ZERO_COLS, w)):
+            hi = a.crop((x, 0, x + 1, h)).getextrema()[1]
+            if hi != 0:
+                errors.append("water-mask.webp: столбец %d альфа до %d, нужен 0" % (x, hi))
+    tex = Image.open(os.path.join(out, "water.webp"))
+    if tex.mode != "RGBA":
+        errors.append("water.webp в режиме %s, нужен RGBA" % tex.mode)
+    return errors
 
 
 def main():
@@ -243,7 +297,7 @@ def main():
 
     sizes = {
         "plate.webp": save(plate, os.path.join(out, "plate.webp"), quality=Q_PLATE),
-        "water.webp": save(tex, os.path.join(out, "water.webp"), quality=Q_TEX),
+        "water.webp": save(tex, os.path.join(out, "water.webp"), quality=Q_TEX, alpha_quality=90),
         "water-mask.webp": save(mask, os.path.join(out, "water-mask.webp"), lossless=True),
         "moon.webp": save(moon, os.path.join(out, "moon.webp"), quality=88, alpha_quality=95),
         "clouds.webp": save(clouds, os.path.join(out, "clouds.webp"), quality=Q_CLOUDS, alpha_quality=90),
@@ -278,6 +332,10 @@ def main():
         os.makedirs(os.path.dirname(a.check) or ".", exist_ok=True)
         check_sheet(out, mask, tex, moon, clouds, a.check)
         print("лист проверки:", a.check)
+        errors = verify_outputs(out)
+        if errors:
+            sys.exit("проверка не прошла: " + "; ".join(errors))
+        print("проверка: маска по краям 0, water.webp RGBA")
     if total > 450 * 1024:
         sys.exit("бюджет 450 КБ превышен")
 

@@ -45,7 +45,9 @@
   background: var(--bd-tex) 0 0 / 100% var(--bd-tile) repeat-y;
   will-change: transform;
   animation: bdFall var(--dur) linear infinite;
-  mix-blend-mode: screen;
+  /* Обычное наложение: плитка светлая, рисунок в альфе, поэтому слой только
+     светлит. (mix-blend-mode тут не работает: маска делает .bd-wf
+     изолированной группой.) */
 }
 
 .bd-water-a { --dur: 3.2s; opacity: .55; }
