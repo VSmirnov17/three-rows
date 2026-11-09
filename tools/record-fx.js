@@ -170,8 +170,9 @@ async function shoot(page, name, r, c, marks) {
   for (const [label, ms] of marks) {
     await wait(Math.max(0, ms - (Date.now() - t0)));
     const at = Date.now() - t0;
-    await page.screenshot({ path: path.join(STILLS, `${name}-${label}.png`) });
+    // Сначала крупно поле (ближе к метке времени), потом экран целиком
     await page.screenshot({ path: path.join(STILLS, `${name}-${label}-board.png`), clip });
+    await page.screenshot({ path: path.join(STILLS, `${name}-${label}.png`) });
     console.log(`${name}-${label}: ${at} ms`);
   }
   await run;
@@ -185,7 +186,7 @@ async function stills(browser) {
     await openLevel(page);
     await move(page);
     await wait(1200);
-    await shoot(page, 'bomb', 4, 4, [['peak', 280], ['smoke', 520], ['after', 1300]]);
+    await shoot(page, 'bomb', 4, 4, [['peak', 220], ['smoke', 400], ['after', 1300]]);
     await wait(800);
     await shoot(page, 'edge', 0, 7, [['peak', 300]]);
     await wait(800);

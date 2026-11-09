@@ -46,7 +46,7 @@
   const GOLD = '#ffd27a';
   const SPRITE_PX = 64;
   /* Взрыв бомбы: узел шире 3 клеток — пик облака (span в assets/fx/bomb.json,
-   * 0,78 кадра) ложится на 3×3, дымные края заходят за них. */
+   * 0,8 кадра) ложится на 3×3, дымные края заходят за них. */
   const BOMB_CELLS = 4;
   const EMBER_HOT = '#ffb15c';    // уголь вылетает светло-оранжевым…
   const EMBER_COOL = '#9a2e14';   // …и гаснет тёмно-красным
@@ -161,7 +161,10 @@
 
   /* Обсидиановый взрыв: кадры листает CSS (steps по background-position),
    * здесь — появление, лёгкий рост и угасание (opacity и transform), чтобы
-   * облако не возникало и не исчезало рывком. */
+   * облако не возникало и не исчезало рывком. Тёмное облако с огненными
+   * просветами (кадры 5–9 листа, 200–400 мс) идёт ещё непрозрачным; с 45 %
+   * длительности узел тает: новые камни падают в воронку с 310 мс, и
+   * плотный дым поверх них дольше выглядел бы грязной пеленой. */
   function bombStrike(t, m) {
     const b = FC.budget(m);
     const dur = T.strikeMs.bomb;
@@ -178,8 +181,8 @@
       el.animate([
         { offset: 0, opacity: 0, transform: 'translate(-50%, -50%) scale(0.8)' },
         { offset: 0.06, opacity: a, transform: 'translate(-50%, -50%) scale(0.92)', easing: 'ease-out' },
-        { offset: 0.4, opacity: a, transform: 'translate(-50%, -50%) scale(1)', easing: 'ease-in-out' },
-        { offset: 0.78, opacity: 0, transform: 'translate(-50%, -50%) scale(1.05)' },
+        { offset: 0.45, opacity: a, transform: 'translate(-50%, -50%) scale(1)', easing: 'ease-in-out' },
+        { offset: 0.85, opacity: 0, transform: 'translate(-50%, -50%) scale(1.05)' },
         { offset: 1, opacity: 0, transform: 'translate(-50%, -50%) scale(1.06)' }
       ], { duration: dur, fill: 'forwards' });
     } else {
@@ -192,8 +195,8 @@
   /* Угли: вылетают из облака во все стороны, тормозят, проседают и гаснут,
    * остывая от светло-оранжевого к тёмно-красному. */
   function embers(r, c, count) {
-    const hot = softSprite(EMBER_HOT);
-    const cool = softSprite(EMBER_COOL);
+    const hot = emberSprite(EMBER_HOT, '#fff0c4');
+    const cool = emberSprite(EMBER_COOL, '#ff7a3a');
     const t0 = performance.now();
     for (let i = 0; i < count; i++) {
       const a = (i + rand()) / count * Math.PI * 2;
@@ -203,8 +206,8 @@
         kind: 'ember', sprite: hot, cool, add: true,
         x: c + 0.5 + Math.cos(a) * d, y: r + 0.5 + Math.sin(a) * d,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, g: 2.2,
-        size: 0.12 + rand() * 0.1, grow: -0.35,
-        alpha: 0.9, born: t0 + rand() * 120, life: 620 + rand() * 260,
+        size: 0.2 + rand() * 0.12, grow: -0.4,
+        alpha: 1, born: t0 + rand() * 120, life: 620 + rand() * 260,
         rot: 0, spin: 0
       });
     }
@@ -252,6 +255,27 @@
     g.fillStyle = grad;
     g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
     sprites.set(color, s);
+    return s;
+  }
+
+  /* Уголь — яркая точка с ореолом: на золотых камнях мягкое пятно
+   * без ядра не читается */
+  function emberSprite(color, core) {
+    const key = 'ember:' + color;
+    let s = sprites.get(key);
+    if (s) return s;
+    s = document.createElement('canvas');
+    s.width = s.height = SPRITE_PX;
+    const g = s.getContext('2d');
+    const h = SPRITE_PX / 2;
+    const grad = g.createRadialGradient(h, h, 0, h, h, h);
+    grad.addColorStop(0, core);
+    grad.addColorStop(0.18, color);
+    grad.addColorStop(0.45, hexA(color, 0.35));
+    grad.addColorStop(1, hexA(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    sprites.set(key, s);
     return s;
   }
 

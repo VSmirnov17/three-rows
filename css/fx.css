@@ -30,7 +30,7 @@
 
 /* ---------- Удары спецкамней (Fx.strike) ---------- */
 
-/* Взрыв бомбы: лист assets/fx/bomb.webp — одна строка из 24 кадров 256×256
+/* Взрыв бомбы: лист assets/fx/bomb.webp — одна строка из 20 кадров 256×256
    (EmberGen «Ground Explosion», JangaFX, CC0, см. assets/fx/LICENSE-EmberGen-CC0.txt;
    сборка — tools/pack_strike.py). Кадры листает steps() по background-position,
    длительность ставит JS (FxCore.TIMING.strikeMs.bomb); появление, рост и
@@ -44,8 +44,8 @@
 }
 
 .fx-bomb {
-  background: url("../assets/fx/bomb.webp") 0 0 / 2400% 100% no-repeat;
-  animation: fxBombFrames 800ms steps(24, jump-none) forwards;
+  background: url("../assets/fx/bomb.webp") 0 0 / 2000% 100% no-repeat;
+  animation: fxBombFrames 800ms steps(20, jump-none) forwards;
 }
 
 @keyframes fxBombFrames {

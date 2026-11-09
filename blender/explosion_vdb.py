@@ -19,7 +19,7 @@ https://jangafx.com/software/embergen/download/free-vdb-animations/
 
   /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
       --python blender/explosion_vdb.py -- --vdb <папка с ground_explosion_*.vdb> \
-      --out <папка кадров> [--frames 8-100] [--step 4] [--size 256] [--samples 24] \
+      --out <папка кадров> [--list 8,16,…] | [--frames 8-100 --step 4] [--size 256] [--samples 24] \
       [--elev 90] [--scale 1.7] [--glow 0.05] [--knee 0.6] [--only N]
 
 Значения по умолчанию — утверждённые для образца (art-src/phase2/PROMPTS.md, «Шаг 5»).
@@ -40,6 +40,12 @@ import bpy
 import numpy as np
 
 GROUND_Z = -1.6        # низ симуляции после масштаба 0.01
+# 20 кадров на 800 мс (40 мс кадр): огненный шар растёт за 5 кадров (8–46),
+# тёмное облако с огненными просветами (54–70) — кадры 5–9, 200–400 мс,
+# пока взрыв ещё непрозрачен и новые камни не упали; дальше дым густеет
+# и тает вместе с прозрачностью узла (js/visuals-fx.js); после 100 облако
+# упирается в край кадра.
+FRAMES = "8,16,26,36,46,54,58,62,66,70,74,77,80,83,86,89,92,95,98,100"
 
 
 def parse_args():
@@ -47,7 +53,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--vdb", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--frames", default="8-100", help="первый-последний кадр VDB (номера файлов)")
+    p.add_argument("--frames", help="первый-последний кадр VDB (номера файлов), вместо --list")
     p.add_argument("--step", type=int, default=4, help="брать каждый N-й кадр")
     p.add_argument("--size", type=int, default=256)
     p.add_argument("--samples", type=int, default=24)
@@ -64,11 +70,12 @@ def parse_args():
     p.add_argument("--knee", type=float, default=0.6, help="выше этой яркости — мягкое сжатие (см. --tone)")
     p.add_argument("--tone", default="channel", help="колено: channel — по каналам, hue — с сохранением оттенка")
     p.add_argument("--top", default="1.0,0.36,0.08", help="цвет конца градиента пламени (линейный RGB)")
-    p.add_argument("--list", help="номера кадров VDB через запятую (вместо --frames/--step)")
+    p.add_argument("--list", default=FRAMES, help="номера кадров VDB через запятую")
     p.add_argument("--exposure", type=float, default=1.0, help="множитель цвета перед гаммой")
     p.add_argument("--only", type=int, help="отрендерить один кадр (номер VDB)")
     a = p.parse_args(argv)
-    a.frames = tuple(int(x) for x in a.frames.split("-"))
+    if a.frames:
+        a.frames = tuple(int(x) for x in a.frames.split("-"))
     a.out = os.path.abspath(a.out)
     a.vdb = os.path.abspath(a.vdb)
     return a
@@ -261,10 +268,10 @@ def render(sc, a):
     t = time.time()
     if a.only is not None:
         nums = [a.only]
-    elif a.list:
-        nums = [int(x) for x in a.list.split(",")]
-    else:
+    elif a.frames:
         nums = list(range(a.frames[0], a.frames[1] + 1, a.step))
+    else:
+        nums = [int(x) for x in a.list.split(",")]
     exr_dir = os.path.join(a.out, "exr")
     os.makedirs(exr_dir, exist_ok=True)
     for i, n in enumerate(nums):
