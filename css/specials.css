@@ -3,10 +3,11 @@
    Правила: анимируем только transform и opacity; всё, что видно лишь внутри
    keyframes, имеет статичный запасной вид (см. prefers-reduced-motion ниже). */
 
-/* Значок — объёмный медальон из Blender (blender/specials.py +
-   tools/finish_specials.py) в центре таблички. Он целиком внутри клетки
-   (72% камня), поэтому не залезает на соседей, а цвет камня виден по краям.
-   Прежние кольца-оверлеи лежат в assets/gems/special-ring/. */
+/* Значок — рисунок Codex в манере камней (tools/pack_specials.py, тёмный
+   контур отделяет его даже от золотого камня) в центре таблички. Он целиком
+   внутри клетки (72% камня), поэтому не залезает на соседей, а цвет камня
+   виден по краям. Прежние наборы: Blender-медальоны — assets/gems/specials-blender/,
+   кольца-оверлеи — assets/gems/special-ring/. */
 .special-overlay {
   position: absolute;
   inset: 14%;

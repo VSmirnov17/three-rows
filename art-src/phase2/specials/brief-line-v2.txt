@@ -1,0 +1,6 @@
+$imagegen
+Asset: one premium match-3 game "power-up" emblem, square image, TRANSPARENT background (real alpha channel)
+Image 1: style and material reference only. Match the painting manner of these emblems exactly (carved polished materials, crisp dark outline, strong top-left highlight, deep 3D through lighting only). The new emblem replaces the top-left one and must look clearly different from the round gold sun at top-right.
+Request: an Aztec LIGHTNING emblem seen STRICTLY FROM THE FRONT (orthographic, symmetrical). A bold plus-shaped cross of four long arms pointing up, down, left and right. Each arm is a thick jagged lightning bolt carved from bright polished turquoise and pale ice-blue crystal, ending in a sharp arrowhead. In the centre a small square obsidian plate with a thin gold rim. The whole emblem is dominated by turquoise and ice blue; gold appears only as thin trims. Open, spiky cross silhouette, no disc, no round outline, no rays between the arms.
+Composition: emblem centred, filling about 85% of the image, generous empty transparent padding.
+Constraints: no text, no letters, no numbers, no drop shadow, no glow halo, no floor, no background, no checkerboard pattern, no frame.
