@@ -168,9 +168,14 @@
     state.overlay = !!document.querySelector('.overlay.show');
   }
 
+  /* Экраны во всю ширину: смена на них идёт через тьму (js/visuals-transitions.js).
+     Окна поверх поля (пауза, итоги, правила) просто выезжают плитой. */
+  const FULL_SCREENS = new Set(['startScreen', 'mapScreen', 'storyScreen']);
+
   function openOverlay(id) {
     const node = $(id);
     if (!node) return;
+    if (FULL_SCREENS.has(id) && !node.classList.contains('show')) fxSafe(() => Tx.veil());
     node.classList.add('show');
     state.overlay = true;
   }
@@ -639,17 +644,24 @@
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
     fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
+    const still = fxSafe(() => Tx.reduced());
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const gem = state.grid[r][c];
         if (!gem) continue;
         const node = createGemEl(gem);
+        if (still) {
+          applyPos(gem);
+          dom.tiles.appendChild(node);
+          continue;
+        }
         node.style.transition = 'none';
         node.style.transform = `translate(${c * 100}%, ${(r - ROWS) * 100}%)`;
         dom.tiles.appendChild(node);
         void node.offsetWidth;
-        node.style.transition = 'transform 640ms cubic-bezier(.22,.82,.28,1)';
-        node.style.transitionDelay = `${c * 22 + (7 - r) * 8}ms`;
+        // Волна идёт слева направо; 600 + 280 мс укладываются в паузу buildBoard (900 мс)
+        node.style.transition = 'transform 600ms cubic-bezier(.22,.82,.28,1)';
+        node.style.transitionDelay = `${c * 34 + (7 - r) * 6}ms`;
         node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
         setTimeout(() => {
           if (node.isConnected) {
@@ -1225,6 +1237,7 @@
     state.save = result.save;
     saveProgress();
     updateSunStone();
+    state.pendingShard = result.newTier ? { levelId: state.levelId, tier: result.newTier } : null;
     state.lastResult = {
       win: true,
       stars,
@@ -1368,6 +1381,7 @@
   async function startLevel(levelId) {
     if (!Campaign.level(levelId)) return false;
     const session = ++state.session;
+    state.pendingShard = null;
     state.running = false;
     state.paused = false;
     state.ended = false;
@@ -1453,6 +1467,7 @@
   /* Стартовый экран; за ним — поле текущего уровня кампании. */
   async function showHome() {
     state.session++;
+    state.pendingShard = null;
     state.running = false;
     state.paused = false;
     state.ended = false;
@@ -1768,6 +1783,16 @@
     };
   }
 
+  /* Отладка: клавиша W при ?debug засчитывает победу, чтобы посмотреть
+     экран итогов и полёт осколка, не проходя уровень. */
+  if (new URLSearchParams(location.search).has('debug')) {
+    window.addEventListener('keydown', e => {
+      if (e.code !== 'KeyW' || !state.running || state.ended) return;
+      state.goals.forEach(g => { g.got = g.need; });
+      checkEnd();
+    });
+  }
+
   /* ---------- Внешний интерфейс для экранов карты и сцен ----------
      Хуки onBeforeLevel / onLandComplete можно заменить присваиванием:
      игра вызывает их через Game.*, а не по ссылке. Карта
@@ -1784,6 +1809,12 @@
     closeOverlay,
     closeAllOverlays,
     markSceneSeen,
+    // Осколок последней победы для полёта на мозаику; отдаётся один раз
+    takeShard() {
+      const shard = state.pendingShard;
+      state.pendingShard = null;
+      return shard || null;
+    },
     // Перед запуском уровня (пролог, вступление земли). Можно вернуть Promise.
     onBeforeLevel() {},
     // Карта пути подключается в js/screens/map.js как Game.showMap.

@@ -236,7 +236,74 @@
     return card;
   }
 
+  /* ---------- Полёт осколка на мозаику ----------
+     Только оформление: прогресс уже записан, ячейка в DOM уже готова и лишь
+     притушена на время полёта. Уход с карты или перерисовка обрывают полёт. */
+  let flight = null;
+
+  function cancelFlight() {
+    if (flight) flight.stop();
+  }
+
+  function playShardFlight(shard) {
+    const land = Campaign.landOf(shard.levelId);
+    if (!land || window.Tx && window.Tx.reduced()) return;
+    const index = land.levels.findIndex(lv => lv.id === shard.levelId);
+    const cell = landsBox.querySelectorAll('.land-card.selected .mosaic-cell')[index];
+    if (!cell) return;
+    if (cell.scrollIntoView) cell.scrollIntoView({ block: 'center', behavior: 'auto' });
+
+    const rect = cell.getBoundingClientRect();
+    const dx = window.innerWidth / 2 - (rect.left + rect.width / 2);
+    const dy = window.innerHeight * 0.46 - (rect.top + rect.height / 2);
+    const big = Math.min(2.6, 150 / Math.max(rect.width, 1));
+
+    const fly = el('div', 'shard-fly tier-' + shard.tier);
+    fly.setAttribute('aria-hidden', 'true');
+    fly.style.cssText = 'left:' + rect.left + 'px;top:' + rect.top + 'px;width:' + rect.width +
+      'px;height:' + rect.height + 'px;';
+    fly.style.backgroundImage = cell.style.backgroundImage;
+    fly.style.backgroundSize = cell.style.backgroundSize;
+    fly.style.backgroundPosition = cell.style.backgroundPosition;
+    document.body.appendChild(fly);
+    cell.classList.add('shard-pending');
+
+    const at = (x, y, s, opacity, offset) =>
+      ({ transform: 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')', opacity, offset });
+    const anim = fly.animate([
+      at(dx, dy, big * 0.85, 0, 0),
+      at(dx, dy, big, 1, 0.2),
+      at(dx, dy, big, 1, 0.38),
+      at(dx * 0.42, dy * 0.42 - 70, (big + 1) / 2, 1, 0.72),
+      at(0, 0, 1, 1, 1)
+    ], { duration: 1300, delay: 420, easing: 'ease-in-out', fill: 'both' });
+
+    const watch = new MutationObserver(() => {
+      if (!root.classList.contains('show')) cancelFlight();
+    });
+    watch.observe(root, { attributes: true, attributeFilter: ['class'] });
+
+    const current = {
+      stop(landed) {
+        if (flight !== current) return;
+        flight = null;
+        watch.disconnect();
+        anim.onfinish = null;
+        anim.cancel();
+        fly.remove();
+        cell.classList.remove('shard-pending');
+        if (!landed) return;
+        cell.classList.add('shard-landed');
+        setTimeout(() => cell.classList.remove('shard-landed'), 950);
+        if (window.SFX) window.SFX.tone(660, 0.22, { type: 'triangle', gain: 0.06 });
+      }
+    };
+    flight = current;
+    anim.onfinish = () => current.stop(true);
+  }
+
   function render() {
+    cancelFlight();
     const save = Game.getSave();
     const difficulty = Game.getDifficulty();
     const lands = Campaign.lands();
@@ -258,11 +325,14 @@
 
   /* Карта открывается с земли текущего уровня */
   function showMap() {
-    selectedLandId = null;
+    const shard = Game.takeShard();
+    const shardLand = shard && Campaign.landOf(shard.levelId);
+    selectedLandId = shardLand ? shardLand.id : null;
     render();
     Game.closeAllOverlays();
     Game.openOverlay('mapScreen');
     root.scrollTop = 0;
+    if (shard) playShardFlight(shard);
   }
 
   Game.showMap = showMap;
