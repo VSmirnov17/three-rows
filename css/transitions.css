@@ -31,16 +31,19 @@ body[data-tx="dip"] .overlay.show { transition-delay: .2s, 0s; }
    Итоги уровня въезжают своей анимацией (css/screens.css). */
 .overlay .modal-card:not(.end-card),
 .overlay .start-card,
-.overlay .story-card {
+.overlay .story-card,
+.overlay .story-portrait {
   transform: translateY(56px);
   transition: transform .46s cubic-bezier(.16, .84, .3, 1);
 }
 .overlay.show .modal-card:not(.end-card),
 .overlay.show .start-card,
-.overlay.show .story-card { transform: none; }
+.overlay.show .story-card,
+.overlay.show .story-portrait { transform: none; }
 body[data-tx="dip"] .overlay.show .modal-card:not(.end-card),
 body[data-tx="dip"] .overlay.show .start-card,
-body[data-tx="dip"] .overlay.show .story-card { transition-delay: .2s; }
+body[data-tx="dip"] .overlay.show .story-card,
+body[data-tx="dip"] .overlay.show .story-portrait { transition-delay: .2s; }
 body[data-tx-ready] .overlay .start-card { animation: none; }
 
 /* Старые лучи и виньетка сменяются вместе с фоном (.theme-bg — .9 с).
@@ -94,6 +97,7 @@ body.has-backdrop .light-shaft { animation-play-state: paused; }
   .light-shafts, .vignette { transition: none; }
   .overlay .modal-card:not(.end-card),
   .overlay .start-card,
-  .overlay .story-card { transform: none; transition: none; }
+  .overlay .story-card,
+  .overlay .story-portrait { transform: none; transition: none; }
   .mosaic-cell.shard-landed::after { animation: none; opacity: 0; }
 }

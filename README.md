@@ -225,6 +225,10 @@ NODE_PATH=/tmp/pw/node_modules node tools/record-fx.js --out art-src/phase2/stri
 - **«Уменьшить движение»**: `Tx.reduced()` читает настройку заново при каждом вызове; вуали, волны, плит и полёта нет.
 - Отладка: при `?debug` клавиша W во время уровня засчитывает победу. Проверки — сценарии `14 transitions` в `tools/e2e/run.js`.
 
+## Портрет жреца
+
+В сюжетных сценах слева от текста стоит старый жрец-рассказчик (`assets/story/priest.webp`, 832×1040, около 99 КБ); на телефоне он над текстом, на низких окнах (высота до 500 px, у узких окон до 620 px) скрыт, чтобы карточке хватило места. Разметка: `.story-stage` в `#storyScreen`, размеры и маска — `css/story.css`. Края растворяются CSS-градиентом (`mask-image`), а не файлом-маской: так работает и с `file://`. Портрет выезжает вместе с карточкой (`css/transitions.css`). Исходник и бриф — `art-src/phase2/priest/src/`. Пересобрать: `sips -Z 1040 art-src/phase2/priest/src/priest-niche.png --out /tmp/p.png && cwebp -q 82 -m 6 /tmp/p.png -o assets/story/priest.webp`.
+
 ## Визуальные слои
 
 Игра сама ничего не рисует поверх логики: `js/game.js` выставляет на `<body>` атрибуты `data-land`, `data-combo`, `data-urgency` (`tense`/`urgent`), `data-outcome` (`win`/`lose`) и шлёт события `sun:special`, `sun:blast`, `sun:match`. Фоны, эффекты комбо, тревога таймера и экраны подписываются на них из `css/*.css` и `js/visuals*.js`, поэтому оформление можно менять, не трогая правила игры.

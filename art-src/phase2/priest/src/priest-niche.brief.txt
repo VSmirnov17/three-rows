@@ -1,0 +1,8 @@
+$imagegen
+Asset: narrator portrait for a story screen in a jungle-temple puzzle game, vertical 4:5, one image. Image 1: style and palette reference only, do not copy its layout or contents.
+Request: head and shoulders of a very old solemn priest, three-quarter view turned toward the viewer's right, gaze going right and slightly down as if speaking to someone beside him; generous headroom.
+Look: serious painterly digital illustration, realistic anatomy and skin, deep wrinkles, grey brows, weary kind dark eyes, solemn dignity; rich detail like a premium fantasy game key art. Not a cartoon, not a caricature, not a mascot.
+Dress: invented ancient-jungle priest costume, Mesoamerican-inspired but fictional: dark woven mantle with gold thread meander border, broad jade and gold collar, jade ear ornaments, restrained low headband of hammered gold with a single jade stone and a few dark feathers. No real deity iconography.
+Light: warm firelight from the lower left on face and gold; faint cool blue moonlight rim on the right shoulder and hair. Deep night mood.
+Constraints: edges of the image fall off smoothly to near-black on all sides, no hard background shapes touching the edge. No text, letters, frame, border, watermark, or extra figures.
+Background: a shallow carved obsidian-stone temple niche behind him with worn stepped-fret relief, barely lit by firelight, dissolving into black before reaching the image edges.

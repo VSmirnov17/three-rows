@@ -1770,6 +1770,85 @@ async function smokeFile(bt, bname) {
       return 'ok';
     });
 
+    await scenario(bname, '15 priest portrait: beside or above the text, never over it', async () => {
+      const notes = [];
+      // [ширина, высота, должен ли портрет быть виден]
+      const sizes = [[1366, 768, true], [1920, 1080, true], [1024, 768, true], [390, 844, true], [360, 740, true], [360, 640, true], [844, 390, false]];
+      for (const [width, height, shown] of sizes) {
+        const { ctx, page } = await newPage(browser, bname, 's15-' + width, { width, height });
+        await startFresh(page, HTTP);
+        await ev(page, () => { window.Story.play(window.Story.PROLOGUE_ID, window.Story.sceneLines(window.Story.PROLOGUE_ID)); });
+        await page.waitForSelector('#storyScreen.show');
+        await page.waitForFunction(() => document.getElementById('storyText').classList.contains('shown'));
+        await page.waitForTimeout(700); // плита доехала
+        const m = await ev(page, () => {
+          const rect = el => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
+          const img = document.querySelector('#storyScreen .story-portrait');
+          return {
+            exists: !!img,
+            alt: img ? img.getAttribute('alt') : null,
+            loaded: img ? img.complete && img.naturalWidth > 0 : false,
+            display: img ? getComputedStyle(img).display : '',
+            portrait: img ? rect(img) : null,
+            card: rect(document.querySelector('#storyScreen .story-card')),
+            font: parseFloat(getComputedStyle(document.getElementById('storyText')).fontSize),
+            btn: document.getElementById('storyNextBtn').offsetHeight,
+            btnFont: parseFloat(getComputedStyle(document.getElementById('storyNextBtn')).fontSize),
+            scrollX: document.documentElement.scrollWidth,
+            vw: innerWidth,
+            vh: innerHeight
+          };
+        });
+        const tag = width + 'x' + height + ' ';
+        assert(m.exists && m.alt === '' && m.loaded, tag + 'portrait present, decorative, loaded: ' + JSON.stringify(m));
+        assert(m.font >= 28 && m.btn >= 56 && m.btnFont >= 20, tag + 'sizes: ' + JSON.stringify(m));
+        assert(m.scrollX <= m.vw, tag + 'horizontal scroll ' + m.scrollX);
+        assert(m.card.t >= 0 && m.card.b <= m.vh + 0.5, tag + 'card off screen: ' + JSON.stringify(m.card));
+        if (shown) {
+          const p = m.portrait, c = m.card;
+          assert(m.display !== 'none' && p.w > 100 && p.h > 100, tag + 'portrait too small: ' + JSON.stringify(p));
+          assert(p.l >= 0 && p.t >= 0 && p.r <= m.vw + 0.5 && p.b <= m.vh + 0.5, tag + 'portrait off screen: ' + JSON.stringify(p));
+          const overlaps = p.l < c.r - 0.5 && p.r > c.l + 0.5 && p.t < c.b - 0.5 && p.b > c.t + 0.5; // встык — не наложение (дробные пиксели)
+          assert(!overlaps, tag + 'portrait over the card: ' + JSON.stringify({ p, c }));
+          notes.push(tag + Math.round(p.w) + 'x' + Math.round(p.h));
+        } else {
+          assert(m.display === 'none', tag + 'portrait should be hidden, display=' + m.display);
+          notes.push(tag + 'hidden');
+        }
+        // Самые длинные фразы: кнопки и портрет остаются на экране
+        const lines = await ev(page, () => {
+          const S = window.Story, out = []; let maxCard = 0, count = 0;
+          const ids = [S.PROLOGUE_ID, ...window.Campaign.lands().flatMap(l => [l.id + '-intro', l.id + '-outro'])];
+          const text = document.getElementById('storyText');
+          const inside = el => { const b = el.getBoundingClientRect(); return b.top >= -0.5 && b.left >= -0.5 && b.bottom <= innerHeight + 0.5 && b.right <= innerWidth + 0.5; };
+          const img = document.querySelector('#storyScreen .story-portrait');
+          for (const id of ids) for (const line of S.sceneLines(id) || []) {
+            text.textContent = line;
+            const card = document.querySelector('#storyScreen .story-card').getBoundingClientRect();
+            const p = img.getBoundingClientRect();
+            const visible = getComputedStyle(img).display !== 'none';
+            maxCard = Math.max(maxCard, card.height); count++;
+            const bad = [];
+            if (!inside(document.getElementById('storyNextBtn'))) bad.push('next');
+            if (!inside(document.getElementById('storySkipBtn'))) bad.push('skip');
+            if (visible && !inside(img)) bad.push('portrait');
+            if (visible && p.left < card.right - 0.5 && p.right > card.left + 0.5 && p.top < card.bottom - 0.5 && p.bottom > card.top + 0.5) bad.push('overlap');
+            if (bad.length) out.push(id + ': ' + bad.join(',') + ' h=' + Math.round(p.height) + ' cardH=' + Math.round(card.height) + ' "' + line.slice(0, 24) + '"');
+          }
+          return { out, maxCard: Math.round(maxCard), count };
+        });
+        assert(lines.count >= 10 && lines.out.length === 0, tag + 'long lines: ' + lines.count + ' ' + lines.out.join(' | '));
+        notes[notes.length - 1] += ' maxCard=' + lines.maxCard;
+        await ctx.close();
+      }
+      // С диска портрет тоже грузится
+      const { ctx, page } = await newPage(browser, bname, 's15-file');
+      await startFresh(page, FILE);
+      await page.waitForFunction(() => { const i = document.querySelector('#storyScreen .story-portrait'); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 5000 });
+      await ctx.close();
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
