@@ -2,7 +2,8 @@
  *
  * TIMING        — длительности и шаги задержек, мс.
  * budget        — сколько частиц и какой силы луч по режиму (calm/reduced/low).
- * shardsFor     — на сколько осколков делить камень при данном числе клеток.
+ * shardsFor     — на сколько осколков делить камень при данном числе клеток;
+ *                 reserved — узлы, уже занятые ударами в этом шаге.
  * shardPolygons — раскрой квадрата клетки на осколки (в процентах 0..100).
  * shardFlight   — куда и как далеко летит осколок.
  * strikeTargets — клетки удара спецкамня и задержка каждой.
@@ -34,6 +35,7 @@
   const CALM_BEAM = 0.6;
   const LOW_SHARDS = 3;
   const SHARDS_PER_STEP = 110;
+  const NODES_PER_STEP = 120;
   const MID = 50;           // центр квадрата клетки, %
 
   /* Бюджет частиц. mode: { calm, reduced, low }.
@@ -60,12 +62,13 @@
   }
 
   /* Осколков на камень: чем больше клеток гаснет разом, тем меньше на каждую —
-   * всего за шаг не больше SHARDS_PER_STEP (узлов в #fx не больше 120);
-   * не меньше 1 и не больше бюджета. cellCount ≥ 1. */
-  function shardsFor(cellCount, mode) {
+   * всего за шаг не больше SHARDS_PER_STEP (узлов в #fx не больше 120, узлы
+   * ударов reserved вычитаются); не меньше 1 и не больше бюджета. cellCount ≥ 1. */
+  function shardsFor(cellCount, mode, reserved) {
     const m = mode || {};
     if (m.reduced) return 0;
-    return Math.max(1, Math.min(budget(m).shards, Math.floor(SHARDS_PER_STEP / cellCount)));
+    const room = Math.min(SHARDS_PER_STEP, NODES_PER_STEP - (reserved || 0));
+    return Math.max(1, Math.min(budget(m).shards, Math.floor(room / cellCount)));
   }
 
   /* Площадь и центр тяжести многоугольника (шнурование). */

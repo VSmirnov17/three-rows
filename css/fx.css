@@ -52,3 +52,50 @@
   from { background-position: 0% 0; }
   to { background-position: 100% 0; }
 }
+
+/* Лучи молнии и волна тотема: окно-узел с рисунком внутри (js/visuals-fx.js
+   arm()). Листы — один столбец кадров; кадры листает steps() по
+   background-position, ширину листа и длительность ставит JS.
+   Сборка листов — tools/render_strikes.py. */
+.fx-arm {
+  overflow: hidden;
+  transform-origin: 0 50%;
+}
+
+.fx-strip {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: 100% 0%;
+  will-change: transform;
+  animation-name: fxStripFrames;
+  animation-fill-mode: forwards;
+}
+
+.fx-line .fx-strip {
+  background-image: url("../assets/fx/beam-turquoise.webp");
+  animation-timing-function: steps(12, jump-none);
+}
+
+.fx-wave .fx-strip {
+  background-image: url("../assets/fx/wave-jade.webp");
+  animation-timing-function: steps(8, jump-none);
+}
+
+@keyframes fxStripFrames {
+  from { background-position: 100% 0%; }
+  to { background-position: 100% 100%; }
+}
+
+.fx-ray {
+  background: url("../assets/fx/ray-gold.webp") 0 0 / 100% 400% no-repeat;
+  transform-origin: 0 50%;
+}
+
+/* Ядра: лист на 3 колонки (солнце, молния, тотем) */
+.fx-core {
+  background: url("../assets/fx/glow-cores.webp") 0 0 / 300% 100% no-repeat;
+}
+.fx-core-sun { background-position: 0% 0; }
+.fx-core-line { background-position: 50% 0; }
+.fx-core-wave { background-position: 100% 0; }

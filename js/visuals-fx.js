@@ -21,8 +21,12 @@
  *                   кадры CSS-анимацией steps() по background-position, css/fx.css)
  *                   над клетками 3×3 и угли на canvas. reduced — ничего;
  *                   low — взрыв без углей; calm — углей меньше (FxCore.budget),
- *                   взрыв прозрачнее (× beamAlpha). Другие типы — пока старый
- *                   код в js/game.js (blastFx).
+ *                   взрыв прозрачнее (× beamAlpha).
+ *                   line: бирюзовые лучи .fx-line от клетки в обе стороны вдоль
+ *                   lineDir; sun: узкие золотые лучи .fx-ray к целям (не больше
+ *                   16, к ближним) и диск в центре; totem: нефритовая волна
+ *                   .fx-wave крестом. Каждый удар заранее занимает свои узлы
+ *                   в бюджете (reserved), осколки делятся остатком.
  * Fx.canvas       — один <canvas class="fx-canvas"> в #fx; цикл
  *                   requestAnimationFrame идёт, только пока есть живые частицы.
  * Fx.particles(kind) — число живых частиц (для e2e); kind 'ember' — только угли.
@@ -50,6 +54,18 @@
   const BOMB_CELLS = 4;
   const EMBER_HOT = '#ffb15c';    // уголь вылетает светло-оранжевым…
   const EMBER_COOL = '#9a2e14';   // …и гаснет тёмно-красным
+  /* Удары молнии, солнца и тотема: полосы и ядра — спрайты assets/fx,
+   * толщины в клетках, кадров столько же, сколько в листах (tools/render_strikes.py) */
+  const FX_SPRITES = ['bomb', 'beam-turquoise', 'ray-gold', 'wave-jade', 'glow-cores'];
+  const BEAM_THICK = 1.7;
+  const WAVE_THICK = 1.6;
+  const RAY_THICK = 0.56;
+  const RAY_ROWS = 4;
+  const MAX_RAYS = 16;
+  const LINE_FLARE = 2.6;
+  const WAVE_FLARE = 3;
+  const SUN_DISC = 4;
+  const BOARD = 8;                // сторона поля, клеток
 
   function mode() {
     return {
@@ -64,6 +80,13 @@
   function later(fn, ms) {
     const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
     timers.add(id);
+  }
+
+  /* Бюджет узлов: удар занимает свои узлы до конца жизни; осколки считают остаток */
+  let reserved = 0;
+  function reserve(n, ms) {
+    reserved += n;
+    later(() => { reserved = Math.max(0, reserved - n); }, ms);
   }
 
   /* ---------- Копии камня в #fx ---------- */
@@ -108,7 +131,7 @@
   }
 
   function burst(r, c, inner, opts, m) {
-    const n = FC.shardsFor(Math.max(1, opts.cells || BOARD_CELLS), m);
+    const n = FC.shardsFor(Math.max(1, opts.cells || BOARD_CELLS), m, reserved);
     const polys = FC.shardPolygons(n, rand);
     const shards = polys.map(poly => {
       const el = cellBox('fx-shard', r, c, inner);
@@ -157,6 +180,9 @@
     const m = mode();
     if (m.reduced) return;
     if (trigger.type === 'bomb') bombStrike(trigger, m);
+    else if (trigger.type === 'line') lineStrike(trigger, m);
+    else if (trigger.type === 'sun') sunStrike(trigger, targets || [], m);
+    else if (trigger.type === 'totem') totemStrike(trigger, m);
   }
 
   /* Обсидиановый взрыв: кадры листает CSS (steps по background-position),
@@ -168,6 +194,7 @@
   function bombStrike(t, m) {
     const b = FC.budget(m);
     const dur = T.strikeMs.bomb;
+    reserve(1, dur + 40);
     const el = document.createElement('div');
     el.className = 'fx-strike fx-bomb';
     el.style.left = ((t.c + 0.5) * CELL) + '%';
@@ -192,6 +219,139 @@
     if (b.embers > 0) embers(t.r, t.c, b.embers);
   }
 
+  /* ---------- Полосы ударов: молния и волна ----------
+   * Полоса — узел-окно (overflow) и внутри спрайт, который выезжает из клетки
+   * удара: рисунок не сжимается, конец луча всегда впереди. Угол 0 — вправо,
+   * 90 — вниз. Длина полосы — от центра клетки до края поля; лист
+   * масштабирован по всей ширине поля и прижат к дальнему краю, поэтому
+   * конец спрайта (кончик или гребень) лежит у края. */
+  function arm(r, c, deg, cells, thick, cls, revealMs, durMs, alpha, holdTo) {
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-arm ' + cls;
+    el.style.left = ((c + 0.5) * CELL) + '%';
+    el.style.top = ((r + 0.5) * CELL) + '%';
+    el.style.width = (cells * CELL) + '%';
+    el.style.height = (thick * CELL) + '%';
+    el.style.transform = `translate(0, -50%) rotate(${deg}deg)`;
+    const strip = document.createElement('div');
+    strip.className = 'fx-strip';
+    strip.style.backgroundSize = (BOARD / cells * 100).toFixed(2) + '% ' + (cls === 'fx-line' ? 1200 : 800) + '%';
+    strip.style.animationDuration = durMs + 'ms';
+    el.appendChild(strip);
+    layer.appendChild(el);
+    if (el.animate) {
+      strip.animate([{ transform: 'translateX(-100%)' }, { transform: 'translateX(0)' }],
+        { duration: revealMs, easing: 'linear', fill: 'forwards' });
+      el.animate([
+        { offset: 0, opacity: alpha },
+        { offset: holdTo, opacity: alpha, easing: 'ease-out' },
+        { offset: 1, opacity: 0 }
+      ], { duration: durMs, fill: 'forwards' });
+    } else {
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), durMs + 40);
+  }
+
+  /* Ядро в клетке удара: лист glow-cores, колонка задаётся классом fx-core-*.
+   * Появляется, чуть растёт и проворачивается; гаснет к концу. */
+  function coreGlow(r, c, cells, kind, durMs, alpha, turn) {
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-core fx-core-' + kind;
+    el.style.left = ((c + 0.5) * CELL) + '%';
+    el.style.top = ((r + 0.5) * CELL) + '%';
+    el.style.width = el.style.height = (cells * CELL) + '%';
+    layer.appendChild(el);
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: 'translate(-50%, -50%) scale(0.55) rotate(0deg)' },
+        { offset: 0.12, opacity: alpha, transform: 'translate(-50%, -50%) scale(0.92) rotate(' + (turn * 0.2) + 'deg)', easing: 'ease-out' },
+        { offset: 0.5, opacity: alpha * 0.75, transform: 'translate(-50%, -50%) scale(1.02) rotate(' + (turn * 0.6) + 'deg)', easing: 'ease-in' },
+        { offset: 1, opacity: 0, transform: 'translate(-50%, -50%) scale(1.1) rotate(' + turn + 'deg)' }
+      ], { duration: durMs, fill: 'forwards' });
+    } else {
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), durMs + 40);
+  }
+
+  /* Молния: два луча в разные стороны вдоль линии. Луч выезжает с той же
+   * скоростью, с какой идёт раскол (mergeDelays: 0,6 waveStepMs на клетку) —
+   * камень трескается, когда кончик до него доходит. */
+  function lineStrike(t, m) {
+    const b = FC.budget(m);
+    const a = b.beamAlpha;
+    const dur = T.strikeMs.line;
+    const col = t.lineDir === 'col';
+    const pos = col ? t.r : t.c;
+    const stepMs = T.waveStepMs * 0.6;
+    const arms = [
+      { deg: col ? 90 : 0, cells: BOARD - (pos + 0.5) },
+      { deg: col ? -90 : 180, cells: pos + 0.5 }
+    ].filter(x => x.cells > 0.5);
+    reserve(arms.length * 2 + 1, dur + 40);
+    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, BEAM_THICK, 'fx-line', Math.max(40, x.cells * stepMs), dur, a, 0.4));
+    coreGlow(t.r, t.c, LINE_FLARE, 'line', Math.round(dur * 0.75), a, 18);
+  }
+
+  /* Тотем: четыре полосы волны крестом, бегут с шагом waveStepMs на клетку,
+   * камни раскалываются под гребнем по своим задержкам. */
+  function totemStrike(t, m) {
+    const b = FC.budget(m);
+    const a = b.beamAlpha;
+    const dur = T.strikeMs.totem;
+    const arms = [
+      { deg: 0, cells: BOARD - (t.c + 0.5) },
+      { deg: 180, cells: t.c + 0.5 },
+      { deg: 90, cells: BOARD - (t.r + 0.5) },
+      { deg: -90, cells: t.r + 0.5 }
+    ].filter(x => x.cells > 0.5);
+    reserve(arms.length * 2 + 1, dur + 40);
+    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, WAVE_THICK, 'fx-wave', x.cells * T.waveStepMs, dur, a, 0.5));
+    coreGlow(t.r, t.c, WAVE_FLARE, 'wave', Math.round(dur * 0.8), a, -14);
+  }
+
+  /* Солнце: узкие золотые лучи к целям своего цвета. Луч доходит до камня
+   * к задержке этого камня (он в тот же миг раскалывается). Лучей не больше
+   * 16 — к ближним по расстоянию; дальние цели раскалываются без луча. */
+  function sunStrike(t, targets, m) {
+    const a = FC.budget(m).beamAlpha;
+    const dur = T.strikeMs.sun;
+    const dist = x => Math.hypot(x.r - t.r, x.c - t.c);
+    const others = targets.filter(x => !(x.r === t.r && x.c === t.c));
+    const rays = others.slice().sort((p, q) => dist(p) - dist(q)).slice(0, MAX_RAYS);
+    reserve(rays.length + 1, dur + 40);
+    rays.forEach(x => ray(t, x, dist(x), a));
+    coreGlow(t.r, t.c, SUN_DISC, 'sun', dur, a, 22);
+  }
+
+  function ray(t, target, cells, alpha) {
+    const life = Math.max(target.delay, 40) + 440;
+    const reach = Math.max(target.delay, 40) / life;
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-ray';
+    el.style.left = ((t.c + 0.5) * CELL) + '%';
+    el.style.top = ((t.r + 0.5) * CELL) + '%';
+    el.style.width = (cells * CELL) + '%';
+    el.style.height = (RAY_THICK * CELL) + '%';
+    el.style.backgroundPosition = '0 ' + (Math.floor(rand() * RAY_ROWS) / (RAY_ROWS - 1) * 100).toFixed(0) + '%';
+    const deg = Math.atan2(target.r - t.r, target.c - t.c) * 180 / Math.PI;
+    const base = `translate(0, -50%) rotate(${deg.toFixed(2)}deg)`;
+    layer.appendChild(el);
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: base + ' scaleX(0)' },
+        { offset: reach, opacity: alpha, transform: base + ' scaleX(1)', easing: 'ease-out' },
+        { offset: Math.min(1, reach + 0.18), opacity: alpha, transform: base + ' scaleX(1)', easing: 'ease-in' },
+        { offset: 1, opacity: 0, transform: base + ' scaleX(1)' }
+      ], { duration: life, easing: 'linear', fill: 'forwards' });
+    } else {
+      el.style.transform = base;
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), life + 30);
+  }
+
   /* Угли: вылетают из облака во все стороны, тормозят, проседают и гаснут,
    * остывая от светло-оранжевого к тёмно-красному. */
   function embers(r, c, count) {
@@ -207,7 +367,7 @@
         x: c + 0.5 + Math.cos(a) * d, y: r + 0.5 + Math.sin(a) * d,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, g: 2.2,
         size: 0.2 + rand() * 0.12, grow: -0.4,
-        alpha: 1, born: t0 + rand() * 120, life: 620 + rand() * 260,
+        alpha: 1, born: t0 + rand() * 120, life: 600 + rand() * 180,
         rot: 0, spin: 0
       });
     }
@@ -417,6 +577,7 @@
     timers.clear();
     layer.querySelectorAll('.fx-standin, .fx-shard, .fx-strike').forEach(el => el.remove());
     parts = [];
+    reserved = 0;
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
     lastT = 0;
@@ -425,6 +586,9 @@
   }
 
   ensureCanvas();
+
+  /* Спрайты ударов — заранее: иначе на хостинге первый удар теряет начальные кадры */
+  FX_SPRITES.forEach(name => { new Image().src = 'assets/fx/' + name + '.webp'; });
 
   /* Открылся любой оверлей (пауза, конец уровня, карта…) — эффекты убрать */
   const overlayObs = new MutationObserver(list => {

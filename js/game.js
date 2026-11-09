@@ -801,59 +801,6 @@
     setTimeout(() => node.remove(), 1050);
   }
 
-  function beamFx(r, c, dir) {
-    const beam = document.createElement('div');
-    beam.className = 'beam ' + (dir === 'h' ? 'horizontal' : 'vertical');
-    if (dir === 'h') {
-      beam.style.left = '0';
-      beam.style.top = (r * 12.5) + '%';
-      beam.style.width = '100%';
-    } else {
-      beam.style.left = (c * 12.5) + '%';
-      beam.style.top = '0';
-      beam.style.height = '100%';
-    }
-    dom.fx.appendChild(beam);
-
-    const flare = document.createElement('div');
-    flare.className = 'beam-flare';
-    flare.style.left = ((c + 0.5) * 12.5) + '%';
-    flare.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(flare);
-
-    setTimeout(() => {
-      beam.remove();
-      flare.remove();
-    }, 560);
-  }
-
-  function sunBurstFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'sun-burst epic';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
-  function shockwaveFx(r, c, epic) {
-    const node = document.createElement('div');
-    node.className = 'shockwave' + (epic ? ' epic' : '');
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
-  function sunRaysFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'sun-rays';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
   function spawnBurst(r, c, color, count) {
     if (dom.fx.childElementCount > 150) return;
     const left = (c + 0.5) * 12.5;
@@ -875,38 +822,12 @@
     }
   }
 
-  /* Удар спецкамня. Без белой вспышки и тряски поля: для пожилого игрока
-     это резко (спецификация шага 5). cells — клетки шага с цветами
-     [{ r, c, color }], по ним FxCore.strikeTargets находит клетки удара.
-     Бомба — уже новый эффект (Fx.strike: обсидиановый взрыв и угли),
-     остальные типы — пока старый код. */
+  /* Удар спецкамня — весь эффект в Fx.strike (js/visuals-fx.js): без белой
+     вспышки, тряски и кольца. cells — клетки шага с цветами [{ r, c, color }],
+     по ним FxCore.strikeTargets находит клетки удара. */
   function blastFx(trigger, cells) {
     emitVisual('blast', { type: trigger.type });
-    if (trigger.type === 'bomb') {
-      if (window.Fx) Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || []));
-      return;
-    }
-    const isSun = trigger.type === 'sun';
-    const isTotem = trigger.type === 'totem';
-    if (isSun) {
-      sunBurstFx(trigger.r, trigger.c);
-    } else if (isTotem) {
-      beamFx(trigger.r, trigger.c, 'h');
-      beamFx(trigger.r, trigger.c, 'v');
-      sunRaysFx(trigger.r, trigger.c);
-    } else {
-      beamFx(trigger.r, trigger.c, trigger.lineDir === 'col' ? 'v' : 'h');
-    }
-
-    shockwaveFx(trigger.r, trigger.c, isSun || isTotem);
-    if (isSun) sunRaysFx(trigger.r, trigger.c);
-    const burstColor = isSun ? '#ffd166' : isTotem ? '#d9b4ff' : '#a9ecff';
-    spawnBurst(trigger.r, trigger.c, burstColor, isSun ? 26 : isTotem ? 24 : 16);
-  }
-
-  function impactFx(r, c, strength) {
-    shockwaveFx(r, c, false);
-    spawnBurst(r, c, '#ffe6a0', 8 + Math.round(strength * 6));
+    if (window.Fx) Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || []));
   }
 
   /* Классы спецкамней: новый тип должен попасть в CSS-ауру и ART.gemInner */
@@ -1133,11 +1054,7 @@
       );
     }
 
-    if (cellsArr.length && !triggers.length && (clear.size >= 6 || chain >= 3)) {
-      const strength = Math.min(1, (clear.size - 5) / 10 + (chain - 2) * 0.12);
-      impactFx(sr / cellsArr.length, sc / cellsArr.length, strength);
-      SFX.impact();
-    }
+    if (cellsArr.length && !triggers.length && (clear.size >= 6 || chain >= 3)) SFX.impact();
 
     const gotBefore = state.goals.map(g => g.got);
     cellsArr.forEach(p => {

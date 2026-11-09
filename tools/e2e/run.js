@@ -1135,12 +1135,13 @@ async function suite(bt, bname, url) {
       // Наблюдатель на весь сценарий: вспышки .blast-flash, тряска рамки,
       // когда камень спрятан (fx-gone) и когда появились осколки (с клеткой).
       await ev(page, () => {
-        const W = window.__fxWatch = { flash: 0, frameBlast: 0, gone: [], shards: [], lifeMax: 0 };
+        const W = window.__fxWatch = { flash: 0, ring: 0, frameBlast: 0, gone: [], shards: [], lifeMax: 0 };
         const born = new WeakMap();
         new MutationObserver(list => list.forEach(m => {
           m.addedNodes.forEach(n => {
             if (!n.classList) return;
             if (n.classList.contains('blast-flash')) W.flash++;
+            if (n.classList.contains('shockwave')) W.ring++;
             if (n.classList.contains('fx-shard')) {
               born.set(n, performance.now());
               W.shards.push({ t: performance.now(), cell: n.dataset.cell });
@@ -1219,6 +1220,8 @@ async function suite(bt, bname, url) {
         const keep = { fx: B.dataset.fx, difficulty: B.dataset.difficulty };
         if (setup === 'low') B.dataset.fx = 'low';
         if (setup === 'calm') B.dataset.difficulty = 'calm';
+        // Спецкамни от прошлых каскадов задели бы цепочкой: на поле их не оставляем
+        S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
         const FXSEL = '.fx-strike, .fx-shard, .fx-standin';
         let node = null, born = 0, gone = 0, maxNodes = 0, added = 0;
         const mo = new MutationObserver(list => list.forEach(m => {
@@ -1277,20 +1280,128 @@ async function suite(bt, bname, url) {
       assert(bc.added === 1 && bc.embers > 0 && bc.embers <= 10, 'бомба calm: взрыв ' + bc.added + ', углей ' + bc.embers + ' (ждали 1..10)');
       assert(bc.opacity >= 0 && bc.opacity < bf.opacity, 'бомба calm: взрыв не прозрачнее полного: ' + bc.opacity + ' vs ' + bf.opacity);
 
-      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      // Удары молнии, солнца и тотема: свой узел появляется за 150 мс, все узлы
+      // уходят за 1100 мс, через 1,5 с ни узлов, ни частиц.
+      const FXNODES = '.fx-strike, .fx-strip, .fx-shard, .fx-standin';
+      const strikeProbe = (o) => ev(page, async ({ r, c, type, dir, sel, setup, FXNODES, keepSpecials }) => {
+        const S = window.__SUN;
+        const fx = document.getElementById('fx');
+        const B = document.body;
+        const keep = { fx: B.dataset.fx, difficulty: B.dataset.difficulty };
+        if (setup === 'low') B.dataset.fx = 'low';
+        if (setup === 'calm') B.dataset.difficulty = 'calm';
+        if (!keepSpecials) S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+        const sun = S.gemAt(r, c).color;
+        const expectRays = Math.min(16, S.state.grid.flat().filter(g => g && g.color === sun && !(g.r === r && g.c === c)).length);
+        const t0 = performance.now();
+        let firstAt = -1, added = 0, maxNodes = 0, lifeMax = 0;
+        const born = new Map();
+        const mo = new MutationObserver(list => {
+          const t = performance.now();
+          list.forEach(m => {
+            m.addedNodes.forEach(n => {
+              if (!n.classList) return;
+              if (n.matches(sel)) { added++; if (firstAt < 0) firstAt = t - t0; }
+              if (n.classList.contains('fx-strike')) born.set(n, t);
+            });
+            m.removedNodes.forEach(n => { if (born.has(n)) { lifeMax = Math.max(lifeMax, t - born.get(n)); born.delete(n); } });
+          });
+          maxNodes = Math.max(maxNodes, fx.querySelectorAll(FXNODES).length);
+        });
+        mo.observe(fx, { childList: true, subtree: true });
+        const run = S.strike(r, c, type, dir);
+        await new Promise(res => setTimeout(res, 240));
+        const el = fx.querySelector(sel);
+        const opacity = el ? +getComputedStyle(el).opacity : -1;
+        const embers = window.Fx.particles();
+        await run;
+        await new Promise(res => setTimeout(res, 1500));
+        mo.disconnect();
+        const res = { firstAt, added, expectRays, opacity, embers, maxNodes, lifeMax, stuck: born.size,
+          leftNodes: fx.querySelectorAll(FXNODES).length, leftParts: window.Fx.particles() };
+        if (keep.fx) B.dataset.fx = keep.fx; else delete B.dataset.fx;
+        B.dataset.difficulty = keep.difficulty;
+        return res;
+      }, { ...o, FXNODES });
+      const idle = () => page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const clean = (name, p) => {
+        assert(p.lifeMax > 0 && p.lifeMax <= 1100 && p.stuck === 0, name + ': узел удара жил ' + p.lifeMax.toFixed(0) + ' мс, не убрано ' + p.stuck);
+        assert(p.leftNodes === 0 && p.leftParts === 0, name + ': через 1,5 с узлов ' + p.leftNodes + ', частиц ' + p.leftParts);
+        assert(p.maxNodes <= 120, name + ': узлов в #fx ' + p.maxNodes + ' (предел 120)');
+      };
+      const seen = (name, p) => assert(p.firstAt >= 0 && p.firstAt <= 150, name + ': свой узел за ' + p.firstAt.toFixed(0) + ' мс (предел 150)');
+
+      await idle();
+      const lr = await strikeProbe({ r: 3, c: 2, type: 'line', dir: 'row', sel: '.fx-line' });
+      seen('молния ряд', lr); clean('молния ряд', lr);
+      assert(lr.added === 2, 'молния ряд: лучей ' + lr.added + ' (ждали 2, в обе стороны)');
+      await idle();
+      const lc = await strikeProbe({ r: 2, c: 5, type: 'line', dir: 'col', sel: '.fx-line' });
+      seen('молния столбец', lc); clean('молния столбец', lc);
+      assert(lc.added === 2, 'молния столбец: лучей ' + lc.added + ' (ждали 2)');
+      await idle();
+      const le = await strikeProbe({ r: 0, c: 0, type: 'line', dir: 'row', sel: '.fx-line' });
+      assert(le.added === 1, 'молния с края: лучей ' + le.added + ' (ждали 1)');
+      await idle();
+      const lCalm = await strikeProbe({ r: 3, c: 2, type: 'line', dir: 'row', sel: '.fx-line', setup: 'calm' });
+      assert(lCalm.opacity >= 0 && lCalm.opacity < lr.opacity, 'молния calm: не прозрачнее полной: ' + lCalm.opacity + ' vs ' + lr.opacity);
+      await idle();
+      const lLow = await strikeProbe({ r: 3, c: 2, type: 'line', dir: 'row', sel: '.fx-line', setup: 'low' });
+      assert(lLow.added === 2 && lLow.embers === 0, 'молния low: лучей ' + lLow.added + ', частиц ' + lLow.embers + ' (ждали 2 и 0)');
+
+      await idle();
+      const sn = await strikeProbe({ r: 4, c: 3, type: 'sun', sel: '.fx-ray' });
+      seen('солнце', sn); clean('солнце', sn);
+      assert(sn.added === sn.expectRays && sn.added > 0, 'солнце: лучей ' + sn.added + ' (ждали ' + sn.expectRays + ')');
+
+      await idle();
+      const tm = await strikeProbe({ r: 4, c: 3, type: 'totem', sel: '.fx-wave' });
+      seen('тотем', tm); clean('тотем', tm);
+      assert(tm.added === 4, 'тотем: полос ' + tm.added + ' (ждали 4)');
+      await idle();
+      const tCalm = await strikeProbe({ r: 4, c: 3, type: 'totem', sel: '.fx-wave', setup: 'calm' });
+      assert(tCalm.opacity >= 0 && tCalm.opacity < tm.opacity, 'тотем calm: не прозрачнее полного: ' + tCalm.opacity + ' vs ' + tm.opacity);
+
+      // Цепочка: солнце с 20 целями и бомба рядом (её цвет — цвет солнца, солнце её задевает)
+      await idle();
+      await ev(page, () => {
+        const S = window.__SUN;
+        const sunColor = S.gemAt(4, 3).color;
+        let n = 0;
+        S.state.grid.forEach(row => row.forEach(g => { if (g && n < 21 && !g.special) { g.color = sunColor; n++; } }));
+        const b = S.gemAt(4, 4);
+        b.color = sunColor;
+        S.upgradeGem(b, 'bomb');
+      });
+      const ch = await strikeProbe({ r: 4, c: 3, type: 'sun', sel: '.fx-ray', keepSpecials: true });
+      assert(ch.added === 16, 'цепочка: лучей ' + ch.added + ' (ждали 16)');
+      assert(ch.maxNodes >= 40, 'цепочка: подозрительно мало узлов, сценарий не сработал: ' + ch.maxNodes);
+      clean('цепочка', ch);
+
+      // reduced — в самом конце сценария: по наблюдению, после возврата 'no-preference' Firefox
+      // оставляет matchMedia(prefers-reduced-motion) в прежнем состоянии.
+      await idle();
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const br = await bomb('reduced');
-      await page.emulateMedia({ reducedMotion: 'no-preference' });
       assert(br.added === 0 && br.embers === 0, 'бомба reduced: взрыв ' + br.added + ', углей ' + br.embers + ' (ждали 0)');
+      await idle();
+      const sRed = await strikeProbe({ r: 2, c: 2, type: 'sun', sel: '.fx-ray' });
+      await idle();
+      const lRed = await strikeProbe({ r: 2, c: 2, type: 'line', dir: 'row', sel: '.fx-line' });
+      await idle();
+      const tRed = await strikeProbe({ r: 2, c: 2, type: 'totem', sel: '.fx-wave' });
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      assert(sRed.added === 0 && lRed.added === 0 && tRed.added === 0, 'reduced: узлы удара есть: ' + [sRed.added, lRed.added, tRed.added]);
 
       const w = await ev(page, () => window.__fxWatch);
       const frameCls = await ev(page, () => document.querySelector('.board-frame').className);
       assert(w.flash === 0, '.blast-flash появлялся: ' + w.flash);
+      assert(w.ring === 0, 'белое кольцо .shockwave появлялось: ' + w.ring);
       assert(w.frameBlast === 0 && !/\bblast(-sun)?\b/.test(frameCls), 'тряска рамки blast/blast-sun: ' + w.frameBlast + ' ' + frameCls);
       const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
-      return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; bomb: off ${bf.off.toFixed(3)} cell, ${bf.cells.toFixed(2)} cells wide, embers ${bf.embers}/low ${bl.embers}/calm ${bc.embers}/reduced ${br.embers}, life ${bf.life.toFixed(0)} ms, nodes ≤ ${bf.maxNodes}, opacity ${bf.opacity.toFixed(2)}/calm ${bc.opacity.toFixed(2)}; flash 0, shake 0; console errors 0`;
+      return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; bomb: off ${bf.off.toFixed(3)} cell, ${bf.cells.toFixed(2)} cells wide, embers ${bf.embers}/low ${bl.embers}/calm ${bc.embers}/reduced ${br.embers}, life ${bf.life.toFixed(0)} ms, nodes ≤ ${bf.maxNodes}, opacity ${bf.opacity.toFixed(2)}/calm ${bc.opacity.toFixed(2)}; line ${lr.firstAt.toFixed(0)}/${lc.firstAt.toFixed(0)} ms, sun ${sn.added} rays, totem ${tm.added} waves, chain peak ${ch.maxNodes} nodes; flash 0, shake 0, ring 0; console errors 0`;
     });
   } finally {
     await browser.close();

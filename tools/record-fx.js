@@ -2,13 +2,15 @@
  *
  * Playwright, окно 1366×768, звук выключен (флажок sun-treasures-muted
  * и выключенный звук браузера), огонь в полном режиме, ?debug, уровень 1-01.
- * Сценарий: 3 обычных хода, удар бомбы в центре поля
+ * Сценарий по умолчанию: 3 обычных хода, удар бомбы в центре поля
  * (__SUN.strike(4, 4, 'bomb')), затем то же на «Спокойно». ~10 с.
+ * --scenario strikes: удар каждого типа (молния ряд и столбец, солнце, тотем)
+ * на «Обычно», затем солнце на «Спокойно» (образец 2).
  * Сервер (python3 -m http.server) скрипт поднимает сам и гасит в finally.
  *
  *   NODE_PATH=/tmp/pw/node_modules node tools/record-fx.js \
  *       --out art-src/phase2/strikes/sample1.webm [--stills <папка>] [--port 8776] \
- *       [--browser chromium|firefox]
+ *       [--browser chromium|firefox] [--scenario strikes]
  *
  * Видео пишет Chromium: запись экрана headless-Firefox в Playwright
  * присылает только изменившиеся куски кадра, и неподвижная часть экрана
@@ -17,7 +19,8 @@
  * ffmpeg (если он есть): видео начинается с готового поля.
  *
  * --stills — отдельным проходом без видео снять кадры бомбы: до, пик,
- * дым, после, и удар у края поля (кадры экрана целиком и крупно поле).
+ * дым, после, и удар у края поля (кадры экрана целиком и крупно поле);
+ * с --scenario strikes — кадры ударов молнии, солнца и тотема.
  */
 const { firefox, chromium } = require('playwright');
 const { spawn, spawnSync } = require('child_process');
@@ -33,6 +36,7 @@ const PORT = opt('port') || '8776';
 const URL = `http://localhost:${PORT}/index.html?debug`;
 const VP = { width: 1366, height: 768 };
 const BROWSER = opt('browser') || (STILLS ? 'firefox' : 'chromium');
+const SCENARIO = opt('scenario') || 'bomb';
 
 const wait = ms => new Promise(res => setTimeout(res, ms));
 
@@ -42,6 +46,10 @@ async function waitServer() {
     await wait(100);
   }
   throw new Error('http.server не отвечает на ' + PORT);
+}
+
+async function portAnswers() {
+  try { await fetch(URL, { signal: AbortSignal.timeout(500) }); return true; } catch (e) { return false; }
 }
 
 async function newCtx(browser, video) {
@@ -94,9 +102,38 @@ async function move(page) {
   await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
 }
 
-async function bomb(page, r, c) {
-  await page.evaluate(([r, c]) => __SUN.strike(r, c, 'bomb'), [r, c]);
+async function bomb(page, r, c) { await strike(page, r, c, 'bomb'); }
+
+/* Удар спецкамня; при dir — молния в этом направлении */
+async function strike(page, r, c, type, dir) {
+  await noSpecials(page);
+  await page.evaluate(([r, c, type, dir]) => __SUN.strike(r, c, type, dir), [r, c, type, dir]);
   await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+}
+
+/* Спецкамни от прошлых каскадов втянули бы в удар цепочкой: на образце
+ * показываем каждый удар отдельно */
+function noSpecials(page) {
+  return page.evaluate(() => __SUN.state.grid.flat().forEach(g => {
+    if (!g || !g.special || g.locked) return;
+    g.special = null;
+    g.lineDir = null;
+    g.el.className = 'gem';
+    g.el.innerHTML = ART.gemInner(g.color);
+  }));
+}
+
+/* Клетка самого частого цвета поля, поближе к центру: солнце ударит по многим */
+function sunCell(page) {
+  return page.evaluate(() => {
+    const cnt = {};
+    const flat = __SUN.state.grid.flat().filter(Boolean);
+    flat.forEach(g => { cnt[g.color] = (cnt[g.color] || 0) + 1; });
+    const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+    const best = flat.filter(g => String(g.color) === top && !g.locked)
+      .sort((a, b) => Math.hypot(a.r - 3.5, a.c - 3.5) - Math.hypot(b.r - 3.5, b.c - 3.5))[0];
+    return [best.r, best.c];
+  });
 }
 
 /* Тот же уровень на «Спокойно»: сложность меняется только при запуске уровня */
@@ -105,6 +142,40 @@ async function toCalm(page) {
   await waitPlayable(page);
   const d = await page.evaluate(() => document.body.dataset.difficulty);
   if (d !== 'calm') throw new Error('body[data-difficulty] = ' + d + ', ждали calm');
+  // Отсчёт «3, 2, 1, ВПЕРЁД!» и падение камней — мимо образца
+  await page.waitForFunction(() => document.getElementById('countdown').classList.contains('hidden'));
+}
+
+/* Образец 2: по удару каждого типа на «Обычно», солнце на «Спокойно» */
+async function recordStrikes(browser) {
+  const { ctx, page } = await newCtx(browser, true);
+  const t0 = Date.now();
+  const sec = () => (Date.now() - t0) / 1000;
+  const keep = [];
+  try {
+    await openLevel(page);
+    keep.push([sec(), null]);
+    await wait(900);
+    await strike(page, 3, 3, 'line', 'row');
+    await wait(1000);
+    await strike(page, 4, 5, 'line', 'col');
+    await wait(1000);
+    const [sr, sc] = await sunCell(page);
+    await strike(page, sr, sc, 'sun');
+    await wait(1100);
+    await strike(page, 3, 4, 'totem');
+    await wait(1000);
+    keep[0][1] = sec() - 0.1;          // до перезапуска уровня: иначе в склейке мелькает пустое поле
+    await toCalm(page);
+    await wait(1300);                 // камни падают на поле — мимо образца
+    keep.push([sec() - 0.1, null]);
+    await wait(800);
+    const [cr, cc] = await sunCell(page);
+    await strike(page, cr, cc, 'sun');
+    await wait(1100);
+  } finally {
+    await finishVideo(page, ctx, keep);
+  }
 }
 
 async function recordVideo(browser) {
@@ -127,23 +198,29 @@ async function recordVideo(browser) {
     await bomb(page, 4, 4);
     await wait(1100);
   } finally {
-    const video = page.video();
-    await ctx.close();
-    if (video) {
-      fs.mkdirSync(path.dirname(OUT), { recursive: true });
-      const raw = OUT.replace(/\.webm$/, '') + '.raw.webm';
-      await video.saveAs(raw);
-      await video.delete();
-      trim(raw, OUT, keep);
-    }
-    fs.rmSync(path.join(path.dirname(OUT), '.rec'), { recursive: true, force: true });
+    await finishVideo(page, ctx, keep);
   }
+}
+
+async function finishVideo(page, ctx, keep) {
+  const video = page.video();
+  await ctx.close();
+  if (video) {
+    fs.mkdirSync(path.dirname(OUT), { recursive: true });
+    const raw = OUT.replace(/\.webm$/, '') + '.raw.webm';
+    await video.saveAs(raw);
+    await video.delete();
+    trim(raw, OUT, keep);
+  }
+  fs.rmSync(path.join(path.dirname(OUT), '.rec'), { recursive: true, force: true });
 }
 
 /* Склеить нужные куски (VP9, без звука): без загрузки страницы и без
  * отсчёта перед уровнем на «Спокойно». keep — [[начало, конец|null], …], с. */
 function trim(raw, out, keep) {
   const parts = keep.filter(k => k[0] != null);
+  // Запись оборвалась до готового поля: не перетирать прежний образец
+  if (!parts.length) { console.log('нечего вырезать — видео не записано'); fs.rmSync(raw, { force: true }); return; }
   const chains = parts.map(([a, b], i) =>
     `[0:v]trim=start=${a.toFixed(2)}${b != null ? ':end=' + b.toFixed(2) : ''},setpts=PTS-STARTPTS[v${i}]`);
   const graph = chains.join(';') + ';' + parts.map((_, i) => `[v${i}]`).join('') + `concat=n=${parts.length}:v=1[v]`;
@@ -157,7 +234,7 @@ function trim(raw, out, keep) {
 }
 
 /* Кадры бомбы по времени от начала удара: экран целиком и крупно поле */
-async function shoot(page, name, r, c, marks) {
+async function shoot(page, name, r, c, marks, type, dir) {
   const board = await page.evaluate(() => {
     const b = document.getElementById('fx').getBoundingClientRect();
     return { x: b.left, y: b.top, width: b.width, height: b.height };
@@ -165,8 +242,9 @@ async function shoot(page, name, r, c, marks) {
   const pad = 24;
   const clip = { x: board.x - pad, y: board.y - pad, width: board.width + 2 * pad, height: board.height + 2 * pad };
   await page.screenshot({ path: path.join(STILLS, `${name}-before.png`) });
+  if (SCENARIO === 'strikes') await noSpecials(page);
   const t0 = Date.now();
-  const run = page.evaluate(([r, c]) => __SUN.strike(r, c, 'bomb'), [r, c]);
+  const run = page.evaluate(([r, c, type, dir]) => __SUN.strike(r, c, type, dir), [r, c, type || 'bomb', dir]);
   for (const [label, ms] of marks) {
     await wait(Math.max(0, ms - (Date.now() - t0)));
     const at = Date.now() - t0;
@@ -177,6 +255,31 @@ async function shoot(page, name, r, c, marks) {
   }
   await run;
   await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+}
+
+async function stillsStrikes(browser) {
+  fs.mkdirSync(STILLS, { recursive: true });
+  const { ctx, page } = await newCtx(browser, false);
+  try {
+    await openLevel(page);
+    await move(page);
+    await wait(900);
+    await shoot(page, 'line-row', 3, 3, [['peak', 130], ['mid', 250], ['fall', 380]], 'line', 'row');
+    await wait(700);
+    await shoot(page, 'line-col', 4, 5, [['peak', 130]], 'line', 'col');
+    await wait(700);
+    const [sr, sc] = await sunCell(page);
+    await shoot(page, 'sun', sr, sc, [['peak', 280], ['fall', 420]], 'sun');
+    await wait(700);
+    await shoot(page, 'totem', 3, 4, [['peak', 220], ['fall', 420]], 'totem');
+    await wait(700);
+    await toCalm(page);
+    await wait(800);
+    const [cr, cc] = await sunCell(page);
+    await shoot(page, 'calm-sun', cr, cc, [['peak', 280]], 'sun');
+  } finally {
+    await ctx.close();
+  }
 }
 
 async function stills(browser) {
@@ -199,6 +302,8 @@ async function stills(browser) {
 }
 
 (async () => {
+  // Занятый порт — чужой сервер: падаем сразу, а не пишем чужую страницу
+  if (await portAnswers()) throw new Error('порт ' + PORT + ' занят — выберите другой (--port)');
   const server = spawn('python3', ['-m', 'http.server', PORT], { cwd: ROOT, stdio: 'ignore' });
   let browser = null;
   try {
@@ -206,9 +311,9 @@ async function stills(browser) {
     browser = BROWSER === 'firefox'
       ? await firefox.launch({ firefoxUserPrefs: { 'media.volume_scale': '0.0' } })
       : await chromium.launch({ args: ['--mute-audio'] });
-    if (STILLS) await stills(browser);
+    if (STILLS) await (SCENARIO === 'strikes' ? stillsStrikes : stills)(browser);
     else {
-      await recordVideo(browser);
+      await (SCENARIO === 'strikes' ? recordStrikes : recordVideo)(browser);
       console.log('видео:', OUT, Math.round(fs.statSync(OUT).size / 1024) + ' КБ');
     }
   } finally {

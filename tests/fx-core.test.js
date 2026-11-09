@@ -79,6 +79,22 @@ test('shardsFor: меньше осколков при большом числе 
   assert.equal(FxCore.shardsFor(5, { reduced: true }), 0);
 });
 
+test('shardsFor: узлы ударов вычитаются из бюджета, всего не больше 120', () => {
+  // Солнце с 16 лучами и диском (17 узлов) и бомба (1 узел) — 18 занято
+  assert.equal(FxCore.shardsFor(18, plain, 0), 6);
+  assert.equal(FxCore.shardsFor(18, plain, 18), 5);
+  assert.equal(FxCore.shardsFor(20, plain, 18), 5);
+  // Не меньше одного осколка, даже если узлов занято больше бюджета
+  assert.equal(FxCore.shardsFor(1, plain, 200), 1);
+  for (let cells = 1; cells <= 64; cells++) {
+    for (const reserved of [0, 5, 9, 18, 36]) {
+      const total = cells * FxCore.shardsFor(cells, plain, reserved);
+      assert.ok(total + reserved <= 120 || FxCore.shardsFor(cells, plain, reserved) === 1,
+        `клеток ${cells}, занято ${reserved}: узлов ${total + reserved}`);
+    }
+  }
+});
+
 test('shardsFor: осколков за шаг не больше 110 (узлы #fx ≤ 120)', () => {
   for (const mode of [plain, { calm: true }, { low: true }]) {
     for (let n = 1; n <= 64; n++) {
