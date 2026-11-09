@@ -1,4 +1,5 @@
-/* Хранитель Солнца — эффекты поля: раскол камня на осколки (этап 2, шаг 5).
+/* Хранитель Солнца — эффекты поля: раскол камня на осколки и удары
+ * спецкамней (этап 2, шаг 5).
  * Что и сколько (раскрой, полёт, бюджет, задержки) решает js/fx-core.js;
  * здесь только DOM и canvas. Анимируются лишь transform и opacity.
  *
@@ -14,9 +15,17 @@
  *                   цвет пыли }; без cells считается худший случай (всё поле,
  *                   1 осколок), чтобы не выйти за бюджет узлов.
  *                   reduced: копия просто гаснет за 200 мс, больше ничего.
+ * Fx.strike(trigger, targets)
+ *                 — удар спецкамня; targets — FxCore.strikeTargets(trigger, cells).
+ *                   bomb: спрайт взрыва .fx-strike.fx-bomb (лист assets/fx/bomb.webp,
+ *                   кадры CSS-анимацией steps() по background-position, css/fx.css)
+ *                   над клетками 3×3 и угли на canvas. reduced — ничего;
+ *                   low — взрыв без углей; calm — углей меньше (FxCore.budget),
+ *                   взрыв прозрачнее (× beamAlpha). Другие типы — пока старый
+ *                   код в js/game.js (blastFx).
  * Fx.canvas       — один <canvas class="fx-canvas"> в #fx; цикл
  *                   requestAnimationFrame идёт, только пока есть живые частицы.
- * Fx.particles()  — число живых частиц (для e2e).
+ * Fx.particles(kind) — число живых частиц (для e2e); kind 'ember' — только угли.
  * Fx.clear()      — убрать всё; вызывается само, когда открывается любой .overlay. */
 (function () {
   'use strict';
@@ -36,6 +45,11 @@
   const DPR_MAX = 2;
   const GOLD = '#ffd27a';
   const SPRITE_PX = 64;
+  /* Взрыв бомбы: узел шире 3 клеток — пик облака (span в assets/fx/bomb.json,
+   * 0,78 кадра) ложится на 3×3, дымные края заходят за них. */
+  const BOMB_CELLS = 4;
+  const EMBER_HOT = '#ffb15c';    // уголь вылетает светло-оранжевым…
+  const EMBER_COOL = '#9a2e14';   // …и гаснет тёмно-красным
 
   function mode() {
     return {
@@ -135,6 +149,66 @@
     const st = cellBox('fx-standin', r, c, inner);
     layer.appendChild(st);
     later(() => { st.remove(); burst(r, c, inner, o, m); }, delay);
+  }
+
+  /* ---------- Удары спецкамней ---------- */
+  function strike(trigger, targets) {
+    if (!trigger) return;
+    const m = mode();
+    if (m.reduced) return;
+    if (trigger.type === 'bomb') bombStrike(trigger, m);
+  }
+
+  /* Обсидиановый взрыв: кадры листает CSS (steps по background-position),
+   * здесь — появление, лёгкий рост и угасание (opacity и transform), чтобы
+   * облако не возникало и не исчезало рывком. */
+  function bombStrike(t, m) {
+    const b = FC.budget(m);
+    const dur = T.strikeMs.bomb;
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-bomb';
+    el.style.left = ((t.c + 0.5) * CELL) + '%';
+    el.style.top = ((t.r + 0.5) * CELL) + '%';
+    el.style.width = el.style.height = (BOMB_CELLS * CELL) + '%';
+    el.style.animationDuration = dur + 'ms';
+    // Под осколками (они добавятся следом), под холстом с углями
+    layer.appendChild(el);
+    const a = b.beamAlpha;
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: 'translate(-50%, -50%) scale(0.8)' },
+        { offset: 0.06, opacity: a, transform: 'translate(-50%, -50%) scale(0.92)', easing: 'ease-out' },
+        { offset: 0.4, opacity: a, transform: 'translate(-50%, -50%) scale(1)', easing: 'ease-in-out' },
+        { offset: 0.78, opacity: 0, transform: 'translate(-50%, -50%) scale(1.05)' },
+        { offset: 1, opacity: 0, transform: 'translate(-50%, -50%) scale(1.06)' }
+      ], { duration: dur, fill: 'forwards' });
+    } else {
+      el.style.opacity = a;
+    }
+    later(() => el.remove(), dur + 40);
+    if (b.embers > 0) embers(t.r, t.c, b.embers);
+  }
+
+  /* Угли: вылетают из облака во все стороны, тормозят, проседают и гаснут,
+   * остывая от светло-оранжевого к тёмно-красному. */
+  function embers(r, c, count) {
+    const hot = softSprite(EMBER_HOT);
+    const cool = softSprite(EMBER_COOL);
+    const t0 = performance.now();
+    for (let i = 0; i < count; i++) {
+      const a = (i + rand()) / count * Math.PI * 2;
+      const d = 0.25 + rand() * 0.55;
+      const sp = 1.6 + rand() * 1.8;
+      add({
+        kind: 'ember', sprite: hot, cool, add: true,
+        x: c + 0.5 + Math.cos(a) * d, y: r + 0.5 + Math.sin(a) * d,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, g: 2.2,
+        size: 0.12 + rand() * 0.1, grow: -0.35,
+        alpha: 0.9, born: t0 + rand() * 120, life: 620 + rand() * 260,
+        rot: 0, spin: 0
+      });
+    }
+    start();
   }
 
   /* ---------- Canvas: пыль и блики ---------- */
@@ -284,7 +358,9 @@
       p.y += p.vy * dt;
       const t = age / p.life;
       // Появляется быстро, гаснет плавно; блик — вспыхивает и сжимается
-      const env = p.twinkle ? Math.sin(Math.PI * t) : Math.min(1, t / 0.15) * (1 - t) * (1 - t);
+      const env = p.twinkle ? Math.sin(Math.PI * t)
+        : p.cool ? Math.min(1, t / 0.08) * (1 - t * t)          // уголь тлеет дольше пыли
+          : Math.min(1, t / 0.15) * (1 - t) * (1 - t);
       const scale = p.twinkle ? 0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, t * 1.3)) : 1 + p.grow * t;
       const s = p.size * scale * k;
       ctx.globalAlpha = Math.max(0, p.alpha * env);
@@ -294,6 +370,13 @@
         ctx.rotate(p.rot + p.spin * t);
         ctx.drawImage(p.sprite, -s / 2, -s / 2, s, s);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+      } else if (p.cool) {
+        // Уголь остывает: горячий спрайт гаснет, холодный проступает
+        const base = ctx.globalAlpha;
+        ctx.globalAlpha = base * (1 - t);
+        ctx.drawImage(p.sprite, p.x * k - s / 2, p.y * k - s / 2, s, s);
+        ctx.globalAlpha = base * t;
+        ctx.drawImage(p.cool, p.x * k - s / 2, p.y * k - s / 2, s, s);
       } else {
         ctx.drawImage(p.sprite, p.x * k - s / 2, p.y * k - s / 2, s, s);
       }
@@ -308,7 +391,7 @@
   function clear() {
     timers.forEach(id => clearTimeout(id));
     timers.clear();
-    layer.querySelectorAll('.fx-standin, .fx-shard').forEach(el => el.remove());
+    layer.querySelectorAll('.fx-standin, .fx-shard, .fx-strike').forEach(el => el.remove());
     parts = [];
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
@@ -328,8 +411,9 @@
   window.Fx = {
     mode,
     shatter,
+    strike,
     canvas,
-    particles: () => parts.length,
+    particles: kind => (kind ? parts.filter(p => p.kind === kind).length : parts.length),
     clear
   };
 })();

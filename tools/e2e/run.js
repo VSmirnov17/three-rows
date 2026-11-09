@@ -1207,6 +1207,82 @@ async function suite(bt, bname, url) {
       assert(vr.at35 === 0, 'у клетки (3,5) были осколки: ' + vr.at35);
       assert(vr.row3 > 0, 'молния по ряду 3 не расколола ни одного камня');
 
+      // Бомба в (4,4): спрайт взрыва .fx-bomb, центр — центр клетки (4,4)
+      // с точностью 5 % клетки; угли на canvas за 200 мс; узел взрыва живёт
+      // не дольше 1100 мс; когда поле успокоилось, через 1,5 с ни узлов
+      // эффектов, ни частиц. Режимы: low — взрыв без углей, reduced — ничего,
+      // calm — углей не больше 10 и взрыв прозрачнее.
+      const bomb = (setup) => ev(page, async (setup) => {
+        const S = window.__SUN;
+        const fx = document.getElementById('fx');
+        const B = document.body;
+        const keep = { fx: B.dataset.fx, difficulty: B.dataset.difficulty };
+        if (setup === 'low') B.dataset.fx = 'low';
+        if (setup === 'calm') B.dataset.difficulty = 'calm';
+        const FXSEL = '.fx-strike, .fx-shard, .fx-standin';
+        let node = null, born = 0, gone = 0, maxNodes = 0, added = 0;
+        const mo = new MutationObserver(list => list.forEach(m => {
+          m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('fx-bomb')) { added++; node = n; born = performance.now(); } });
+          m.removedNodes.forEach(n => { if (n === node) gone = performance.now(); });
+          maxNodes = Math.max(maxNodes, fx.querySelectorAll(FXSEL).length);
+        }));
+        mo.observe(fx, { childList: true });
+        const run = S.strike(4, 4, 'bomb');
+        await new Promise(res => setTimeout(res, 150));
+        const el = fx.querySelector('.fx-bomb');
+        let off = -1, cells = 0, opacity = -1;
+        if (el) {
+          const b = el.getBoundingClientRect();
+          const f = fx.getBoundingClientRect();
+          const cell = f.width / 8;
+          off = Math.hypot(b.left + b.width / 2 - (f.left + 4.5 * cell), b.top + b.height / 2 - (f.top + 4.5 * cell)) / cell;
+          cells = el.offsetWidth / cell;
+        }
+        const embers = window.Fx.particles('ember');
+        await new Promise(res => setTimeout(res, 250));
+        if (el) opacity = +getComputedStyle(el).opacity;
+        await run;
+        await new Promise(res => setTimeout(res, 1500));
+        mo.disconnect();
+        const res = {
+          added, off, cells, embers, opacity,
+          life: born && gone ? gone - born : (node && node.isConnected ? 99999 : 0),
+          maxNodes,
+          leftNodes: fx.querySelectorAll(FXSEL).length,
+          leftParts: window.Fx.particles()
+        };
+        B.dataset.fx = keep.fx || '';
+        if (!keep.fx) delete B.dataset.fx;
+        B.dataset.difficulty = keep.difficulty;
+        return res;
+      }, setup);
+
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const bf = await bomb('full');
+      assert(bf.added === 1, 'бомба: .fx-bomb появился ' + bf.added + ' раз');
+      assert(bf.off >= 0 && bf.off <= 0.05, 'бомба: центр .fx-bomb дальше 5 % клетки от центра (4,4): ' + bf.off.toFixed(3));
+      assert(bf.cells >= 3, 'бомба: взрыв уже 3 клеток: ' + bf.cells.toFixed(2));
+      assert(bf.embers > 0, 'бомба: нет углей на canvas за 150 мс');
+      assert(bf.life > 0 && bf.life <= 1100, 'бомба: узел взрыва жил ' + bf.life.toFixed(0) + ' мс (предел 1100)');
+      assert(bf.maxNodes <= 120, 'бомба: узлов эффектов в #fx ' + bf.maxNodes + ' (предел 120)');
+      assert(bf.leftNodes === 0 && bf.leftParts === 0, 'бомба: через 1,5 с осталось узлов ' + bf.leftNodes + ', частиц ' + bf.leftParts);
+
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const bl = await bomb('low');
+      assert(bl.added === 1 && bl.embers === 0, 'бомба low: взрыв ' + bl.added + ', углей ' + bl.embers + ' (ждали 1 и 0)');
+      assert(bl.leftNodes === 0 && bl.leftParts === 0, 'бомба low: остались узлы/частицы');
+
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const bc = await bomb('calm');
+      assert(bc.added === 1 && bc.embers > 0 && bc.embers <= 10, 'бомба calm: взрыв ' + bc.added + ', углей ' + bc.embers + ' (ждали 1..10)');
+      assert(bc.opacity >= 0 && bc.opacity < bf.opacity, 'бомба calm: взрыв не прозрачнее полного: ' + bc.opacity + ' vs ' + bf.opacity);
+
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const br = await bomb('reduced');
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      assert(br.added === 0 && br.embers === 0, 'бомба reduced: взрыв ' + br.added + ', углей ' + br.embers + ' (ждали 0)');
+
       const w = await ev(page, () => window.__fxWatch);
       const frameCls = await ev(page, () => document.querySelector('.board-frame').className);
       assert(w.flash === 0, '.blast-flash появлялся: ' + w.flash);
@@ -1214,7 +1290,7 @@ async function suite(bt, bname, url) {
       const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
-      return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; flash 0, shake 0; console errors 0`;
+      return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; bomb: off ${bf.off.toFixed(3)} cell, ${bf.cells.toFixed(2)} cells wide, embers ${bf.embers}/low ${bl.embers}/calm ${bc.embers}/reduced ${br.embers}, life ${bf.life.toFixed(0)} ms, nodes ≤ ${bf.maxNodes}, opacity ${bf.opacity.toFixed(2)}/calm ${bc.opacity.toFixed(2)}; flash 0, shake 0; console errors 0`;
     });
   } finally {
     await browser.close();
@@ -1251,6 +1327,18 @@ async function smokeFile(bt, bname) {
       assert(fire.calm && fire.calm.startsWith('file:') && fire.calmW > 0, 'fire-calm sheet not loaded: ' + JSON.stringify(fire));
       assert(fire.flare && fire.flareW > 0, 'fire-flare sheet not loaded: ' + JSON.stringify(fire));
       assert(fire.bowlW > 0, 'brazier bowl not loaded: ' + JSON.stringify(fire));
+      // Лист взрыва бомбы (css/fx.css) с диска: адрес — из правила .fx-bomb
+      const bombW = await ev(page, async () => {
+        const probe = document.createElement('div');
+        probe.className = 'fx-strike fx-bomb';
+        probe.style.animation = 'none';
+        document.getElementById('fx').appendChild(probe);
+        const m = /url\(["']?(.*?)["']?\)/.exec(getComputedStyle(probe).backgroundImage);
+        probe.remove();
+        if (!m || !m[1].startsWith('file:')) return 0;
+        return new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = m[1]; });
+      });
+      assert(bombW > 0, 'bomb sheet not loaded from file://');
       // Живой фон земли 1 с диска: пять картинок грузятся, маска воды задана.
       // Маска — data: URI (assets/backdrop/land1/water-mask.js): CSS-маску по
       // file:// Chromium и WebKit не грузят (CORS), и струи легли бы на весь прямоугольник.
@@ -1287,7 +1375,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: land2=${JSON.stringify(bd2.sizes)} savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bombSheet=${bombW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: land2=${JSON.stringify(bd2.sizes)} savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }

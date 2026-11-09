@@ -876,16 +876,20 @@
   }
 
   /* Удар спецкамня. Без белой вспышки и тряски поля: для пожилого игрока
-     это резко (спецификация шага 5). */
-  function blastFx(trigger) {
+     это резко (спецификация шага 5). cells — клетки шага с цветами
+     [{ r, c, color }], по ним FxCore.strikeTargets находит клетки удара.
+     Бомба — уже новый эффект (Fx.strike: обсидиановый взрыв и угли),
+     остальные типы — пока старый код. */
+  function blastFx(trigger, cells) {
     emitVisual('blast', { type: trigger.type });
+    if (trigger.type === 'bomb') {
+      if (window.Fx) Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || []));
+      return;
+    }
     const isSun = trigger.type === 'sun';
-    const isBomb = trigger.type === 'bomb';
     const isTotem = trigger.type === 'totem';
     if (isSun) {
       sunBurstFx(trigger.r, trigger.c);
-    } else if (isBomb) {
-      explosionFx(trigger.r, trigger.c);
     } else if (isTotem) {
       beamFx(trigger.r, trigger.c, 'h');
       beamFx(trigger.r, trigger.c, 'v');
@@ -896,18 +900,8 @@
 
     shockwaveFx(trigger.r, trigger.c, isSun || isTotem);
     if (isSun) sunRaysFx(trigger.r, trigger.c);
-    const burstColor = isSun ? '#ffd166' : isBomb ? '#ffb070' : isTotem ? '#d9b4ff' : '#a9ecff';
-    spawnBurst(trigger.r, trigger.c, burstColor, isSun ? 26 : isBomb ? 22 : isTotem ? 24 : 16);
-  }
-
-  /* Взрыв камня-бомбы: огненный шар вместо луча */
-  function explosionFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'bomb-blast';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 760);
+    const burstColor = isSun ? '#ffd166' : isTotem ? '#d9b4ff' : '#a9ecff';
+    spawnBurst(trigger.r, trigger.c, burstColor, isSun ? 26 : isTotem ? 24 : 16);
   }
 
   function impactFx(r, c, strength) {
@@ -1076,7 +1070,15 @@
     setCombo(mult);
     emitVisual('match', { chain, mult });
 
-    triggers.forEach(t => blastFx(t));
+    const cellsArr = Array.from(clear).map(parseKey);
+    // Цвет клеток — до applyCascade: по нему солнце находит свои камни,
+    // а удары (blastFx, раскол ниже) — свои клетки.
+    const cellsColored = cellsArr.map(p => {
+      const gem = gemAt(p.r, p.c);
+      return { r: p.r, c: p.c, color: gem ? gem.color : null };
+    });
+
+    triggers.forEach(t => blastFx(t, cellsColored));
 
     if (triggers.length) {
       const sunCount = triggers.filter(t => t.type === 'sun').length;
@@ -1085,8 +1087,6 @@
       const pan = clamp((triggers[0].c + 0.5) / COLS * 2 - 1, -0.8, 0.8);
       SFX.blast({ line: lineCount, sun: sunCount, chain, pan, bomb: bombCount });
     }
-
-    const cellsArr = Array.from(clear).map(parseKey);
 
     // Клетки, которые реально двигают незакрытые цели: за них платим
     // заметно больше, чтобы «фарм» пустых камней не окупался.
@@ -1158,11 +1158,6 @@
 
     SFX.match(chain, clear.size, triggers.length > 0);
     // Камень раскалывается, когда до него дошёл удар (FxCore.mergeDelays).
-    // Цвет клеток — до applyCascade: по нему солнце находит свои камни.
-    const cellsColored = cellsArr.map(p => {
-      const gem = gemAt(p.r, p.c);
-      return { r: p.r, c: p.c, color: gem ? gem.color : null };
-    });
     const delays = FxCore.mergeDelays(cellsColored, triggers);
     clear.forEach(k => {
       const p = parseKey(k);

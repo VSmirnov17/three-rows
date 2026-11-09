@@ -251,3 +251,22 @@ test('mergeDelays: без ударов все задержки нулевые', 
   assert.equal(m.size, cells.length);
   for (const v of m.values()) assert.equal(v, 0);
 });
+
+/* Лист взрыва бомбы: css/fx.css листает его steps() с числами, вписанными
+ * руками (по file:// json не загрузить), — они должны совпадать с
+ * assets/fx/bomb.json, а лист — укладываться в бюджет шага 5. */
+test('лист взрыва бомбы совпадает с css/fx.css и в бюджете', () => {
+  const fs = require('node:fs');
+  const at = (...p) => require('node:path').join(__dirname, '..', ...p);
+  const meta = JSON.parse(fs.readFileSync(at('assets', 'fx', 'bomb.json'), 'utf8'));
+  const css = fs.readFileSync(at('css', 'fx.css'), 'utf8');
+  const kb = fs.statSync(at('assets', 'fx', meta.src)).size / 1024;
+  assert.ok(meta.frames <= 24, 'кадров ' + meta.frames);
+  assert.ok(meta.fw <= 256 && meta.fh <= 256, 'кадр ' + meta.fw + '×' + meta.fh);
+  assert.ok(kb <= 400, 'лист ' + kb.toFixed(0) + ' КБ');
+  const rule = /\.fx-bomb\s*\{[^}]*\}/.exec(css)[0];
+  assert.ok(rule.includes('assets/fx/' + meta.src), 'файл листа в css');
+  assert.ok(rule.includes(`/ ${meta.frames * 100}% 100%`), 'background-size под ' + meta.frames + ' кадров');
+  assert.ok(rule.includes(`steps(${meta.frames}, jump-none)`), 'steps() под ' + meta.frames + ' кадров');
+  assert.ok(rule.includes(`${TIMING.strikeMs.bomb}ms`), 'длительность = TIMING.strikeMs.bomb');
+});

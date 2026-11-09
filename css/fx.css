@@ -1,4 +1,4 @@
-/* Эффекты поля (js/visuals-fx.js): раскол камня на осколки.
+/* Эффекты поля (js/visuals-fx.js): раскол камня на осколки и удары спецкамней.
    Анимируются только transform и opacity (Web Animations из JS). */
 
 /* Камень, который раскалывается: узел прячется сразу, вместо него
@@ -26,4 +26,29 @@
   height: 100%;
   z-index: 1;
   pointer-events: none;
+}
+
+/* ---------- Удары спецкамней (Fx.strike) ---------- */
+
+/* Взрыв бомбы: лист assets/fx/bomb.webp — одна строка из 24 кадров 256×256
+   (EmberGen «Ground Explosion», JangaFX, CC0, см. assets/fx/LICENSE-EmberGen-CC0.txt;
+   сборка — tools/pack_strike.py). Кадры листает steps() по background-position,
+   длительность ставит JS (FxCore.TIMING.strikeMs.bomb); появление, рост и
+   угасание — Web Animations (opacity, transform). Центр узла — центр клетки
+   удара, размер (4 клетки) ставит JS. */
+.fx-strike {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.fx-bomb {
+  background: url("../assets/fx/bomb.webp") 0 0 / 2400% 100% no-repeat;
+  animation: fxBombFrames 800ms steps(24, jump-none) forwards;
+}
+
+@keyframes fxBombFrames {
+  from { background-position: 0% 0; }
+  to { background-position: 100% 0; }
 }

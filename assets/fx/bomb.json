@@ -1,0 +1,9 @@
+{
+  "src": "bomb.webp",
+  "frames": 24,
+  "fw": 256,
+  "fh": 256,
+  "fps": 30,
+  "span": 0.777,
+  "source": "EmberGen Ground Explosion (JangaFX), CC0"
+}
