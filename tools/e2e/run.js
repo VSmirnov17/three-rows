@@ -904,7 +904,7 @@ async function suite(bt, bname, url) {
         const px = cv.width && cv.height ? cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data : [];
         let painted = 0;
         for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) painted++;
-        return { mode: document.body.dataset.bd, painted, flies: __BD.flies().length, anim: getComputedStyle(document.querySelector('.bd-water')).animationName };
+        return { mode: document.body.dataset.bd, painted, flies: __BD.flies().length, anim: getComputedStyle(document.querySelector('.theme-bg.on .bd-water')).animationName };
       });
       assert(bd.mode === 'still', 'data-bd при reduced-motion: ' + bd.mode);
       assert(bd.painted === 0 && bd.flies === 0, `светлячки при reduced-motion: painted=${bd.painted} flies=${bd.flies}`);
@@ -975,7 +975,7 @@ async function suite(bt, bname, url) {
         a11y.forEach(a => assert(!a.missing && a.aria === 'true' && a.pe === 'none', 'слой фона: ' + JSON.stringify(a)));
         // Стартовый экран — оверлей: фон на паузе (на телефоне стоит всегда)
         await page.waitForTimeout(300);
-        const s0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.bd-water')).animationName }));
+        const s0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.theme-bg.on .bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.theme-bg.on .bd-water')).animationName }));
         await page.waitForTimeout(1000);
         const s1 = await ev(page, () => __BD.frames);
         assert(s0.mode === (vp.phone ? 'still' : 'paused'), 'режим на стартовом экране: ' + s0.mode);
@@ -987,7 +987,7 @@ async function suite(bt, bname, url) {
         await page.click('#playBtn');
         await waitStarted(page);
         await page.waitForTimeout(2000);
-        const g0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.bd-water')).animationName }));
+        const g0 = await ev(page, () => ({ mode: document.body.dataset.bd, f: __BD.frames, ps: getComputedStyle(document.querySelector('.theme-bg.on .bd-water')).animationPlayState, an: getComputedStyle(document.querySelector('.theme-bg.on .bd-water')).animationName }));
         await page.waitForTimeout(1000);
         const g1 = await ev(page, () => __BD.frames);
         if (vp.phone) {
@@ -1003,7 +1003,7 @@ async function suite(bt, bname, url) {
         await shot(page, bname, vp.n + '-L4-backdrop');
         // Луна: 7×7 точек по рамке .bd-moon
         const moonPts = await ev(page, () => {
-          const r = document.querySelector('.bd-moon').getBoundingClientRect();
+          const r = document.querySelector('.theme-bg.on .bd-moon').getBoundingClientRect();
           const p = [];
           for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) p.push([r.left + r.width * (i + 0.5) / 7, r.top + r.height * (j + 0.5) / 7]);
           return p;
@@ -1015,7 +1015,7 @@ async function suite(bt, bname, url) {
         if (vp.moonMin) assert(moonFrac >= vp.moonMin, `луна открыта на ${(moonFrac * 100).toFixed(0)}% < ${vp.moonMin * 100}%: ${moonBy}`);
         // Водопад: 20 точек по средней вертикали .bd-wf
         const wfPts = await ev(page, () => {
-          const r = document.querySelector('.bd-wf').getBoundingClientRect();
+          const r = document.querySelector('.theme-bg.on .bd-wf').getBoundingClientRect();
           const p = [];
           for (let i = 0; i < 20; i++) p.push([r.left + r.width / 2, r.top + r.height * (i + 0.5) / 20]);
           return p;
@@ -1042,7 +1042,7 @@ async function suite(bt, bname, url) {
       });
     }
 
-    await scenario(bname, '12 backdrop land switch 2-01, mosaic keeps bg-jaguar', async () => {
+    await scenario(bname, '12 backdrop land switch 2-01 (temple plate, no waterfall), mosaic keeps bg-jaguar', async () => {
       const key = 's12switch';
       const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fxFull: true });
       await startFresh(page, url);
@@ -1059,23 +1059,52 @@ async function suite(bt, bname, url) {
       await ev(page, () => { window.__SUN.start('2-01'); });
       await waitStarted(page);
       await page.waitForFunction(() => { const l = document.querySelector('.theme-bg[data-theme="2"]'); return l && l.classList.contains('on'); }, null, { timeout: 15000 });
-      await page.waitForTimeout(1000);
-      const r = await ev(page, () => ({
-        on1: document.querySelector('.theme-bg[data-theme="1"]').classList.contains('on'),
-        hb: document.body.classList.contains('has-backdrop'),
-        want: !!Campaign.lands().find(l => l.id === 2).backdrop,
-        f: __BD.frames
-      }));
+      await page.waitForTimeout(2000);
+      const r = await ev(page, () => {
+        const l2 = document.querySelector('.theme-bg[data-theme="2"]');
+        const plate = l2.querySelector('.bd-plate');
+        return {
+          on1: document.querySelector('.theme-bg[data-theme="1"]').classList.contains('on'),
+          hb: document.body.classList.contains('has-backdrop'),
+          want: !!Campaign.lands().find(l => l.id === 2).backdrop,
+          stage: !!l2.querySelector('.bd-stage'),
+          wf: l2.querySelectorAll('.bd-wf, .bd-mist, .bd-water').length,
+          moon: !!l2.querySelector('.bd-moon'),
+          clouds: !!l2.querySelector('.bd-cloud-track'),
+          plateSrc: plate && plate.src.replace(/^.*\/assets\//, 'assets/'),
+          plateW: plate ? plate.naturalWidth : 0,
+          mode: document.body.dataset.bd,
+          f: __BD.frames
+        };
+      });
       await page.waitForTimeout(1000);
       const f1 = await ev(page, () => __BD.frames);
       assert(!r.on1, 'слой земли 1 остался .on');
-      assert(r.hb === r.want, `has-backdrop=${r.hb}, а backdrop у земли 2 ${r.want}`);
-      if (!r.want) assert(f1 === r.f, `на земле без живого фона светлячки летают: ${r.f} -> ${f1}`);
+      assert(r.want === true && r.hb === true, `has-backdrop=${r.hb}, backdrop у земли 2 ${r.want}: должен быть живой фон`);
+      assert(r.stage, 'в слое земли 2 нет .bd-stage');
+      assert(r.wf === 0, `в слое земли 2 есть водопад или туман (${r.wf})`);
+      assert(r.moon && r.clouds, 'в слое земли 2 нет луны или облаков');
+      assert(r.plateSrc === 'assets/backdrop/land2/plate.webp' && r.plateW === 1672, 'плита земли 2: ' + r.plateSrc + ' ' + r.plateW);
+      assert(r.mode === 'run', 'на уровне земли 2 режим ' + r.mode);
+      assert(f1 > r.f, `на земле 2 светлячки не летают: ${r.f} -> ${f1}`);
+      // Луна открыта (7×7 точек по рамке .bd-moon) и не закрыта кнопками и табличками
+      const moonPts = await ev(page, () => {
+        const m = document.querySelector('.theme-bg[data-theme="2"] .bd-moon').getBoundingClientRect();
+        const p = [];
+        for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) p.push([m.left + m.width * (i + 0.5) / 7, m.top + m.height * (j + 0.5) / 7]);
+        return p;
+      });
+      const moonHit = await bdOpen(page, moonPts);
+      const moonFrac = moonHit.filter(h => h === '').length / moonHit.length;
+      assert(moonFrac >= 0.6, `луна земли 2 открыта на ${(moonFrac * 100).toFixed(0)}%: ` + [...new Set(moonHit.filter(Boolean))].join(','));
+      // Светлячки и здесь не над табличками, кнопками, рамкой поля
+      const fc = await fliesCheck(page);
+      assert(fc.n > 0 && !fc.bad.length, `светлячки земли 2: ${fc.n}, на занятых местах: ` + fc.bad.join(' '));
       await shot(page, bname, 'desktop-L4-land2-backdrop');
       const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
-      return `mosaic ${mosaic.length} cells bg-jaguar; land2 has-backdrop=${r.hb} (backdrop ${r.want}); layer1 on=${r.on1}; frames ${r.f}->${f1}; console errors 0`;
+      return `mosaic ${mosaic.length} cells bg-jaguar; land2 has-backdrop=${r.hb}, no .bd-wf/.bd-mist, plate ${r.plateW}px, moon open ${(moonFrac * 100).toFixed(0)}%, flies ${fc.n} ok; layer1 on=${r.on1}; frames ${r.f}->${f1}; console errors 0`;
     });
   } finally {
     await browser.close();
@@ -1121,13 +1150,23 @@ async function smokeFile(bt, bname) {
         const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src; });
         const sizes = {};
         for (const k of ['plate', 'water', 'mask', 'moon', 'clouds']) sizes[k] = await load(land[k]);
-        const cs = getComputedStyle(document.querySelector('.bd-wf'));
+        const cs = getComputedStyle(document.querySelector('.theme-bg.on .bd-wf'));
         const mask = cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
         return { sizes, mask: String(mask).slice(0, 40) };
       });
       assert(Object.values(bd.sizes).every(w => w > 0), 'backdrop images not loaded: ' + JSON.stringify(bd.sizes));
       assert(bd.mask && bd.mask !== 'none' && bd.mask !== 'undefined', 'no mask on .bd-wf: ' + bd.mask);
       assert(bd.mask.startsWith('url("data:'), 'mask is not a data: URI (file:// CORS): ' + bd.mask);
+      // Земля 2 (без воды): плита с диска, луна и облака — общие файлы земли 1
+      const bd2 = await ev(page, async () => {
+        const land = Campaign.lands().find(l => l.id === 2).backdrop;
+        const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src; });
+        const sizes = {};
+        for (const k of ['plate', 'moon', 'clouds']) sizes[k] = await load(land[k]);
+        return { sizes, water: !!(land.water || land.mask || land.wf), waterfall: land.waterfall };
+      });
+      assert(Object.values(bd2.sizes).every(w => w > 0), 'land 2 backdrop images not loaded: ' + JSON.stringify(bd2.sizes));
+      assert(!bd2.water && bd2.waterfall === false, 'land 2 backdrop must have no water: ' + JSON.stringify(bd2));
       const bdErr = (consoleLog[bname + '/file-smoke'] || []).filter(l => /assets\/backdrop\//.test(l) || /CORS|Access-Control/.test(l));
       assert(!bdErr.length, 'backdrop load errors: ' + bdErr.join(' | '));
       await playRealMove(page);
@@ -1138,7 +1177,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: land2=${JSON.stringify(bd2.sizes)} savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }

@@ -43,14 +43,17 @@
   function build(layer, land, onReady) {
     const b = land.backdrop;
     layer.setAttribute("aria-hidden", "true");
-    layer.style.setProperty("--bd-tex", cssUrl(b.water));
-    // Маска — data: URI из assets/backdrop/landN/water-mask.js, если он подключён:
-    // CSS-маску с file:// Chromium и WebKit не грузят (запрос маски идёт с CORS)
-    const maskData = window.BACKDROP_DATA && window.BACKDROP_DATA[b.mask];
-    layer.style.setProperty("--bd-mask", maskData ? 'url("' + maskData + '")' : cssUrl(b.mask));
+    const water = !!(b.waterfall && b.wf);   // у земли без воды (земля 2) струй, маски и тумана нет
+    if (water) {
+      layer.style.setProperty("--bd-tex", cssUrl(b.water));
+      // Маска — data: URI из assets/backdrop/landN/water-mask.js, если он подключён:
+      // CSS-маску с file:// Chromium и WebKit не грузят (запрос маски идёт с CORS)
+      const maskData = window.BACKDROP_DATA && window.BACKDROP_DATA[b.mask];
+      layer.style.setProperty("--bd-mask", maskData ? 'url("' + maskData + '")' : cssUrl(b.mask));
+      // Высота плитки струй — доля высоты сцены (высота сцены — как в css/backdrop.css)
+      layer.style.setProperty("--bd-tile", "calc(max(100vh, 56.27vw) * " + b.tile + ")");
+    }
     layer.style.setProperty("--bd-clouds", cssUrl(b.clouds));
-    // Высота плитки струй — доля высоты сцены (высота сцены — как в css/backdrop.css)
-    layer.style.setProperty("--bd-tile", "calc(max(100vh, 56.27vw) * " + b.tile + ")");
 
     const stage = el("div", "bd-stage");
     stage.setAttribute("aria-hidden", "true");
@@ -61,7 +64,7 @@
     plate.src = b.plate;
     stage.appendChild(plate);
 
-    if (b.waterfall && b.wf) {
+    if (water) {
       const g = b.wf;
       const wf = el("div", "bd-wf");
       wf.style.left = pct(g.x);

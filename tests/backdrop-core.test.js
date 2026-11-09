@@ -149,3 +149,38 @@ test('все файлы assets/backdrop/land1 вместе не больше 450
   const total = fs.readdirSync(dir).reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
   assert.ok(total <= 450 * 1024, `${total} байт`);
 });
+
+test('земля 2: плита без воды, луна и облака общие с землёй 1, размер совпадает с backdrop.json', () => {
+  const land = require('../js/campaign/land-02.js');
+  const root = path.join(__dirname, '..');
+  const bd = land.backdrop;
+  assert.ok(bd, 'у земли 2 нет backdrop');
+  assert.equal(bd.waterfall, false);
+  assert.ok(!bd.wf && !bd.water && !bd.mask && bd.tile === undefined, 'у земли 2 не должно быть воды');
+  for (const k of ['plate', 'moon', 'clouds']) {
+    assert.ok(fs.existsSync(path.join(root, bd[k])), `${k}: нет файла ${bd[k]}`);
+  }
+  assert.equal(bd.plate, 'assets/backdrop/land2/plate.webp');
+  assert.equal(bd.moon, 'assets/backdrop/land1/moon.webp');
+  assert.equal(bd.clouds, 'assets/backdrop/land1/clouds.webp');
+  assert.equal(land.bg, bd.plate);
+  assert.equal(land.mosaic, 'assets/art/bg-temple.webp');
+  const json = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land2', 'backdrop.json'), 'utf8'));
+  assert.deepEqual(Object.keys(json), ['plate'], 'в backdrop.json земли 2 только размер плиты');
+  // размер плиты — из заголовка WebP (VP8: 14 бит ширины/высоты со смещения 26)
+  const buf = fs.readFileSync(path.join(root, bd.plate));
+  assert.equal(buf.toString('ascii', 8, 12), 'WEBP');
+  assert.equal(buf.toString('ascii', 12, 16), 'VP8 ');
+  assert.deepEqual([buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff], json.plate);
+  // плита того же вида сцены, что у земли 1 (CSS-сцена 1672×941)
+  const j1 = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land1', 'backdrop.json'), 'utf8'));
+  assert.deepEqual(json.plate, j1.plate);
+});
+
+test('все файлы assets/backdrop/land2 вместе не больше 250 КБ', () => {
+  const dir = path.join(__dirname, '..', 'assets', 'backdrop', 'land2');
+  const names = fs.readdirSync(dir).sort();
+  assert.deepEqual(names, ['backdrop.json', 'plate.webp']);
+  const total = names.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
+  assert.ok(total <= 250 * 1024, `${total} байт`);
+});

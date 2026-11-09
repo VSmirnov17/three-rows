@@ -19,6 +19,12 @@
 на Pillow (в системном python3 numpy нет).
 
   python3 tools/pack_backdrop.py --land 1 [--src DIR] [--out DIR]
+
+Земля 2 («Храм Змея») — только плита, без воды, маски, луны и облаков:
+  python3 tools/pack_backdrop.py --land 2
+берёт <src>/plate-land2.png и пишет assets/backdrop/land2/{plate.webp,
+backdrop.json}. Луна и облака земли 2 — те же файлы land1/moon.webp и
+land1/clouds.webp (пути в js/campaign/land-02.js), копий не делается.
 """
 import argparse
 import base64
@@ -42,6 +48,7 @@ MASK_ZERO_COLS = 2        # столько крайних столбцов с к
 TEX_COLOR = (215, 232, 245)
 TEX_A_LO, TEX_A_SPAN, TEX_A_POW = 12.0, 90.0, 1.0
 MOON_SIZE = 256
+PLATE_ONLY_BUDGET = 250 * 1024   # земля без воды: плита и json
 # CSS blur(.6px) в пробнике шёл по диску ~100 px; в картинке 256 px это ~1,5 px
 MOON_BLUR = 1.5
 MOON_BRIGHTNESS = 0.92
@@ -278,6 +285,27 @@ def verify_outputs(out):
     return errors
 
 
+def main_plate_only(a, out):
+    """Земля без воды: плита и backdrop.json (размер плиты), как у земли 1 по q и форме."""
+    plate = Image.open(os.path.join(a.src, "plate-land%d.png" % a.land)).convert("RGB")
+    W, H = plate.size
+    sizes = {"plate.webp": save(plate, os.path.join(out, "plate.webp"), quality=Q_PLATE)}
+    geom = {"plate": [W, H]}
+    jp = os.path.join(out, "backdrop.json")
+    with open(jp, "w") as f:
+        json.dump(geom, f, ensure_ascii=False)
+        f.write("\n")
+    sizes["backdrop.json"] = os.path.getsize(jp)
+    print(json.dumps(geom, ensure_ascii=False))
+    total = 0
+    for k, v in sizes.items():
+        total += v
+        print("%-18s %7.1f КБ" % (k, v / 1024))
+    print("%-18s %7.1f КБ" % ("всего", total / 1024))
+    if total > PLATE_ONLY_BUDGET:
+        sys.exit("бюджет %d КБ превышен" % (PLATE_ONLY_BUDGET // 1024))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--land", type=int, default=1)
@@ -287,6 +315,8 @@ def main():
     a = ap.parse_args()
     out = a.out or "assets/backdrop/land%d" % a.land
     os.makedirs(out, exist_ok=True)
+    if a.land != 1:
+        return main_plate_only(a, out)
 
     plate = Image.open(os.path.join(a.src, "plate.png")).convert("RGB")
     W, H = plate.size

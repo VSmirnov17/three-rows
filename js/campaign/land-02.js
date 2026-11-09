@@ -51,8 +51,17 @@
     id: 2,
     key: 'serpent',
     name: 'Храм Змея',
-    bg: 'assets/art/bg-temple.webp',
+    bg: 'assets/backdrop/land2/plate.webp',
     mosaic: 'assets/art/bg-temple.webp',
+    /* Живой фон без воды (js/visuals-backdrop.js): плита храма своя, луна и
+       облака общие с землёй 1 (те же файлы, без копий). Размер плиты — из
+       assets/backdrop/land2/backdrop.json (tools/pack_backdrop.py --land 2) */
+    backdrop: {
+      plate: 'assets/backdrop/land2/plate.webp',
+      moon: 'assets/backdrop/land1/moon.webp',
+      clouds: 'assets/backdrop/land1/clouds.webp',
+      waterfall: false
+    },
     mechanic: 'vines',
     scenes: {
       intro: [
