@@ -1122,6 +1122,100 @@ async function suite(bt, bname, url) {
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
       return `mosaic ${mosaic.length} cells bg-jaguar; land2 has-backdrop=${r.hb}, no .bd-wf/.bd-mist, plate ${r.plateW}px, moon open ${(moonFrac * 100).toFixed(0)}%, flies ${fc.n} ok; layer1 on=${r.on1}; frames ${r.f}->${f1}; console errors 0`;
     });
+
+    // ---- 13 ----
+    await scenario(bname, '13 strikes: gem shatters into shards, no flash or shake, vines survive a line', async () => {
+      const key = 's13';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fxFull: true });
+      await startFresh(page, url);
+      await page.click('#startScreen [data-difficulty-btn="normal"]');
+      await page.click('#playBtn');
+      await waitStarted(page);
+      await page.waitForFunction(() => __SUN.state.running && !__SUN.state.busy, null, { timeout: 10000 });
+      // Наблюдатель на весь сценарий: вспышки .blast-flash, тряска рамки,
+      // когда камень спрятан (fx-gone) и когда появились осколки (с клеткой).
+      await ev(page, () => {
+        const W = window.__fxWatch = { flash: 0, frameBlast: 0, gone: [], shards: [], lifeMax: 0 };
+        const born = new WeakMap();
+        new MutationObserver(list => list.forEach(m => {
+          m.addedNodes.forEach(n => {
+            if (!n.classList) return;
+            if (n.classList.contains('blast-flash')) W.flash++;
+            if (n.classList.contains('fx-shard')) {
+              born.set(n, performance.now());
+              W.shards.push({ t: performance.now(), cell: n.dataset.cell });
+            }
+          });
+          m.removedNodes.forEach(n => {
+            if (born.has(n)) W.lifeMax = Math.max(W.lifeMax, performance.now() - born.get(n));
+          });
+        })).observe(document.getElementById('fx'), { childList: true, subtree: true });
+        new MutationObserver(list => list.forEach(m => {
+          if (m.target.classList && m.target.classList.contains('fx-gone')) W.gone.push(performance.now());
+        })).observe(document.getElementById('tiles'), { attributes: true, attributeFilter: ['class'], subtree: true });
+        const frame = document.querySelector('.board-frame');
+        new MutationObserver(() => {
+          if (frame.classList.contains('blast') || frame.classList.contains('blast-sun')) W.frameBlast++;
+        }).observe(frame, { attributes: true, attributeFilter: ['class'] });
+      });
+
+      // Обычный ход: камни раскалываются на осколки в течение 150 мс,
+      // через 700 мс после хода ни осколков, ни копий камней не осталось.
+      await playRealMove(page);
+      const mv = await ev(page, () => {
+        const W = window.__fxWatch;
+        return { gone: W.gone.length, shards: W.shards.length, lag: W.shards.length && W.gone.length ? W.shards[0].t - W.gone[0] : -1 };
+      });
+      assert(mv.gone > 0, 'после хода ни один камень не спрятан (fx-gone)');
+      assert(mv.shards > 0, 'после хода нет .fx-shard');
+      assert(mv.lag >= 0 && mv.lag <= 150, 'осколки появились не за 150 мс: ' + mv.lag.toFixed(0));
+      await page.waitForTimeout(700);
+      const left = await ev(page, () => document.querySelectorAll('#fx .fx-shard, #fx .fx-standin').length);
+      assert(left === 0, 'через 700 мс в #fx осталось осколков/копий: ' + left);
+      mv.lifeMax = await ev(page, () => window.__fxWatch.lifeMax);
+      assert(mv.lifeMax > 0 && mv.lifeMax <= 700, 'осколок жил дольше 700 мс: ' + mv.lifeMax.toFixed(0));
+      await page.waitForTimeout(800);
+      const parts = await ev(page, () => window.Fx.particles());
+      assert(parts === 0, 'через 1,5 с на canvas живые частицы: ' + parts);
+
+      // Лианы: молния по ряду 3 срывает лиану с (3,5), камень остаётся на месте.
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      await ev(page, () => __SUN.setVines([[3, 5]]));
+      const vr = await ev(page, async () => {
+        const S = window.__SUN;
+        const W = window.__fxWatch;
+        const node = S.gemAt(3, 5).el;
+        let snapped = false;
+        const mo = new MutationObserver(() => { if (node.classList.contains('vine-snap')) snapped = true; });
+        mo.observe(node, { attributes: true, attributeFilter: ['class'] });
+        const t0 = performance.now();
+        const run = S.strike(3, 1, 'line', 'row');
+        // Первый шаг: гашение сразу, удаление узлов через 310 мс, затем падение (≥390 мс)
+        await new Promise(res => setTimeout(res, 400));
+        const alive = node.isConnected && S.gemAt(3, 5) && S.gemAt(3, 5).el === node;
+        const firstStep = W.shards.filter(s => s.t >= t0 && s.t - t0 < 400);
+        await run;
+        mo.disconnect();
+        return {
+          snapped, alive,
+          at35: firstStep.filter(s => s.cell === '3,5').length,
+          row3: firstStep.filter(s => s.cell && s.cell.startsWith('3,')).length
+        };
+      });
+      assert(vr.snapped, 'камень (3,5) не получил vine-snap');
+      assert(vr.alive, 'узел камня (3,5) убран молнией');
+      assert(vr.at35 === 0, 'у клетки (3,5) были осколки: ' + vr.at35);
+      assert(vr.row3 > 0, 'молния по ряду 3 не расколола ни одного камня');
+
+      const w = await ev(page, () => window.__fxWatch);
+      const frameCls = await ev(page, () => document.querySelector('.board-frame').className);
+      assert(w.flash === 0, '.blast-flash появлялся: ' + w.flash);
+      assert(w.frameBlast === 0 && !/\bblast(-sun)?\b/.test(frameCls), 'тряска рамки blast/blast-sun: ' + w.frameBlast + ' ' + frameCls);
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; flash 0, shake 0; console errors 0`;
+    });
   } finally {
     await browser.close();
   }

@@ -24,18 +24,16 @@
     return 'gold';
   }
 
-  /* ---------- Экранный слой: виньетка и вспышка ---------- */
+  /* ---------- Экранный слой: виньетка ---------- */
   const screen = document.createElement('div');
   screen.className = 'sfx-screen';
   screen.setAttribute('aria-hidden', 'true');
   const vignette = document.createElement('div');
   vignette.className = 'sfx-vignette';
-  const flash = document.createElement('div');
-  flash.className = 'sfx-flash';
-  screen.append(vignette, flash);
+  screen.append(vignette);
   document.body.appendChild(screen);
 
-  [vignette, flash].forEach(el => el.addEventListener('animationend', () => el.classList.remove('go')));
+  vignette.addEventListener('animationend', () => vignette.classList.remove('go'));
 
   /* ---------- 1. Комбо ---------- */
   let lastMatchFx = 0;
@@ -85,11 +83,6 @@
       replay(vignette, 'go');
       punchBoard(mult);
     }
-  });
-
-  window.addEventListener('sun:blast', e => {
-    if (!e.detail || e.detail.type !== 'sun' || reduced()) return;
-    replay(flash, 'go');
   });
 
   /* Подпрыгивание значка комбо при каждом росте множителя */
