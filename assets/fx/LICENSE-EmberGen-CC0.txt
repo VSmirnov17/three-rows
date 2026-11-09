@@ -1,0 +1,12 @@
+Взрыв камня-бомбы (bomb.webp) отрендерен из готовой симуляции
+«Ground Explosion» из бесплатного набора VDB JangaFX:
+https://jangafx.com/software/embergen/download/free-vdb-animations/
+
+CREATED WITH EMBERGEN BY JANGAFX (https://jangafx.com)
+
+Лицензия исходной симуляции: Creative Commons Zero — Public Domain (CC0 1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+Авторы просят упоминать EmberGen, если симуляции пригодились.
+
+Как пересобрать — art-src/phase2/PROMPTS.md, раздел «Шаг 5»
+(blender/explosion_vdb.py, tools/pack_strike.py).

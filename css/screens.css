@@ -77,8 +77,6 @@ body[data-combo="8"] .combo-badge::after {
 
 /* --- Удар по полю (scale складывается с transform тряски) --- */
 .board-frame.sfx-punch { animation: sfxPunch .32s cubic-bezier(.2, .9, .3, 1.3); }
-.board-frame.sfx-punch.blast { animation: blastShake .55s cubic-bezier(.36, .07, .19, .97), sfxPunch .32s cubic-bezier(.2, .9, .3, 1.3); }
-.board-frame.sfx-punch.blast-sun { animation: blastShake .72s cubic-bezier(.36, .07, .19, .97), blastGlow .8s ease-out, sfxPunch .32s cubic-bezier(.2, .9, .3, 1.3); }
 .board-frame.sfx-punch.shake { animation: frameShake .32s ease, sfxPunch .32s cubic-bezier(.2, .9, .3, 1.3); }
 
 @keyframes sfxPunch {
@@ -173,8 +171,7 @@ body[data-combo="8"] .combo-badge::after {
   overflow: hidden;
 }
 
-.sfx-vignette,
-.sfx-flash {
+.sfx-vignette {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -209,18 +206,6 @@ body[data-combo="8"] .combo-badge::after {
     20% { opacity: .6; }
     100% { opacity: 0; }
   }
-}
-
-.sfx-flash {
-  background: radial-gradient(circle at 50% 48%, rgba(255, 250, 220, .85), rgba(255, 214, 110, .45) 40%, rgba(255, 180, 60, .1) 75%);
-}
-
-.sfx-flash.go { animation: sfxFlash .42s ease-out; }
-
-@keyframes sfxFlash {
-  0% { opacity: 0; }
-  12% { opacity: .85; }
-  100% { opacity: 0; }
 }
 
 /* =========================================================
@@ -703,7 +688,7 @@ body[data-urgency="urgent"] .time-plaque.urgent::after {
    ========================================================= */
 @media (prefers-reduced-motion: reduce) {
   .sfx-confetti, .sfx-burst, .sfx-ash, .sfx-combo-word { display: none !important; }
-  .sfx-vignette, .sfx-flash { animation: none !important; opacity: 0 !important; }
+  .sfx-vignette { animation: none !important; opacity: 0 !important; }
   .sfx-rays { animation: none !important; opacity: .9; transform: none; }
   .combo-badge::after,
   .time-plaque::after { animation: none !important; }

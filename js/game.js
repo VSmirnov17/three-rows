@@ -258,6 +258,19 @@
     window.dispatchEvent(new CustomEvent('sun:' + name, { detail }));
   }
 
+  /* Эффекты (Fx, FxCore) не должны ломать механику: сбой в них пишется в
+     консоль, а ход идёт дальше. Нет Fx или FxCore (скрипт не загрузился) —
+     молча берём fallback. Все вызовы эффектов из game.js идут через fxSafe. */
+  function fxSafe(fn, fallback) {
+    if (!window.Fx || !window.FxCore) return fallback;
+    try {
+      return fn();
+    } catch (err) {
+      console.error('[fx] ' + (err && err.message ? err.message : err), err);
+      return fallback;
+    }
+  }
+
   function setCombo(mult) {
     setBodyState('combo', mult);
     state.comboMult = mult;
@@ -578,10 +591,18 @@
   /* Мягкий отказ для камня в лианах: небольшое покачивание, без звука
      ошибки и без красного. Повторные нажатия подряд не накладываются. */
   let lastRefuseAt = 0;
+  /* prefers-reduced-motion читаем заново при каждом вызове: MediaQueryList,
+     который держали с загрузки, в Firefox отстаёт после смены настройки. */
+  function reducedMotion() {
+    const fxReduced = fxSafe(() => !!Fx.mode().reduced, null);
+    if (fxReduced !== null) return fxReduced;
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
   function refuseLocked(gems) {
     const t = Date.now();
     if (t - lastRefuseAt < 380) return;
     lastRefuseAt = t;
+    if (reducedMotion()) return;
     gems.forEach(gem => {
       if (!gem || !gem.el) return;
       gem.el.querySelectorAll('.gem-inner, .vine-overlay').forEach(part => {
@@ -615,6 +636,8 @@
 
   function spawnBoard() {
     dom.tiles.innerHTML = '';
+    // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
+    fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -789,27 +812,6 @@
   }
 
   /* ---------- Эффекты ---------- */
-  const particleColors = GEM_COLORS;
-
-  function spawnParticles(r, c, color) {
-    if (dom.fx.childElementCount > 110) return;
-    const left = (c + 0.5) * 12.5;
-    const top = (r + 0.5) * 12.5;
-    for (let i = 0; i < 3; i++) {
-      const p = document.createElement('span');
-      p.className = 'particle';
-      p.style.left = left + '%';
-      p.style.top = top + '%';
-      p.style.background = color;
-      p.style.color = color;
-      p.style.setProperty('--dx', ((Math.random() - 0.5) * 74).toFixed(0) + 'px');
-      p.style.setProperty('--dy', (-22 - Math.random() * 52).toFixed(0) + 'px');
-      p.style.animationDelay = (Math.random() * 70).toFixed(0) + 'ms';
-      dom.fx.appendChild(p);
-      setTimeout(() => p.remove(), 760);
-    }
-  }
-
   function spawnScoreFloat(r, c, text) {
     const node = document.createElement('div');
     node.className = 'score-float';
@@ -818,67 +820,6 @@
     node.style.top = ((r + 0.5) * 12.5) + '%';
     dom.fx.appendChild(node);
     setTimeout(() => node.remove(), 1050);
-  }
-
-  function beamFx(r, c, dir) {
-    const beam = document.createElement('div');
-    beam.className = 'beam ' + (dir === 'h' ? 'horizontal' : 'vertical');
-    if (dir === 'h') {
-      beam.style.left = '0';
-      beam.style.top = (r * 12.5) + '%';
-      beam.style.width = '100%';
-    } else {
-      beam.style.left = (c * 12.5) + '%';
-      beam.style.top = '0';
-      beam.style.height = '100%';
-    }
-    dom.fx.appendChild(beam);
-
-    const flare = document.createElement('div');
-    flare.className = 'beam-flare';
-    flare.style.left = ((c + 0.5) * 12.5) + '%';
-    flare.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(flare);
-
-    setTimeout(() => {
-      beam.remove();
-      flare.remove();
-    }, 560);
-  }
-
-  function sunBurstFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'sun-burst epic';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
-  function shockwaveFx(r, c, epic) {
-    const node = document.createElement('div');
-    node.className = 'shockwave' + (epic ? ' epic' : '');
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
-  function sunRaysFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'sun-rays';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 900);
-  }
-
-  function flashFx(color) {
-    const node = document.createElement('div');
-    node.className = 'blast-flash';
-    node.style.background = `radial-gradient(circle at 50% 50%, ${color} 0%, rgba(255,255,255,0) 68%)`;
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 620);
   }
 
   function spawnBurst(r, c, color, count) {
@@ -902,60 +843,12 @@
     }
   }
 
-  let blastShakeTimer = null;
-  function blastFx(trigger) {
+  /* Удар спецкамня — весь эффект в Fx.strike (js/visuals-fx.js): без белой
+     вспышки, тряски и кольца. cells — клетки шага с цветами [{ r, c, color }],
+     по ним FxCore.strikeTargets находит клетки удара. */
+  function blastFx(trigger, cells) {
     emitVisual('blast', { type: trigger.type });
-    const isSun = trigger.type === 'sun';
-    const isBomb = trigger.type === 'bomb';
-    const isTotem = trigger.type === 'totem';
-    if (isSun) {
-      sunBurstFx(trigger.r, trigger.c);
-    } else if (isBomb) {
-      explosionFx(trigger.r, trigger.c);
-    } else if (isTotem) {
-      beamFx(trigger.r, trigger.c, 'h');
-      beamFx(trigger.r, trigger.c, 'v');
-      sunRaysFx(trigger.r, trigger.c);
-    } else {
-      beamFx(trigger.r, trigger.c, trigger.lineDir === 'col' ? 'v' : 'h');
-    }
-
-    shockwaveFx(trigger.r, trigger.c, isSun || isTotem);
-    if (isSun) sunRaysFx(trigger.r, trigger.c);
-    const burstColor = isSun ? '#ffd166' : isBomb ? '#ffb070' : isTotem ? '#d9b4ff' : '#a9ecff';
-    spawnBurst(trigger.r, trigger.c, burstColor, isSun ? 26 : isBomb ? 22 : isTotem ? 24 : 16);
-    const flashColor = isSun
-      ? 'rgba(255, 232, 150, .9)'
-      : isBomb
-        ? 'rgba(255, 176, 112, .88)'
-        : isTotem
-          ? 'rgba(206, 168, 255, .88)'
-          : 'rgba(150, 235, 255, .82)';
-    flashFx(flashColor);
-
-    dom.boardFrame.classList.remove('blast', 'blast-sun');
-    void dom.boardFrame.offsetWidth;
-    dom.boardFrame.classList.add(isSun ? 'blast-sun' : 'blast');
-    clearTimeout(blastShakeTimer);
-    blastShakeTimer = setTimeout(() => {
-      dom.boardFrame.classList.remove('blast', 'blast-sun');
-    }, 800);
-  }
-
-  /* Взрыв камня-бомбы: огненный шар вместо луча */
-  function explosionFx(r, c) {
-    const node = document.createElement('div');
-    node.className = 'bomb-blast';
-    node.style.left = ((c + 0.5) * 12.5) + '%';
-    node.style.top = ((r + 0.5) * 12.5) + '%';
-    dom.fx.appendChild(node);
-    setTimeout(() => node.remove(), 760);
-  }
-
-  function impactFx(r, c, strength) {
-    shockwaveFx(r, c, false);
-    flashFx('rgba(255, 231, 160, ' + (0.16 + strength * 0.16).toFixed(2) + ')');
-    spawnBurst(r, c, '#ffe6a0', 8 + Math.round(strength * 6));
+    fxSafe(() => Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || [])));
   }
 
   /* Классы спецкамней: новый тип должен попасть в CSS-ауру и ART.gemInner */
@@ -979,7 +872,7 @@
     gem.el.className = 'gem ' + (SPECIAL_CLASS[type] || 'special-line');
     gem.el.innerHTML = ART.gemInner(gem.color, type);
     const inner = gem.el.querySelector('.gem-inner');
-    if (inner && inner.animate) {
+    if (inner && inner.animate && !reducedMotion()) {
       inner.animate(
         [{ transform: 'scale(.2) rotate(-30deg)' }, { transform: 'scale(1.3) rotate(6deg)' }, { transform: 'scale(1)' }],
         { duration: 420, easing: 'cubic-bezier(.2,.8,.3,1.3)' }
@@ -1017,12 +910,13 @@
       applyPos(gem);
     });
     void dom.tiles.offsetWidth;
+    const still = reducedMotion();
     movable.forEach(gem => {
       const node = gem.el;
       node.style.transition = 'opacity .35s ease';
       node.style.opacity = '1';
       const inner = node.querySelector('.gem-inner');
-      if (inner && inner.animate) {
+      if (inner && inner.animate && !still) {
         inner.animate(
           [{ transform: 'scale(.3) rotate(-20deg)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
           { duration: 420, easing: 'cubic-bezier(.2,.8,.3,1.2)' }
@@ -1090,137 +984,9 @@
       // блок) и что очистить. Здесь — только анимация, звук и подсчёт.
       const plan = Board.planCascade(state.grid, state.swapCell);
       if (!plan) break;
-      const { creates, clear, triggers } = plan;
-      // Камни в лианах из clear уже исключены ядром: их лиана срывается, а
-      // сами они не считаются собранными (цели цвета, очки).
-      const unlockArr = Array.from(plan.unlocks || []).map(parseKey);
-
       chain++;
       maxChain = Math.max(maxChain, chain);
-      state.chain = chain;
-      const mult = Math.min(8, chain + 1);
-      setCombo(mult);
-      emitVisual('match', { chain, mult });
-
-      triggers.forEach(t => blastFx(t));
-
-      if (triggers.length) {
-        const sunCount = triggers.filter(t => t.type === 'sun').length;
-        const lineCount = triggers.filter(t => t.type === 'line' || t.type === 'totem').length;
-        const bombCount = triggers.filter(t => t.type === 'bomb').length;
-        const pan = clamp((triggers[0].c + 0.5) / COLS * 2 - 1, -0.8, 0.8);
-        SFX.blast({ line: lineCount, sun: sunCount, chain, pan, bomb: bombCount });
-      }
-
-      const cellsArr = Array.from(clear).map(parseKey);
-
-      // Клетки, которые реально двигают незакрытые цели: за них платим
-      // заметно больше, чтобы «фарм» пустых камней не окупался.
-      const needLeft = new Map();
-      state.goals.forEach(g => {
-        if (g.type === 'color' && g.got < g.need) {
-          needLeft.set(g.color, (needLeft.get(g.color) || 0) + g.need - g.got);
-        }
-      });
-      let goalCells = 0;
-      cellsArr.forEach(p => {
-        const gem = gemAt(p.r, p.c);
-        if (!gem) return;
-        const left = needLeft.get(gem.color) || 0;
-        if (left > 0) {
-          goalCells++;
-          needLeft.set(gem.color, left - 1);
-        }
-      });
-
-      const econ = Economy.clearDetail({
-        cells: clear.size,
-        goalCells: goalCells,
-        chain: chain,
-        creates: creates,
-        triggers: triggers,
-        timeLeft: econTimeLeft(),
-        totalTime: state.totalTime
-      });
-
-      const gained = econ.score;
-      state.econBase += econ.raw;
-      state.econClear += econ.score;
-      setScore(state.score + gained, true);
-
-      let sr = 0;
-      let sc = 0;
-      cellsArr.forEach(p => { sr += p.r; sc += p.c; });
-      if (cellsArr.length) {
-        spawnScoreFloat(
-          sr / cellsArr.length,
-          sc / cellsArr.length,
-          '+' + fmtNum(gained) + (mult > 1 ? ' ×' + mult : '') + ' · темп ' + econ.paceLabel
-        );
-      }
-
-      if (cellsArr.length && !triggers.length && (clear.size >= 6 || chain >= 3)) {
-        const strength = Math.min(1, (clear.size - 5) / 10 + (chain - 2) * 0.12);
-        impactFx(sr / cellsArr.length, sc / cellsArr.length, strength);
-        SFX.impact();
-      }
-
-      const gotBefore = state.goals.map(g => g.got);
-      cellsArr.forEach(p => {
-        const gem = gemAt(p.r, p.c);
-        if (!gem) return;
-        state.goals.forEach(goal => {
-          if (goal.type === 'color' && goal.color === gem.color && goal.got < goal.need) goal.got++;
-        });
-      });
-      // Цель «Лианы»: каждая сорванная лиана — один шаг
-      if (unlockArr.length) {
-        state.goals.forEach(goal => {
-          if (goal.type === 'vines') goal.got = Math.min(goal.need, goal.got + unlockArr.length);
-        });
-      }
-      const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
-      if (changed >= 0) updateGoals(changed);
-
-      SFX.match(chain, clear.size, triggers.length > 0);
-      clear.forEach(k => {
-        const p = parseKey(k);
-        const gem = gemAt(p.r, p.c);
-        if (!gem || !gem.el) return;
-        gem.el.classList.add('clearing');
-        spawnParticles(p.r, p.c, GEM_COLORS[gem.color]);
-      });
-
-      // Срыв лиан: лиана вспыхивает и рвётся, камень остаётся на месте.
-      unlockArr.forEach(p => {
-        const gem = gemAt(p.r, p.c);
-        if (!gem || !gem.el) return;
-        gem.el.classList.add('vine-snap');
-        spawnBurst(p.r, p.c, '#6fe04a', 7);
-        emitVisual('unlock', { r: p.r, c: p.c });
-      });
-
-      if (creates.length) {
-        // Показываем самый приоритетный из созданных спецкамней
-        const rank = { totem: 0, sun: 1, bomb: 2, line: 3 };
-        const top = creates.slice().sort((a, b) => rank[a.type] - rank[b.type])[0];
-        showToast(SPECIAL_TOAST[top.type] || 'Особый камень!', 1200);
-      }
-
-      await sleep(310);
-
-      const { removed, unlocked } = Board.applyCascade(state.grid, plan);
-      removed.forEach(gem => {
-        if (gem.el) gem.el.remove();
-      });
-      unlocked.forEach(gem => setGemLocked(gem, false));
-
-      creates.forEach(cr => {
-        const gem = gemAt(cr.r, cr.c);
-        if (gem) upgradeGem(gem, cr.type, cr.dir);
-      });
-
-      await dropGems();
+      await playStep(plan, chain);
     }
 
     state.chain = 0;
@@ -1231,6 +997,144 @@
       await reshuffleBoard(true, true);
     }
     return maxChain;
+  }
+
+  /* Один шаг каскада по плану ядра { matched, creates, clear, triggers,
+     unlocks }: удары, очки, цели, раскол камней, затем удаление и падение.
+     Его же проигрывает отладочный __SUN.strike. */
+  async function playStep(plan, chain) {
+    const { creates, clear, triggers } = plan;
+    // Камни в лианах из clear уже исключены ядром: их лиана срывается, а
+    // сами они не считаются собранными (цели цвета, очки).
+    const unlockArr = Array.from(plan.unlocks || []).map(parseKey);
+
+    state.chain = chain;
+    const mult = Math.min(8, chain + 1);
+    setCombo(mult);
+    emitVisual('match', { chain, mult });
+
+    const cellsArr = Array.from(clear).map(parseKey);
+    // Цвет клеток — до applyCascade: по нему солнце находит свои камни,
+    // а удары (blastFx, раскол ниже) — свои клетки.
+    const cellsColored = cellsArr.map(p => {
+      const gem = gemAt(p.r, p.c);
+      return { r: p.r, c: p.c, color: gem ? gem.color : null };
+    });
+
+    triggers.forEach(t => blastFx(t, cellsColored));
+
+    if (triggers.length) {
+      const sunCount = triggers.filter(t => t.type === 'sun').length;
+      const lineCount = triggers.filter(t => t.type === 'line' || t.type === 'totem').length;
+      const bombCount = triggers.filter(t => t.type === 'bomb').length;
+      const pan = clamp((triggers[0].c + 0.5) / COLS * 2 - 1, -0.8, 0.8);
+      SFX.blast({ line: lineCount, sun: sunCount, chain, pan, bomb: bombCount });
+    }
+
+    // Клетки, которые реально двигают незакрытые цели: за них платим
+    // заметно больше, чтобы «фарм» пустых камней не окупался.
+    const needLeft = new Map();
+    state.goals.forEach(g => {
+      if (g.type === 'color' && g.got < g.need) {
+        needLeft.set(g.color, (needLeft.get(g.color) || 0) + g.need - g.got);
+      }
+    });
+    let goalCells = 0;
+    cellsArr.forEach(p => {
+      const gem = gemAt(p.r, p.c);
+      if (!gem) return;
+      const left = needLeft.get(gem.color) || 0;
+      if (left > 0) {
+        goalCells++;
+        needLeft.set(gem.color, left - 1);
+      }
+    });
+
+    const econ = Economy.clearDetail({
+      cells: clear.size,
+      goalCells: goalCells,
+      chain: chain,
+      creates: creates,
+      triggers: triggers,
+      timeLeft: econTimeLeft(),
+      totalTime: state.totalTime
+    });
+
+    const gained = econ.score;
+    state.econBase += econ.raw;
+    state.econClear += econ.score;
+    setScore(state.score + gained, true);
+
+    let sr = 0;
+    let sc = 0;
+    cellsArr.forEach(p => { sr += p.r; sc += p.c; });
+    if (cellsArr.length) {
+      spawnScoreFloat(
+        sr / cellsArr.length,
+        sc / cellsArr.length,
+        '+' + fmtNum(gained) + (mult > 1 ? ' ×' + mult : '') + ' · темп ' + econ.paceLabel
+      );
+    }
+
+    if (cellsArr.length && !triggers.length && (clear.size >= 6 || chain >= 3)) SFX.impact();
+
+    const gotBefore = state.goals.map(g => g.got);
+    cellsArr.forEach(p => {
+      const gem = gemAt(p.r, p.c);
+      if (!gem) return;
+      state.goals.forEach(goal => {
+        if (goal.type === 'color' && goal.color === gem.color && goal.got < goal.need) goal.got++;
+      });
+    });
+    // Цель «Лианы»: каждая сорванная лиана — один шаг
+    if (unlockArr.length) {
+      state.goals.forEach(goal => {
+        if (goal.type === 'vines') goal.got = Math.min(goal.need, goal.got + unlockArr.length);
+      });
+    }
+    const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
+    if (changed >= 0) updateGoals(changed);
+
+    SFX.match(chain, clear.size, triggers.length > 0);
+    // Камень раскалывается, когда до него дошёл удар (FxCore.mergeDelays).
+    const delays = fxSafe(() => FxCore.mergeDelays(cellsColored, triggers), new Map());
+    clear.forEach(k => {
+      const p = parseKey(k);
+      const gem = gemAt(p.r, p.c);
+      if (!gem || !gem.el) return;
+      fxSafe(() => Fx.shatter(gem.el, p.r, p.c, delays.get(k) || 0, { cells: clear.size, color: GEM_COLORS[gem.color] }));
+    });
+
+    // Срыв лиан: лиана вспыхивает и рвётся, камень остаётся на месте.
+    unlockArr.forEach(p => {
+      const gem = gemAt(p.r, p.c);
+      if (!gem || !gem.el) return;
+      gem.el.classList.add('vine-snap');
+      spawnBurst(p.r, p.c, '#6fe04a', 7);
+      emitVisual('unlock', { r: p.r, c: p.c });
+    });
+
+    if (creates.length) {
+      // Показываем самый приоритетный из созданных спецкамней
+      const rank = { totem: 0, sun: 1, bomb: 2, line: 3 };
+      const top = creates.slice().sort((a, b) => rank[a.type] - rank[b.type])[0];
+      showToast(SPECIAL_TOAST[top.type] || 'Особый камень!', 1200);
+    }
+
+    await sleep(310);
+
+    const { removed, unlocked } = Board.applyCascade(state.grid, plan);
+    removed.forEach(gem => {
+      if (gem.el) gem.el.remove();
+    });
+    unlocked.forEach(gem => setGemLocked(gem, false));
+
+    creates.forEach(cr => {
+      const gem = gemAt(cr.r, cr.c);
+      if (gem) upgradeGem(gem, cr.type, cr.dir);
+    });
+
+    await dropGems();
   }
 
   async function dropGems() {
@@ -1836,6 +1740,23 @@
       findSquares, findCorners, analyzePatterns,
       findLineGroups, hasAnyMatch,
       expandSpecials: (base, protectedKeys) => Board.expandSpecials(state.grid, base, protectedKeys),
+      // Удар спецкамня в клетке: __SUN.strike(3, 1, 'line', 'row'). Камень
+      // становится спецкамнем и срабатывает тем же шагом, что в каскаде,
+      // затем поле разрешается как после хода.
+      async strike(r, c, type, dir) {
+        const gem = gemAt(r, c);
+        if (!gem || state.busy) return;
+        state.busy = true;
+        try {
+          upgradeGem(gem, type, dir);
+          const plan = { matched: new Set(), creates: [], ...Board.expandSpecials(state.grid, [r + ',' + c], []) };
+          await playStep(plan, 1);
+          await resolveBoard();
+        } finally {
+          state.busy = false;
+          state.lastAction = now();
+        }
+      },
       reshuffleBoard,
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)
       setVines(cells) {

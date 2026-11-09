@@ -1,0 +1,633 @@
+/* Хранитель Солнца — эффекты поля: раскол камня на осколки и удары
+ * спецкамней (этап 2, шаг 5).
+ * Что и сколько (раскрой, полёт, бюджет, задержки) решает js/fx-core.js;
+ * здесь только DOM и canvas. Анимируются лишь transform и opacity.
+ *
+ * Fx.mode()       — { calm, reduced, low } по body[data-difficulty],
+ *                   body[data-fx] и prefers-reduced-motion; читается при каждом вызове.
+ * Fx.shatter(gemEl, r, c, delayMs, opts)
+ *                 — камень прячется сразу (класс fx-gone), на его месте в #fx
+ *                   копия .fx-standin; через delayMs она распадается на осколки
+ *                   .fx-shard (копии рисунка, обрезанные clip-path), они летят
+ *                   и гаснут за TIMING.shatterMs; на canvas — пыль цвета камня
+ *                   и золотые блики. Вызывающий передаёт opts { cells — сколько
+ *                   клеток гаснет в этом шаге (для FxCore.shardsFor), color —
+ *                   цвет пыли }; без cells считается худший случай (всё поле,
+ *                   1 осколок), чтобы не выйти за бюджет узлов.
+ *                   reduced: копия просто гаснет за 200 мс, больше ничего.
+ * Fx.strike(trigger, targets)
+ *                 — удар спецкамня; targets — FxCore.strikeTargets(trigger, cells).
+ *                   bomb: спрайт взрыва .fx-strike.fx-bomb (лист assets/fx/bomb.webp,
+ *                   кадры CSS-анимацией steps() по background-position, css/fx.css)
+ *                   над клетками 3×3 и угли на canvas. reduced — ничего;
+ *                   low — взрыв без углей; calm — углей меньше (FxCore.budget),
+ *                   взрыв прозрачнее (× beamAlpha).
+ *                   line: бирюзовые лучи .fx-line от клетки в обе стороны вдоль
+ *                   lineDir; sun: узкие золотые лучи .fx-ray к целям (не больше
+ *                   16, к ближним) и диск в центре; totem: нефритовая волна
+ *                   .fx-wave крестом. Каждый удар заранее занимает свои узлы
+ *                   в бюджете (reserved), осколки делятся остатком.
+ * Fx.canvas       — один <canvas class="fx-canvas"> в #fx; цикл
+ *                   requestAnimationFrame идёт, только пока есть живые частицы.
+ * Fx.particles(kind) — число живых частиц (для e2e); kind 'ember' — только угли.
+ * Fx.clear()      — убрать всё; вызывается само, когда открывается любой .overlay. */
+(function () {
+  'use strict';
+
+  const FC = window.FxCore;
+  const T = FC.TIMING;
+  const layer = document.getElementById('fx');
+  const body = document.body;
+  const rand = Math.random;
+
+  const CELL = 12.5;              // клетка, % поля
+  const BOARD_CELLS = 64;         // худший случай, если opts.cells не передан
+  const REDUCED_FADE_MS = 200;
+  const SAG = 18;                 // осколок проседает к концу полёта, % клетки
+  const MAX_PARTICLES = 260;      // потолок частиц на canvas
+  const DPR_MAX = 2;
+  const GOLD = '#ffd27a';
+  const SPRITE_PX = 64;
+  /* Взрыв бомбы: узел шире 3 клеток — пик облака (span в assets/fx/bomb.json,
+   * 0,8 кадра) ложится на 3×3, дымные края заходят за них. */
+  const BOMB_CELLS = 4;
+  const EMBER_HOT = '#ffb15c';    // уголь вылетает светло-оранжевым…
+  const EMBER_COOL = '#9a2e14';   // …и гаснет тёмно-красным
+  /* Удары молнии, солнца и тотема: полосы и ядра — спрайты assets/fx,
+   * толщины в клетках, кадров столько же, сколько в листах (tools/render_strikes.py) */
+  const FX_SPRITES = ['bomb', 'beam-turquoise', 'ray-gold', 'wave-jade', 'glow-cores'];
+  const BEAM_THICK = 1.7;
+  const WAVE_THICK = 1.6;
+  const RAY_THICK = 0.56;
+  const RAY_ROWS = 4;
+  const MAX_RAYS = 16;
+  const LINE_FLARE = 2.6;
+  const WAVE_FLARE = 3;
+  const SUN_DISC = 4;
+  const BOARD = 8;                // сторона поля, клеток
+
+  function mode() {
+    return {
+      calm: body.dataset.difficulty === 'calm',
+      // Каждый раз заново: MediaQueryList, взятый при загрузке, в Firefox
+      // обновляется с запаздыванием (свежий запрос верен сразу)
+      reduced: !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+      low: body.dataset.fx === 'low'
+    };
+  }
+
+  /* ---------- Таймеры: Fx.clear() отменяет все отложенные шаги ---------- */
+  const timers = new Set();
+  function later(fn, ms) {
+    const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
+    timers.add(id);
+  }
+
+  /* Бюджет узлов: удар занимает свои узлы до конца жизни; осколки считают остаток */
+  let reserved = 0;
+  function reserve(n, ms) {
+    reserved += n;
+    later(() => { reserved = Math.max(0, reserved - n); }, ms);
+  }
+
+  /* ---------- Копии камня в #fx ---------- */
+  function cellBox(cls, r, c, inner) {
+    const el = document.createElement('div');
+    el.className = 'fx-cell ' + cls;
+    el.style.left = (c * CELL) + '%';
+    el.style.top = (r * CELL) + '%';
+    el.dataset.cell = r + ',' + c;
+    el.appendChild(inner.cloneNode(true));
+    return el;
+  }
+
+  function fadeOut(el, ms) {
+    if (el.animate) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-out', fill: 'forwards' });
+    later(() => el.remove(), ms + 20);
+  }
+
+  /* Полёт осколка: наружу быстро и с замедлением, к концу проседает
+   * (тяжесть), чуть поворачивается вокруг своего центра и гаснет. */
+  function fly(el, poly) {
+    const f = FC.shardFlight(poly, rand);
+    const dur = Math.round(T.shatterMs * (0.84 + rand() * 0.16));
+    if (el.animate) {
+      const frames = [];
+      const steps = 6;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const out = 1 - (1 - t) * (1 - t);
+        const x = f.dx * out;
+        const y = f.dy * out + SAG * t * t;
+        const fade = t < 0.4 ? 1 : Math.pow(1 - (t - 0.4) / 0.6, 1.3);
+        frames.push({
+          offset: t,
+          transform: `translate(${x.toFixed(2)}%, ${y.toFixed(2)}%) rotate(${(f.rot * out).toFixed(1)}deg) scale(${(1 - 0.12 * t).toFixed(3)})`,
+          opacity: fade.toFixed(3)
+        });
+      }
+      el.animate(frames, { duration: dur, easing: 'linear', fill: 'forwards' });
+    }
+    later(() => el.remove(), dur + 40);
+  }
+
+  function burst(r, c, inner, opts, m) {
+    const n = FC.shardsFor(Math.max(1, opts.cells || BOARD_CELLS), m, reserved);
+    const polys = FC.shardPolygons(n, rand);
+    const shards = polys.map(poly => {
+      const el = cellBox('fx-shard', r, c, inner);
+      el.style.clipPath = 'polygon(' + poly.map(p => p[0].toFixed(1) + '% ' + p[1].toFixed(1) + '%').join(', ') + ')';
+      el.style.transformOrigin = poly.cx.toFixed(1) + '% ' + poly.cy.toFixed(1) + '%';
+      return el;
+    });
+    const frag = document.createDocumentFragment();
+    shards.forEach(el => frag.appendChild(el));
+    layer.appendChild(frag);
+    shards.forEach((el, i) => fly(el, polys[i]));
+
+    const b = FC.budget(m);
+    if (b.dust > 0) dust(r, c, opts.color || GOLD, b.dust, b.beamAlpha);
+    if (b.glints > 0) glints(r, c, b.glints, b.beamAlpha);
+  }
+
+  function shatter(gemEl, r, c, delayMs, opts) {
+    if (!gemEl) return;
+    const o = opts || {};
+    const m = mode();
+    const inner = gemEl.querySelector('.gem-inner');
+    gemEl.classList.add('fx-gone');
+    if (!inner) return;
+    const delay = Math.max(0, delayMs || 0);
+
+    if (m.reduced) {
+      const st = cellBox('fx-standin', r, c, inner);
+      layer.appendChild(st);
+      // Лучей в reduced нет (strike выходит сразу), ждать их незачем
+      fadeOut(st, REDUCED_FADE_MS);
+      return;
+    }
+    if (delay === 0) {
+      burst(r, c, inner, o, m);
+      return;
+    }
+    // Ждём своей очереди (удар ещё не дошёл): на месте камня стоит его копия
+    const st = cellBox('fx-standin', r, c, inner);
+    layer.appendChild(st);
+    later(() => { st.remove(); burst(r, c, inner, o, m); }, delay);
+  }
+
+  /* ---------- Удары спецкамней ---------- */
+  function strike(trigger, targets) {
+    if (!trigger) return;
+    const m = mode();
+    if (m.reduced) return;
+    if (trigger.type === 'bomb') bombStrike(trigger, m);
+    else if (trigger.type === 'line') lineStrike(trigger, m);
+    else if (trigger.type === 'sun') sunStrike(trigger, targets || [], m);
+    else if (trigger.type === 'totem') totemStrike(trigger, m);
+  }
+
+  /* Обсидиановый взрыв: кадры листает CSS (steps по background-position),
+   * здесь — появление, лёгкий рост и угасание (opacity и transform), чтобы
+   * облако не возникало и не исчезало рывком. Тёмное облако с огненными
+   * просветами (кадры 5–9 листа, 200–400 мс) идёт ещё непрозрачным; с 45 %
+   * длительности узел тает: новые камни падают в воронку с 310 мс, и
+   * плотный дым поверх них дольше выглядел бы грязной пеленой. */
+  function bombStrike(t, m) {
+    const b = FC.budget(m);
+    const dur = T.strikeMs.bomb;
+    reserve(1, dur + 40);
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-bomb';
+    el.style.left = ((t.c + 0.5) * CELL) + '%';
+    el.style.top = ((t.r + 0.5) * CELL) + '%';
+    el.style.width = el.style.height = (BOMB_CELLS * CELL) + '%';
+    el.style.animationDuration = dur + 'ms';
+    // Под осколками (они добавятся следом), под холстом с углями
+    layer.appendChild(el);
+    const a = b.beamAlpha;
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: 'translate(-50%, -50%) scale(0.8)' },
+        { offset: 0.06, opacity: a, transform: 'translate(-50%, -50%) scale(0.92)', easing: 'ease-out' },
+        { offset: 0.45, opacity: a, transform: 'translate(-50%, -50%) scale(1)', easing: 'ease-in-out' },
+        { offset: 0.85, opacity: 0, transform: 'translate(-50%, -50%) scale(1.05)' },
+        { offset: 1, opacity: 0, transform: 'translate(-50%, -50%) scale(1.06)' }
+      ], { duration: dur, fill: 'forwards' });
+    } else {
+      el.style.opacity = a;
+    }
+    later(() => el.remove(), dur + 40);
+    if (b.embers > 0) embers(t.r, t.c, b.embers);
+  }
+
+  /* ---------- Полосы ударов: молния и волна ----------
+   * Полоса — узел-окно (overflow) и внутри спрайт, который выезжает из клетки
+   * удара: рисунок не сжимается, конец луча всегда впереди. Угол 0 — вправо,
+   * 90 — вниз. Длина полосы — от центра клетки до края поля; лист
+   * масштабирован по всей ширине поля и прижат к дальнему краю, поэтому
+   * конец спрайта (кончик или гребень) лежит у края. */
+  function arm(r, c, deg, cells, thick, cls, revealMs, durMs, alpha, holdTo) {
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-arm ' + cls;
+    el.style.left = ((c + 0.5) * CELL) + '%';
+    el.style.top = ((r + 0.5) * CELL) + '%';
+    el.style.width = (cells * CELL) + '%';
+    el.style.height = (thick * CELL) + '%';
+    el.style.transform = `translate(0, -50%) rotate(${deg}deg)`;
+    const strip = document.createElement('div');
+    strip.className = 'fx-strip';
+    strip.style.backgroundSize = (BOARD / cells * 100).toFixed(2) + '% ' + (cls === 'fx-line' ? 1200 : 800) + '%';
+    strip.style.animationDuration = durMs + 'ms';
+    el.appendChild(strip);
+    layer.appendChild(el);
+    if (el.animate) {
+      strip.animate([{ transform: 'translateX(-100%)' }, { transform: 'translateX(0)' }],
+        { duration: revealMs, easing: 'linear', fill: 'forwards' });
+      el.animate([
+        { offset: 0, opacity: alpha },
+        { offset: holdTo, opacity: alpha, easing: 'ease-out' },
+        { offset: 1, opacity: 0 }
+      ], { duration: durMs, fill: 'forwards' });
+    } else {
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), durMs + 40);
+  }
+
+  /* Ядро в клетке удара: лист glow-cores, колонка задаётся классом fx-core-*.
+   * Появляется, чуть растёт и проворачивается; гаснет к концу. */
+  function coreGlow(r, c, cells, kind, durMs, alpha, turn) {
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-core fx-core-' + kind;
+    el.style.left = ((c + 0.5) * CELL) + '%';
+    el.style.top = ((r + 0.5) * CELL) + '%';
+    el.style.width = el.style.height = (cells * CELL) + '%';
+    layer.appendChild(el);
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: 'translate(-50%, -50%) scale(0.55) rotate(0deg)' },
+        { offset: 0.12, opacity: alpha, transform: 'translate(-50%, -50%) scale(0.92) rotate(' + (turn * 0.2) + 'deg)', easing: 'ease-out' },
+        { offset: 0.5, opacity: alpha * 0.75, transform: 'translate(-50%, -50%) scale(1.02) rotate(' + (turn * 0.6) + 'deg)', easing: 'ease-in' },
+        { offset: 1, opacity: 0, transform: 'translate(-50%, -50%) scale(1.1) rotate(' + turn + 'deg)' }
+      ], { duration: durMs, fill: 'forwards' });
+    } else {
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), durMs + 40);
+  }
+
+  /* Молния: два луча в разные стороны вдоль линии. Луч выезжает с той же
+   * скоростью, с какой идёт раскол (TIMING.lineStepMs на клетку) —
+   * камень трескается, когда кончик до него доходит. */
+  function lineStrike(t, m) {
+    const b = FC.budget(m);
+    const a = b.beamAlpha;
+    const dur = T.strikeMs.line;
+    const col = t.lineDir === 'col';
+    const pos = col ? t.r : t.c;
+    const arms = [
+      { deg: col ? 90 : 0, cells: BOARD - (pos + 0.5) },
+      { deg: col ? -90 : 180, cells: pos + 0.5 }
+    ].filter(x => x.cells > 0.5);
+    reserve(arms.length * 2 + 1, dur + 40);
+    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, BEAM_THICK, 'fx-line', Math.max(40, x.cells * T.lineStepMs), dur, a, 0.4));
+    coreGlow(t.r, t.c, LINE_FLARE, 'line', Math.round(dur * 0.75), a, 18);
+  }
+
+  /* Тотем: четыре полосы волны крестом, бегут с шагом waveStepMs на клетку,
+   * камни раскалываются под гребнем по своим задержкам. */
+  function totemStrike(t, m) {
+    const b = FC.budget(m);
+    const a = b.beamAlpha;
+    const dur = T.strikeMs.totem;
+    const arms = [
+      { deg: 0, cells: BOARD - (t.c + 0.5) },
+      { deg: 180, cells: t.c + 0.5 },
+      { deg: 90, cells: BOARD - (t.r + 0.5) },
+      { deg: -90, cells: t.r + 0.5 }
+    ].filter(x => x.cells > 0.5);
+    reserve(arms.length * 2 + 1, dur + 40);
+    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, WAVE_THICK, 'fx-wave', x.cells * T.waveStepMs, dur, a, 0.5));
+    coreGlow(t.r, t.c, WAVE_FLARE, 'wave', Math.round(dur * 0.8), a, -14);
+  }
+
+  /* Солнце: узкие золотые лучи к целям своего цвета. Луч доходит до камня
+   * к задержке этого камня (он в тот же миг раскалывается). Лучей не больше
+   * 16 — к ближним по расстоянию; дальние цели раскалываются без луча. */
+  function sunStrike(t, targets, m) {
+    const a = FC.budget(m).beamAlpha;
+    const dur = T.strikeMs.sun;
+    const dist = x => Math.hypot(x.r - t.r, x.c - t.c);
+    const others = targets.filter(x => !(x.r === t.r && x.c === t.c));
+    const rays = others.slice().sort((p, q) => dist(p) - dist(q)).slice(0, MAX_RAYS);
+    reserve(rays.length + 1, dur + 40);
+    rays.forEach(x => ray(t, x, dist(x), a));
+    coreGlow(t.r, t.c, SUN_DISC, 'sun', dur, a, 22);
+  }
+
+  function ray(t, target, cells, alpha) {
+    const life = Math.max(target.delay, 40) + 440;
+    const reach = Math.max(target.delay, 40) / life;
+    const el = document.createElement('div');
+    el.className = 'fx-strike fx-ray';
+    el.style.left = ((t.c + 0.5) * CELL) + '%';
+    el.style.top = ((t.r + 0.5) * CELL) + '%';
+    el.style.width = (cells * CELL) + '%';
+    el.style.height = (RAY_THICK * CELL) + '%';
+    el.style.backgroundPosition = '0 ' + (Math.floor(rand() * RAY_ROWS) / (RAY_ROWS - 1) * 100).toFixed(0) + '%';
+    const deg = Math.atan2(target.r - t.r, target.c - t.c) * 180 / Math.PI;
+    const base = `translate(0, -50%) rotate(${deg.toFixed(2)}deg)`;
+    layer.appendChild(el);
+    if (el.animate) {
+      el.animate([
+        { offset: 0, opacity: 0, transform: base + ' scaleX(0)' },
+        { offset: reach, opacity: alpha, transform: base + ' scaleX(1)', easing: 'ease-out' },
+        { offset: Math.min(1, reach + 0.18), opacity: alpha, transform: base + ' scaleX(1)', easing: 'ease-in' },
+        { offset: 1, opacity: 0, transform: base + ' scaleX(1)' }
+      ], { duration: life, easing: 'linear', fill: 'forwards' });
+    } else {
+      el.style.transform = base;
+      el.style.opacity = alpha;
+    }
+    later(() => el.remove(), life + 30);
+  }
+
+  /* Угли: вылетают из облака во все стороны, тормозят, проседают и гаснут,
+   * остывая от светло-оранжевого к тёмно-красному. */
+  function embers(r, c, count) {
+    const hot = emberSprite(EMBER_HOT, '#fff0c4');
+    const cool = emberSprite(EMBER_COOL, '#ff7a3a');
+    const t0 = performance.now();
+    for (let i = 0; i < count; i++) {
+      const a = (i + rand()) / count * Math.PI * 2;
+      const d = 0.25 + rand() * 0.55;
+      const sp = 1.6 + rand() * 1.8;
+      add({
+        kind: 'ember', sprite: hot, cool, add: true,
+        x: c + 0.5 + Math.cos(a) * d, y: r + 0.5 + Math.sin(a) * d,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, g: 2.2,
+        size: 0.2 + rand() * 0.12, grow: -0.4,
+        alpha: 1, born: t0 + rand() * 120, life: 600 + rand() * 180,
+        rot: 0, spin: 0
+      });
+    }
+    start();
+  }
+
+  /* ---------- Canvas: пыль и блики ---------- */
+  const canvas = document.createElement('canvas');
+  canvas.className = 'fx-canvas';
+  canvas.setAttribute('aria-hidden', 'true');
+  const ctx = canvas.getContext('2d');
+  let parts = [];
+  let raf = 0;
+  let cellPx = 0;
+  let dpr = 1;
+
+  /* #fx очищается целиком при новой раскладке поля — холст возвращаем на место */
+  function ensureCanvas() {
+    if (canvas.parentNode !== layer) layer.insertBefore(canvas, layer.firstChild);
+    const w = layer.clientWidth;
+    const h = layer.clientHeight;
+    dpr = Math.min(DPR_MAX, window.devicePixelRatio || 1);
+    const pw = Math.round(w * dpr);
+    const ph = Math.round(h * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) {
+      canvas.width = pw;
+      canvas.height = ph;
+    }
+    cellPx = w / 8;
+  }
+
+  /* Мягкие спрайты рисуются один раз на цвет */
+  const sprites = new Map();
+  function softSprite(color) {
+    let s = sprites.get(color);
+    if (s) return s;
+    s = document.createElement('canvas');
+    s.width = s.height = SPRITE_PX;
+    const g = s.getContext('2d');
+    const h = SPRITE_PX / 2;
+    const grad = g.createRadialGradient(h, h, 0, h, h, h);
+    grad.addColorStop(0, color);
+    grad.addColorStop(0.35, hexA(color, 0.55));
+    grad.addColorStop(1, hexA(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    sprites.set(color, s);
+    return s;
+  }
+
+  /* Уголь — яркая точка с ореолом: на золотых камнях мягкое пятно
+   * без ядра не читается */
+  function emberSprite(color, core) {
+    const key = 'ember:' + color;
+    let s = sprites.get(key);
+    if (s) return s;
+    s = document.createElement('canvas');
+    s.width = s.height = SPRITE_PX;
+    const g = s.getContext('2d');
+    const h = SPRITE_PX / 2;
+    const grad = g.createRadialGradient(h, h, 0, h, h, h);
+    grad.addColorStop(0, core);
+    grad.addColorStop(0.18, color);
+    grad.addColorStop(0.45, hexA(color, 0.35));
+    grad.addColorStop(1, hexA(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    sprites.set(key, s);
+    return s;
+  }
+
+  /* Блик — четырёхлучевая звёздочка с тёплым ядром */
+  let starSprite = null;
+  function star() {
+    if (starSprite) return starSprite;
+    const s = document.createElement('canvas');
+    s.width = s.height = SPRITE_PX;
+    const g = s.getContext('2d');
+    const h = SPRITE_PX / 2;
+    const core = g.createRadialGradient(h, h, 0, h, h, h * 0.42);
+    core.addColorStop(0, 'rgba(255, 246, 214, 1)');
+    core.addColorStop(0.4, hexA(GOLD, 0.7));
+    core.addColorStop(1, hexA(GOLD, 0));
+    g.fillStyle = core;
+    g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    g.globalCompositeOperation = 'lighter';
+    [[SPRITE_PX, 3], [3, SPRITE_PX]].forEach(([w, hh]) => {
+      const ray = g.createRadialGradient(h, h, 0, h, h, h);
+      ray.addColorStop(0, hexA(GOLD, 0.9));
+      ray.addColorStop(1, hexA(GOLD, 0));
+      g.fillStyle = ray;
+      g.fillRect(h - w / 2, h - hh / 2, w, hh);
+    });
+    starSprite = s;
+    return s;
+  }
+
+  function hexA(hex, a) {
+    const v = parseInt(hex.slice(1), 16);
+    return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${a})`;
+  }
+
+  function add(p) {
+    if (parts.length >= MAX_PARTICLES) return;
+    parts.push(p);
+  }
+
+  /* Пыль: облачко цвета камня — один крупный медленный клуб и мелкая
+   * пыль, разлетается и оседает. Позиции и скорости — в клетках. */
+  function dust(r, c, color, count, bright) {
+    const sprite = softSprite(color);
+    const t0 = performance.now();
+    for (let i = 0; i < count; i++) {
+      const puff = i === 0;
+      const a = rand() * Math.PI * 2;
+      const sp = puff ? 0.15 : 0.5 + rand() * 0.9;
+      add({
+        sprite, add: false,
+        x: c + 0.5 + Math.cos(a) * 0.12, y: r + 0.5 + Math.sin(a) * 0.12,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.25, g: 0.6,
+        size: puff ? 0.9 : 0.16 + rand() * 0.22, grow: puff ? 0.5 : 0.3,
+        alpha: (puff ? 0.2 : 0.22 + rand() * 0.14) * bright,
+        born: t0 + rand() * 40, life: puff ? 520 : 480 + rand() * 320,
+        rot: 0, spin: 0
+      });
+    }
+    start();
+  }
+
+  function glints(r, c, count, bright) {
+    const sprite = star();
+    const t0 = performance.now();
+    for (let i = 0; i < count; i++) {
+      const a = rand() * Math.PI * 2;
+      const d = 0.18 + rand() * 0.16;
+      add({
+        sprite, add: true, twinkle: true,
+        x: c + 0.5 + Math.cos(a) * d, y: r + 0.5 + Math.sin(a) * d,
+        vx: 0, vy: -0.12, g: 0,
+        size: 0.42 + rand() * 0.14, grow: 0,
+        alpha: 0.85 * bright,
+        born: t0 + 30 + i * 70 + rand() * 40, life: 420 + rand() * 100,
+        rot: rand() * 0.6, spin: 0.9
+      });
+    }
+    start();
+  }
+
+  function start() {
+    if (raf || !parts.length) return;
+    ensureCanvas();
+    raf = requestAnimationFrame(frame);
+  }
+
+  let lastT = 0;
+  function frame(now) {
+    raf = 0;
+    const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 0.016);
+    lastT = now;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const k = cellPx * dpr;
+    const alive = [];
+    for (const p of parts) {
+      const age = now - p.born;
+      if (age > p.life) continue;
+      alive.push(p);
+      if (age < 0) continue;
+      p.vx *= 1 - 1.8 * dt;
+      p.vy = p.vy * (1 - 1.8 * dt) + p.g * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      const t = age / p.life;
+      // Появляется быстро, гаснет плавно; блик — вспыхивает и сжимается
+      const env = p.twinkle ? Math.sin(Math.PI * t)
+        : p.cool ? Math.min(1, t / 0.08) * (1 - t * t)          // уголь тлеет дольше пыли
+          : Math.min(1, t / 0.15) * (1 - t) * (1 - t);
+      const scale = p.twinkle ? 0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, t * 1.3)) : 1 + p.grow * t;
+      const s = p.size * scale * k;
+      ctx.globalAlpha = Math.max(0, p.alpha * env);
+      ctx.globalCompositeOperation = p.add ? 'lighter' : 'source-over';
+      if (p.spin) {
+        ctx.setTransform(1, 0, 0, 1, p.x * k, p.y * k);
+        ctx.rotate(p.rot + p.spin * t);
+        ctx.drawImage(p.sprite, -s / 2, -s / 2, s, s);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      } else if (p.cool) {
+        // Уголь остывает: горячий спрайт гаснет, холодный проступает
+        const base = ctx.globalAlpha;
+        ctx.globalAlpha = base * (1 - t);
+        ctx.drawImage(p.sprite, p.x * k - s / 2, p.y * k - s / 2, s, s);
+        ctx.globalAlpha = base * t;
+        ctx.drawImage(p.cool, p.x * k - s / 2, p.y * k - s / 2, s, s);
+      } else {
+        ctx.drawImage(p.sprite, p.x * k - s / 2, p.y * k - s / 2, s, s);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    parts = alive;
+    if (parts.length) raf = requestAnimationFrame(frame);
+    else lastT = 0;
+  }
+
+  function clear() {
+    timers.forEach(id => clearTimeout(id));
+    timers.clear();
+    layer.querySelectorAll('.fx-standin, .fx-shard, .fx-strike').forEach(el => el.remove());
+    parts = [];
+    reserved = 0;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    lastT = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  ensureCanvas();
+
+  /* Спрайты ударов — заранее: иначе на хостинге первый удар теряет начальные кадры.
+   * Не на разборе скрипта: ~490 КБ спорили бы с PNG камней первого поля. Ждём
+   * загрузки страницы и простоя, грузим с низким приоритетом и просим
+   * декодировать, чтобы первый кадр удара не ждал битмап. Всё необязательное:
+   * на старых браузерах без fetchPriority, decode и requestIdleCallback — просто
+   * загрузка, из file:// тоже. */
+  const preloaded = [];           // держим ссылки: декодированный битмап не должен уйти раньше удара
+  function preloadSprites() {
+    FX_SPRITES.forEach(name => {
+      try {
+        const img = new Image();
+        if ('fetchPriority' in img) img.fetchPriority = 'low';
+        img.src = 'assets/fx/' + name + '.webp';
+        preloaded.push(img);
+        if (typeof img.decode === 'function') img.decode().catch(() => {});
+      } catch (e) { /* спрайты догрузятся при первом ударе */ }
+    });
+  }
+  function schedulePreload() {
+    const go = () => {
+      if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(preloadSprites, { timeout: 4000 });
+      else setTimeout(preloadSprites, 0);
+    };
+    setTimeout(go, 1500);
+  }
+  if (document.readyState === 'complete') schedulePreload();
+  else window.addEventListener('load', schedulePreload, { once: true });
+
+  /* Открылся любой оверлей (пауза, конец уровня, карта…) — эффекты убрать */
+  const overlayObs = new MutationObserver(list => {
+    if (list.some(m => m.target.classList.contains('show'))) clear();
+  });
+  document.querySelectorAll('.overlay').forEach(o => overlayObs.observe(o, { attributes: true, attributeFilter: ['class'] }));
+
+  window.Fx = {
+    mode,
+    shatter,
+    strike,
+    canvas,
+    particles: kind => (kind ? parts.filter(p => p.kind === kind).length : parts.length),
+    clear
+  };
+})();

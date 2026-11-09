@@ -1,0 +1,101 @@
+/* Эффекты поля (js/visuals-fx.js): раскол камня на осколки и удары спецкамней.
+   Анимируются только transform и opacity (Web Animations из JS). */
+
+/* Камень, который раскалывается: узел прячется сразу, вместо него
+   в #fx работают копии (узел удалит applyCascade через 310 мс). */
+.gem.fx-gone { opacity: 0; pointer-events: none; }
+
+/* Копия камня и осколки — клетка поля в слое #fx (та же сетка, что .tiles) */
+.fx-cell {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  pointer-events: none;
+}
+
+.fx-shard { will-change: transform, opacity; }
+
+/* У летящего куска тень не нужна, а filter на сотне движущихся узлов дорог */
+.fx-shard .gem-svg { filter: none; }
+
+/* Пыль и блики — один холст над осколками */
+.fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ---------- Удары спецкамней (Fx.strike) ---------- */
+
+/* Взрыв бомбы: лист assets/fx/bomb.webp — одна строка из 20 кадров 256×256
+   (EmberGen «Ground Explosion», JangaFX, CC0, см. assets/fx/LICENSE-EmberGen-CC0.txt;
+   сборка — tools/pack_strike.py). Кадры листает steps() по background-position,
+   длительность ставит JS (FxCore.TIMING.strikeMs.bomb); появление, рост и
+   угасание — Web Animations (opacity, transform). Центр узла — центр клетки
+   удара, размер (4 клетки) ставит JS. */
+.fx-strike {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.fx-bomb {
+  background: url("../assets/fx/bomb.webp") 0 0 / 2000% 100% no-repeat;
+  animation: fxBombFrames 800ms steps(20, jump-none) forwards;
+}
+
+@keyframes fxBombFrames {
+  from { background-position: 0% 0; }
+  to { background-position: 100% 0; }
+}
+
+/* Лучи молнии и волна тотема: окно-узел с рисунком внутри (js/visuals-fx.js
+   arm()). Листы — один столбец кадров; кадры листает steps() по
+   background-position, ширину листа и длительность ставит JS.
+   Сборка листов — tools/render_strikes.py. */
+.fx-arm {
+  overflow: hidden;
+  transform-origin: 0 50%;
+}
+
+.fx-strip {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: 100% 0%;
+  will-change: transform;
+  animation-name: fxStripFrames;
+  animation-fill-mode: forwards;
+}
+
+.fx-line .fx-strip {
+  background-image: url("../assets/fx/beam-turquoise.webp");
+  animation-timing-function: steps(12, jump-none);
+}
+
+.fx-wave .fx-strip {
+  background-image: url("../assets/fx/wave-jade.webp");
+  animation-timing-function: steps(8, jump-none);
+}
+
+@keyframes fxStripFrames {
+  from { background-position: 100% 0%; }
+  to { background-position: 100% 100%; }
+}
+
+.fx-ray {
+  background: url("../assets/fx/ray-gold.webp") 0 0 / 100% 400% no-repeat;
+  transform-origin: 0 50%;
+}
+
+/* Ядра: лист на 3 колонки (солнце, молния, тотем) */
+.fx-core {
+  background: url("../assets/fx/glow-cores.webp") 0 0 / 300% 100% no-repeat;
+}
+.fx-core-sun { background-position: 0% 0; }
+.fx-core-line { background-position: 50% 0; }
+.fx-core-wave { background-position: 100% 0; }

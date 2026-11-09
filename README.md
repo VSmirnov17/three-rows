@@ -188,6 +188,32 @@ python3 art-src/phase2/fire/check.py assets/fire/fire-calm.webp /tmp/seam.png
 
 Если изменились числа в `assets/fire/fire.json`, перенесите их в `FireCore.SHEET` (`js/fire-core.js`) — тест `tests/fire-core.test.js` следит за совпадением. Своя симуляция Mantaflow `blender/fire.py` осталась запасным путём (пользователь счёл её «дешёвой»).
 
+## Эффекты поля
+
+Когда камни гаснут, они раскалываются на осколки, а спецкамни бьют каждый по-своему (`js/fx-core.js`, `js/visuals-fx.js`, `css/fx.css`). Логика отделена от рисования, как у огня: `FxCore` (`js/fx-core.js`, тесты `tests/fx-core.test.js`) — чистые функции без DOM: `TIMING` (длительности), `budget` (сколько частиц и какой силы луч по режиму), `shardsFor` (на сколько осколков делить камень, чтобы узлов в `#fx` было не больше 120), `shardPolygons` и `shardFlight` (раскрой клетки и полёт осколка), `strikeTargets` и `mergeDelays` (какие клетки задевает удар и с какой задержкой они гаснут). `Fx` (`js/visuals-fx.js`, `window.Fx`) — только DOM и canvas: `Fx.shatter`, `Fx.strike`, `Fx.particles(kind)`, `Fx.mode()`, `Fx.clear()`. Игра зовёт их из `js/game.js` (`playStep`), числа и задержки в ядро передаёт параметрами. Анимируются только `transform` и `opacity`; ни вспышек экрана, ни тряски поля, ни белого кольца.
+
+- **Раскол.** Камень гаснет сразу (`fx-gone`), на его месте в слое `#fx` встаёт копия (`.fx-standin`) и в свой черёд (задержка от удара) распадается на осколки `.fx-shard`: копии рисунка камня, обрезанные `clip-path`, они разлетаются и гаснут за 560 мс. На canvas — пыль цвета камня и золотые блики. Лианы удар срывает, а сам камень в лианах не раскалывается.
+- **Бомба** — обсидиановый взрыв `.fx-bomb` (лист `assets/fx/bomb.webp`, 20 кадров из CC0-симуляции JangaFX «Ground Explosion») и 18 углей на canvas. **Молния** — бирюзовые лучи `.fx-line` в обе стороны вдоль ряда или столбца. **Солнце** — золотые лучи `.fx-ray` к целям своего цвета (не больше 16) и диск в центре. **Тотем** — нефритовая волна `.fx-wave` крестом. Узлы удара убираются за 1100 мс, если открыть паузу или любой экран поверх поля, `Fx.clear()` убирает всё сразу.
+- **Режимы** (`Fx.mode()` читает их при каждом вызове, `matchMedia` заново: долго живущий `MediaQueryList` в Firefox отстаёт после смены настройки). «Спокойно»: осколки те же, а пыль, блики, угли и прозрачность лучей — 0,6 от полных. Слабый компьютер (`body[data-fx="low"]`): по 3 осколка на камень, спрайты ударов есть, частиц на canvas нет. `prefers-reduced-motion`: ни осколков, ни ударов, камень просто гаснет за 200 мс; `upgradeGem`, отказ для камня в лианах и перетасовка тоже не запускают `element.animate` (камень всё равно становится спецкамнем).
+
+Пересборка спрайтов (исходники и параметры — `art-src/phase2/PROMPTS.md`, «Шаг 5»):
+
+```bash
+# Бомба: рендер 20 кадров из VDB Ground Explosion (около 1,2 ГБ, в проект не кладутся), затем лист assets/fx/bomb.webp
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+    --python blender/explosion_vdb.py -- --vdb <папка>/ground_explosion_VDB --out <кадры>
+python3 tools/pack_strike.py <кадры> assets/fx/bomb.webp --json assets/fx/bomb.json
+python3 tools/pack_strike.py --check
+
+# Лучи молнии и солнца, волна тотема, ядра в клетке удара (numpy из встроенного Python Blender, cwebp)
+/Applications/Blender.app/Contents/Resources/5.2/python/bin/python3.13 tools/render_strikes.py assets/fx
+
+# Видео-образец эффектов для показа (Chromium, звук выключен; --scenario strikes — молния, солнце, тотем)
+NODE_PATH=/tmp/pw/node_modules node tools/record-fx.js --out art-src/phase2/strikes/sample1.webm
+```
+
+Утверждённые образцы лежат в `art-src/phase2/strikes/` (`sample1.webm` — раскол и бомба, `sample2.webm` — молния, солнце, тотем). Спрайты лучей, волны и ядер нарисованы кодом (шум numpy), а не взяты из готовой симуляции или нарисованы Codex; пользователь принял их на видео. Проверки — сценарии `13 strikes` в `tools/e2e/run.js`.
+
 ## Визуальные слои
 
 Игра сама ничего не рисует поверх логики: `js/game.js` выставляет на `<body>` атрибуты `data-land`, `data-combo`, `data-urgency` (`tense`/`urgent`), `data-outcome` (`win`/`lose`) и шлёт события `sun:special`, `sun:blast`, `sun:match`. Фоны, эффекты комбо, тревога таймера и экраны подписываются на них из `css/*.css` и `js/visuals*.js`, поэтому оформление можно менять, не трогая правила игры.
@@ -272,6 +298,14 @@ js/visuals-screens.js — эффекты комбо, баннер уровня, 
 js/fire-core.js   — огонь жаровен: реакции на игру, вспышка, кадры, пределы яркости (без DOM)
 js/visuals-fire.js — жаровни: кадры огня, вспышка, свет, искры
 css/fire.css      — раскладка жаровен, слой света и искр
+js/fx-core.js     — эффекты поля: раскрой осколков, бюджет по режимам, цели и задержки ударов (без DOM)
+js/visuals-fx.js  — эффекты поля: осколки, удары бомбы, молнии, солнца и тотема, частицы на canvas
+css/fx.css        — слой #fx: осколки, лист взрыва, лучи и волны
+assets/fx/        — спрайты ударов (bomb, beam-turquoise, ray-gold, wave-jade, glow-cores)
+blender/explosion_vdb.py — рендер взрыва бомбы из VDB EmberGen
+tools/pack_strike.py — кадры взрыва → спрайт-лист bomb.webp
+tools/render_strikes.py — лучи, волна и ядра ударов (numpy)
+tools/record-fx.js — запись видео-образца эффектов (Playwright)
 assets/fire/      — спрайт-лист огня, fire.json, лицензия EmberGen CC0
 assets/backdrop/  — живой фон земель 1 и 2: плиты, струи и маска воды, луна, облака
 tools/pack_backdrop.py — картины Codex → слои живого фона (Pillow)
