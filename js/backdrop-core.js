@@ -8,6 +8,8 @@
  * fliesOn  — летят ли светлячки: только в 'run' и не на слабом компьютере.
  * fireflyAlpha — плавная яркость светлячка в момент t.
  * isFree, spawnPoint — свободное от табличек и кнопок место для светлячка.
+ * newFly, stepFly — рождение и шаг светлячка: полёт, разворот у занятых мест
+ *            и краёв, перерождение в новом месте в самый тёмный момент.
  * Время и случайность сюда приходят параметрами: ни Date.now(), ни Math.random()
  * внутри нет.
  */
@@ -40,7 +42,10 @@
     period: Object.freeze([3.5, 6.5]),// период мерцания, с
     alpha: Object.freeze([0.08, 0.8]),
     radius: Object.freeze([1.0, 1.7]),// радиус ядра, px
-    glow: 6                           // свечение: радиус ядра × 6
+    glow: 6,                          // свечение: радиус ядра × 6
+    floor: 0.15,                      // выше 0,15 высоты окна не летают (там небо и луна)
+    life: Object.freeze([40, 90]),    // через столько секунд светлячок перерождается
+    wander: 1.2                       // рысканье курса, рад/с
   });
 
   /* 'still' важнее 'paused': при reduced-motion или на телефоне картина стоит всегда. */
@@ -71,13 +76,23 @@
     return true;
   }
 
-  /* Случайная свободная точка: x ∈ [4, w−4], y ∈ [0,15·h, h−6].
+  /* Где светлячок может быть: x ∈ [4, w−4], y ∈ [0,15·h, h−6]. */
+  function inBounds(w, h, x, y) {
+    return x >= 4 && x <= w - 4 && y >= FIREFLY.floor * h && y <= h - 6;
+  }
+
+  /* Точка в границах и вне занятых мест (с отступом FIREFLY.pad). */
+  function flyFits(rects, w, h, x, y) {
+    return inBounds(w, h, x, y) && isFree(rects, x, y, FIREFLY.pad);
+  }
+
+  /* Случайная свободная точка в границах inBounds.
    * Если за tries попыток места нет — null. */
   function spawnPoint(rects, w, h, rand, tries) {
     const n = tries === undefined ? 60 : tries;
     const x0 = 4;
     const x1 = w - 4;
-    const y0 = 0.15 * h;
+    const y0 = FIREFLY.floor * h;
     const y1 = h - 6;
     for (let i = 0; i < n; i++) {
       const x = x0 + rand() * (x1 - x0);
@@ -87,5 +102,51 @@
     return null;
   }
 
-  return { LIMITS, FIREFLY, modeFor, fliesOn, fireflyAlpha, isFree, spawnPoint };
+  const between = (rand, r) => r[0] + rand() * (r[1] - r[0]);
+
+  /* Новый светлячок в момент t (или null, если места нет). Фаза мерцания
+   * подобрана так, что в момент рождения он самый тусклый: появляется
+   * плавно, а не вспышкой. */
+  function newFly(rects, w, h, t, rand) {
+    // Свободны часто только узкие полосы по бокам: попыток больше, чем по умолчанию
+    const p = spawnPoint(rects, w, h, rand, 200);
+    if (!p) return null;
+    const period = between(rand, FIREFLY.period);
+    return {
+      x: p.x,
+      y: p.y,
+      a: rand() * Math.PI * 2,
+      v: between(rand, FIREFLY.speed),
+      p: period,
+      ph: ((-t % period) + period) % period,   // (t + ph) / p — целое: яркость минимальна
+      r: between(rand, FIREFLY.radius),
+      born: t,
+      life: between(rand, FIREFLY.life)
+    };
+  }
+
+  /* Шаг светлячка f из момента t − dt в момент t. Возвращает f (сдвинутого
+   * или развернувшегося) либо нового светлячка (или null), если f отжил
+   * своё и как раз прошёл самую тусклую точку мерцания.
+   * Курс слегка рыскает; лёгкий подъём FIREFLY.rise. Если следующий шаг
+   * уводит на занятое место или за границы (в том числе выше 0,15·h),
+   * светлячок туда не идёт, а разворачивается. */
+  function stepFly(f, t, dt, rects, w, h, rand) {
+    if (t - f.born >= f.life &&
+        Math.floor((t + f.ph) / f.p) !== Math.floor((t - dt + f.ph) / f.p)) {
+      return newFly(rects, w, h, t, rand);
+    }
+    f.a += (rand() * 2 - 1) * dt * FIREFLY.wander;
+    const nx = f.x + Math.cos(f.a) * f.v * dt;
+    const ny = f.y + Math.sin(f.a) * f.v * dt - FIREFLY.rise * dt;
+    if (flyFits(rects, w, h, nx, ny)) {
+      f.x = nx;
+      f.y = ny;
+    } else {
+      f.a += Math.PI + (rand() - 0.5);
+    }
+    return f;
+  }
+
+  return { LIMITS, FIREFLY, modeFor, fliesOn, fireflyAlpha, isFree, inBounds, flyFits, spawnPoint, newFly, stepFly };
 });

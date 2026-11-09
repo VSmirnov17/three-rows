@@ -184,3 +184,68 @@ test('все файлы assets/backdrop/land2 вместе не больше 250
   const total = names.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
   assert.ok(total <= 250 * 1024, `${total} байт`);
 });
+
+/* линейный конгруэнтный генератор для симуляций */
+function lcgRand(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+test('новый светлячок появляется самым тусклым', () => {
+  const rand = lcgRand(7);
+  for (const t of [0, 3.3, 17.25, 600.5]) {
+    const f = BC.newFly([], 1366, 768, t, rand);
+    assert.ok(f, 'нет светлячка');
+    assert.ok(Math.abs(BC.fireflyAlpha(t, f.p, f.ph) - FIREFLY.alpha[0]) < 1e-9, `t=${t}: ${BC.fireflyAlpha(t, f.p, f.ph)}`);
+    assert.ok(f.life >= FIREFLY.life[0] && f.life <= FIREFLY.life[1], `life ${f.life}`);
+  }
+  assert.equal(BC.newFly([{ left: 0, top: 0, right: 1366, bottom: 768 }], 1366, 768, 0, rand), null);
+});
+
+test('светлячки за 10 минут не собираются у верха и не заходят на занятое', () => {
+  /* 1366×768: свободны только боковые полосы (занято x 73..1293 на всю высоту) */
+  const w = 1366;
+  const h = 768;
+  const rects = [{ left: 73, top: 0, right: 1293, bottom: h }];
+  const rand = lcgRand(2026);
+  const dt = 1 / 60;
+  let t = 0;
+  let flies = [];
+  for (let i = 0; i < FIREFLY.count; i++) flies.push(BC.newFly(rects, w, h, t, rand));
+  let samples = 0;
+  let top10 = 0;
+  let topQuarter = 0;
+  let respawns = 0;
+  const steps = 10 * 60 * 60;
+  for (let s = 1; s <= steps; s++) {
+    t = s * dt;
+    flies = flies.map(f => {
+      const g = BC.stepFly(f, t, dt, rects, w, h, rand);
+      if (g !== f) {
+        respawns++;
+        assert.ok(g, `t=${t.toFixed(2)}: место для перерождения не нашлось`);
+        assert.ok(BC.fireflyAlpha(t, g.p, g.ph) - FIREFLY.alpha[0] < 1e-9, 'переродился не самым тусклым');
+        assert.ok(t - f.born >= f.life, 'переродился раньше срока');
+        /* старый уходит в самый тусклый момент: яркость у минимума */
+        assert.ok(BC.fireflyAlpha(t, f.p, f.ph) < FIREFLY.alpha[0] + 0.01, 'ушёл не в тусклый момент');
+      }
+      assert.ok(BC.flyFits(rects, w, h, g.x, g.y), `t=${t.toFixed(2)}: (${g.x.toFixed(1)}, ${g.y.toFixed(1)}) вне свободного места`);
+      return g;
+    });
+    if (s % 60 === 0) {
+      for (const f of flies) {
+        samples++;
+        if (f.y < 0.1 * h) top10++;
+        if (f.y < 0.25 * h) topQuarter++;
+      }
+    }
+  }
+  const share = top10 / samples;
+  assert.ok(share <= 0.2, `в верхних 10% окна ${(share * 100).toFixed(1)}%`);
+  /* полоса между полом 0,15·h и 0,25·h — меньше трети (равномерно было бы ~12%) */
+  assert.ok(topQuarter / samples <= 0.33, `в верхней четверти ${(topQuarter / samples * 100).toFixed(1)}%`);
+  assert.ok(respawns >= FIREFLY.count * 5, `перерождений ${respawns}`);
+});

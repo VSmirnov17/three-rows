@@ -1,8 +1,8 @@
 /* Живой фон земли (этап 2, шаг 3): водопад, луна, облака, светлячки.
    Игровую логику не трогает: слушает body[data-fx], body.has-backdrop
    (ставит js/visuals.js), оверлеи и document.hidden.
-   Решения (режим, мерцание, свободные места) — в js/backdrop-core.js,
-   здесь только DOM.
+   Решения (режим, мерцание, свободные места, полёт и перерождение
+   светлячков) — в js/backdrop-core.js, здесь только DOM.
 
    Backdrop.build(layer, land, onReady) строит слои внутри слоя темы
    .theme-bg (его создаёт js/visuals.js): .bd-stage (плита, водопад, туман)
@@ -12,7 +12,8 @@
 
    Режим body[data-bd] (BackdropCore.modeFor):
      run    — всё движется;
-     paused — вкладка скрыта или открыт любой .overlay.show;
+     paused — вкладка скрыта, открыт любой .overlay.show или идёт отсчёт
+              «3, 2, 1» перед уровнем (.countdown, он размывает фон);
      still  — prefers-reduced-motion или телефон (те же условия, что прячут
               жаровни в css/fire.css): картина стоит, светлячков нет.
    Слабый компьютер body[data-fx="low"] (ставит js/visuals-fire.js):
@@ -107,37 +108,26 @@
   host.appendChild(canvas);
   const ctx = canvas.getContext("2d");
 
-  const BUSY = ".hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .hint-bar, .combo-badge";
-  const rnd = (a, b) => a + Math.random() * (b - a);
+  /* Занятые места: таблички, кнопки, рамка поля, жаровни, круг Камня с
+     подписью земли, подсказка, значок серии. Тот же список берёт e2e (__BD). */
+  const BUSY = ".hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .sun-stone-caption, .hint-bar, .combo-badge";
   let W = 0;
   let H = 0;
   let busy = [];
+  // Светлячок или null (места не нашлось — пробуем раз в секунду)
   const flies = [];
-  for (let i = 0; i < F.count; i++) flies.push({ on: false, retry: 0 });
+  for (let i = 0; i < F.count; i++) flies.push(null);
+  let retryAt = 0;
 
-  function spawn(f) {
-    const p = BC.spawnPoint(busy, W, H, Math.random);
-    if (!p) {
-      // Места нет (узкое окно): светлячок ждёт и пробует ещё раз
-      f.on = false;
-      f.retry = 1;
-      return;
-    }
-    f.on = true;
-    f.x = p.x;
-    f.y = p.y;
-    f.a = rnd(0, Math.PI * 2);
-    f.v = rnd(F.speed[0], F.speed[1]);
-    f.p = rnd(F.period[0], F.period[1]);
-    f.ph = rnd(0, f.p);
-    f.r = rnd(F.radius[0], F.radius[1]);
-  }
+  let raf = 0;
+  let last = 0;
+  let clock = 0;
+  let frames = 0;
 
-  const inside = (x, y) => x >= 0 && x <= W && y >= 0 && y <= H;
-  const fits = (x, y) => inside(x, y) && BC.isFree(busy, x, y, F.pad);
+  const born = () => BC.newFly(busy, W, H, clock, Math.random);
 
   /* Холст — по видимой области, занятые места — по таблицам и кнопкам.
-     Светлячок на занятом месте или за краем окна перерождается. */
+     Светлячок на занятом месте или за границами перерождается. */
   function measure() {
     const de = document.documentElement;
     W = de.clientWidth || window.innerWidth;
@@ -155,17 +145,15 @@
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) busy.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
     });
-    flies.forEach(f => { if (!f.on || !fits(f.x, f.y)) spawn(f); });
+    for (let i = 0; i < flies.length; i++) {
+      const f = flies[i];
+      if (!f || !BC.flyFits(busy, W, H, f.x, f.y)) flies[i] = born();
+    }
   }
 
   function clear() {
     ctx.clearRect(0, 0, W, H);
   }
-
-  let raf = 0;
-  let last = 0;
-  let clock = 0;
-  let frames = 0;
 
   function draw(f, alpha) {
     const R = f.r * F.glow;
@@ -187,24 +175,20 @@
     clock += dt;
     frames++;
     clear();
+    const retry = clock >= retryAt;
+    if (retry) retryAt = clock + 1;
     for (let i = 0; i < flies.length; i++) {
-      const f = flies[i];
-      if (!f.on) {
-        f.retry -= dt;
-        if (f.retry <= 0) spawn(f);
-        if (!f.on) continue;
-      }
-      f.a += rnd(-1, 1) * dt * 1.2;
-      const nx = f.x + Math.cos(f.a) * f.v * dt;
-      const ny = f.y + Math.sin(f.a) * f.v * dt - F.rise * dt;
-      // Упёрся в табличку, кнопку или край окна — разворачивается, не заходя туда
-      if (fits(nx, ny)) {
-        f.x = nx;
-        f.y = ny;
+      let f = flies[i];
+      if (!f) {
+        if (!retry) continue;
+        f = born();
+        if (!f) continue;
       } else {
-        f.a += Math.PI + rnd(-0.5, 0.5);
+        // Полёт, разворот у занятых мест и краёв, перерождение в тусклый момент
+        f = BC.stepFly(f, clock, dt, busy, W, H, Math.random);
       }
-      draw(f, BC.fireflyAlpha(clock, f.p, f.ph));
+      flies[i] = f;
+      if (f) draw(f, BC.fireflyAlpha(clock, f.p, f.ph));
     }
   }
 
@@ -221,7 +205,7 @@
   function refresh() {
     const m = BC.modeFor({
       hidden: document.hidden,
-      overlay: !!document.querySelector(".overlay.show"),
+      overlay: !!document.querySelector(".overlay.show, .countdown:not(.hidden)"),
       reduced: !!(reduceMq && reduceMq.matches),
       phone: phoneMqs.some(q => q && q.matches)
     });
@@ -248,7 +232,7 @@
   }
 
   const overlayObs = new MutationObserver(relayout);
-  document.querySelectorAll(".overlay").forEach(o => overlayObs.observe(o, { attributes: true, attributeFilter: ["class"] }));
+  document.querySelectorAll(".overlay, .countdown").forEach(o => overlayObs.observe(o, { attributes: true, attributeFilter: ["class"] }));
   new MutationObserver(refresh).observe(body, { attributes: true, attributeFilter: ["class", "data-fx"] });
   document.addEventListener("visibilitychange", refresh);
   [reduceMq].concat(phoneMqs).forEach(q => {
@@ -284,8 +268,9 @@
       get frames() { return frames; },
       get mode() { return mode; },
       // Только те, что сейчас рисуются: без цикла (пауза, still, земля без фона) — пусто
-      flies: () => (raf ? flies.filter(f => f.on).map(f => ({ x: f.x, y: f.y })) : []),
-      busy: () => busy.map(r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }))
+      flies: () => (raf ? flies.filter(Boolean).map(f => ({ x: f.x, y: f.y })) : []),
+      busy: () => busy.map(r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
+      busySelector: BUSY
     };
   }
 })();

@@ -150,6 +150,10 @@ body:not(.has-backdrop) .bd-flies { display: none; }
 .theme-bg:not(.on) .bd-anim { animation-play-state: paused; }
 body:not([data-bd="run"]) .bd-anim { animation-play-state: paused; }
 body[data-bd="still"] .bd-anim { animation: none; }
+/* Без анимации ореол и туман встали бы на непрозрачность 1 — ярче, чем
+   когда-либо в движении (до .9). Ставим середину их размаха. */
+body[data-bd="still"] .bd-halo { opacity: .76; }
+body[data-bd="still"] .bd-mist { opacity: .7; }
 
 /* ---------- Земля с живым фоном: старые слои не нужны ---------- */
 body.has-backdrop .light-shaft,

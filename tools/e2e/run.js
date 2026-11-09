@@ -943,16 +943,17 @@ async function suite(bt, bname, url) {
         return 'nothing';
       });
     }, pts);
-    const BUSY_SEL = '.hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .hint-bar, .combo-badge';
     // Светлячки вне занятых мест (по __BD.busy() и по свежим прямоугольникам) с отступом 10 px
-    const fliesCheck = (page) => ev(page, (sel) => {
+    // Список занятых мест — тот же, что у игры (__BD.busySelector), без копии здесь
+    const fliesCheck = (page) => ev(page, () => {
+      const sel = __BD.busySelector;
       const pad = 10;
       const fresh = [...document.querySelectorAll(sel)].map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
       const rects = __BD.busy().concat(fresh.map(r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })));
       const flies = __BD.flies();
       const bad = flies.filter(p => rects.some(r => p.x > r.left - pad && p.x < r.right + pad && p.y > r.top - pad && p.y < r.bottom + pad));
       return { n: flies.length, bad: bad.map(p => Math.round(p.x) + ',' + Math.round(p.y)) };
-    }, BUSY_SEL);
+    });
     const VPS12 = [
       { width: 1366, height: 768, n: 'desktop', moonMin: 0.6, wfMin: 0.25, next: [1920, 1080] },
       { width: 1366, height: 650, n: 'desktop-short', moonMin: 0.6, next: [1024, 768] },
@@ -1029,6 +1030,7 @@ async function suite(bt, bname, url) {
         const fc = await fliesCheck(page);
         assert(!fc.bad.length, 'светлячки на занятых местах: ' + fc.bad.join(' '));
         if (vp.phone) assert(fc.n === 0, 'на телефоне светлячки летают: ' + fc.n);
+        else assert(fc.n > 0, 'на десктопе нет ни одного светлячка: проверка мест прошла бы вхолостую');
         notes.push(`flies ${fc.n} ok`);
         // То же после смены окна
         await page.setViewportSize({ width: vp.next[0], height: vp.next[1] });
@@ -1036,6 +1038,7 @@ async function suite(bt, bname, url) {
         const fc2 = await fliesCheck(page);
         const m2 = await ev(page, () => document.body.dataset.bd);
         assert(!fc2.bad.length, `после смены окна на ${vp.next.join('x')} светлячки на занятых местах: ` + fc2.bad.join(' '));
+        assert(fc2.n > 0, `после смены окна на ${vp.next.join('x')} нет ни одного светлячка`);
         notes.push(`resize ${vp.next.join('x')}: ${m2}, flies ${fc2.n} ok`);
         await ctx.close();
         return notes.join('; ');
