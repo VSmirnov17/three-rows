@@ -1495,6 +1495,28 @@ async function suite(bt, bname, url) {
         assert(r.gone > 0, `reduced ${type}: камни не исчезли`);
       }
 
+      // Солнце с дальними целями: копия камня не ждёт лучей, которых в reduced нет —
+      // живёт только своё угасание (200 мс), даже у самой дальней цели
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const sd = await ev(page, async () => {
+        const S = window.__SUN, fx = document.getElementById('fx');
+        S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+        const color = S.gemAt(0, 0).color;
+        S.state.grid.forEach((row, r) => row.forEach((g, c) => { if (g && (r + c >= 10 || (r === 7 && c === 7))) g.color = color; }));
+        const born = new Map(); let life = 0, n = 0;
+        const mo = new MutationObserver(list => list.forEach(m => {
+          m.addedNodes.forEach(x => { if (x.classList && x.classList.contains('fx-standin')) born.set(x, performance.now()); });
+          m.removedNodes.forEach(x => { if (born.has(x)) { n++; life = Math.max(life, performance.now() - born.get(x)); born.delete(x); } });
+        }));
+        mo.observe(fx, { childList: true });
+        await S.strike(0, 0, 'sun');
+        await new Promise(res => setTimeout(res, 100));
+        mo.disconnect();
+        return { life, n, open: born.size };
+      });
+      assert(sd.n >= 8, 'reduced sun: копий камней-целей ' + sd.n + ' (ждали ≥ 8), проверка пустая');
+      assert(sd.life <= 320, `reduced sun: копия камня жила ${sd.life.toFixed(0)} мс (ждали ≤ 320, ждала лучей)`);
+
       // Апгрейд камня: итоговое состояние верное, движения (element.animate) нет
       await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
       const up = await ev(page, () => {
@@ -1541,6 +1563,66 @@ async function suite(bt, bname, url) {
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
       return `reduced: move gone ${mv.gone}, shards 0, strikes bomb/line/sun/totem clean, upgrade/refuse/reshuffle without animate`;
+    });
+
+    // Сбой эффектов не ломает механику: Fx.shatter и Fx.strike бросают, ход и удар
+    // всё равно доигрываются (busy снят, 64 камня, счёт вырос). Ошибки консоли
+    // здесь ожидаемы, но только подставленные — любая другая роняет сценарий.
+    await scenario(bname, '13 strikes effect failure: board recovers when Fx throws', async () => {
+      const key = 's13fail';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fxFull: true });
+      await startNormal(page);
+      await ev(page, () => {
+        window.Fx.shatter = () => { throw new Error('injected shatter failure'); };
+        window.Fx.strike = () => { throw new Error('injected strike failure'); };
+      });
+      const gemsOk = () => ev(page, () => ({
+        busy: __SUN.state.busy,
+        dom: document.querySelectorAll('#tiles .gem').length,
+        grid: __SUN.state.grid.flat().filter(Boolean).length,
+        gone: document.querySelectorAll('#tiles .fx-gone').length
+      }));
+      const score0 = await ev(page, () => __SUN.state.score);
+      // Обычный ход: каскад гасит камни через Fx.shatter, который бросает
+      await ev(page, async () => {
+        const S = window.__SUN;
+        const m = S.findMove();
+        if (m) await S.attemptSwap(m[0], m[1]).catch(() => {});
+      });
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 5000 });
+      await page.waitForTimeout(500);
+      const afterMove = await gemsOk();
+      const score1 = await ev(page, () => __SUN.state.score);
+      assert(!afterMove.busy, 'после хода со сбоем эффектов busy остался true');
+      assert(afterMove.dom === 64 && afterMove.grid === 64, `после хода камней в DOM ${afterMove.dom}, в сетке ${afterMove.grid} (ждали 64)`);
+      assert(afterMove.gone === 0, 'после хода остались спрятанные камни: ' + afterMove.gone);
+      assert(score1 > score0, `счёт не вырос после хода: ${score0} -> ${score1}`);
+      // Удар бомбы: Fx.strike и Fx.shatter бросают
+      const struck = await ev(page, async () => {
+        const S = window.__SUN;
+        S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+        let err = null;
+        try { await S.strike(4, 4, 'bomb'); } catch (e) { err = String(e && e.message); }
+        return err;
+      });
+      assert(struck === null, 'удар со сбоем эффектов бросил наружу: ' + struck);
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 5000 });
+      await page.waitForTimeout(500);
+      const afterStrike = await gemsOk();
+      const score2 = await ev(page, () => __SUN.state.score);
+      assert(!afterStrike.busy, 'после удара со сбоем эффектов busy остался true');
+      assert(afterStrike.dom === 64 && afterStrike.grid === 64, `после удара камней в DOM ${afterStrike.dom}, в сетке ${afterStrike.grid} (ждали 64)`);
+      assert(afterStrike.gone === 0, 'после удара остались спрятанные камни: ' + afterStrike.gone);
+      assert(score2 > score1, `счёт не вырос после удара: ${score1} -> ${score2}`);
+      // Игра жива: следующий ход проходит
+      await playRealMove(page);
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      const foreign = errs.filter(l => !/injected (shatter|strike) failure/.test(l));
+      assert(foreign.length === 0, 'чужие ошибки консоли: ' + foreign.join(' | '));
+      assert(errs.some(l => /injected shatter failure/.test(l)) && errs.some(l => /injected strike failure/.test(l)),
+        'подставленные сбои не дошли до консоли (сценарий пустой): ' + errs.length);
+      return `Fx throws: move score ${score0}->${score1}, bomb ->${score2}, busy released, 64 gems, ${errs.length} injected console errors`;
     });
 
     // Пауза посреди удара: через 1,5 с узлов эффектов нет, частиц нет

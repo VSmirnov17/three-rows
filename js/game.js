@@ -258,6 +258,19 @@
     window.dispatchEvent(new CustomEvent('sun:' + name, { detail }));
   }
 
+  /* Эффекты (Fx, FxCore) не должны ломать механику: сбой в них пишется в
+     консоль, а ход идёт дальше. Нет Fx или FxCore (скрипт не загрузился) —
+     молча берём fallback. Все вызовы эффектов из game.js идут через fxSafe. */
+  function fxSafe(fn, fallback) {
+    if (!window.Fx || !window.FxCore) return fallback;
+    try {
+      return fn();
+    } catch (err) {
+      console.error('[fx] ' + (err && err.message ? err.message : err), err);
+      return fallback;
+    }
+  }
+
   function setCombo(mult) {
     setBodyState('combo', mult);
     state.comboMult = mult;
@@ -581,7 +594,8 @@
   /* prefers-reduced-motion читаем заново при каждом вызове: MediaQueryList,
      который держали с загрузки, в Firefox отстаёт после смены настройки. */
   function reducedMotion() {
-    if (window.Fx && Fx.mode) return !!Fx.mode().reduced;
+    const fxReduced = fxSafe(() => !!Fx.mode().reduced, null);
+    if (fxReduced !== null) return fxReduced;
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
   function refuseLocked(gems) {
@@ -623,7 +637,7 @@
   function spawnBoard() {
     dom.tiles.innerHTML = '';
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
-    if (window.Fx) Fx.clear();
+    fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -834,7 +848,7 @@
      по ним FxCore.strikeTargets находит клетки удара. */
   function blastFx(trigger, cells) {
     emitVisual('blast', { type: trigger.type });
-    if (window.Fx) Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || []));
+    fxSafe(() => Fx.strike(trigger, FxCore.strikeTargets(trigger, cells || [])));
   }
 
   /* Классы спецкамней: новый тип должен попасть в CSS-ауру и ART.gemInner */
@@ -1083,12 +1097,12 @@
 
     SFX.match(chain, clear.size, triggers.length > 0);
     // Камень раскалывается, когда до него дошёл удар (FxCore.mergeDelays).
-    const delays = FxCore.mergeDelays(cellsColored, triggers);
+    const delays = fxSafe(() => FxCore.mergeDelays(cellsColored, triggers), new Map());
     clear.forEach(k => {
       const p = parseKey(k);
       const gem = gemAt(p.r, p.c);
       if (!gem || !gem.el) return;
-      Fx.shatter(gem.el, p.r, p.c, delays.get(k) || 0, { cells: clear.size, color: GEM_COLORS[gem.color] });
+      fxSafe(() => Fx.shatter(gem.el, p.r, p.c, delays.get(k) || 0, { cells: clear.size, color: GEM_COLORS[gem.color] }));
     });
 
     // Срыв лиан: лиана вспыхивает и рвётся, камень остаётся на месте.

@@ -162,7 +162,8 @@
     if (m.reduced) {
       const st = cellBox('fx-standin', r, c, inner);
       layer.appendChild(st);
-      later(() => fadeOut(st, REDUCED_FADE_MS), delay);
+      // Лучей в reduced нет (strike выходит сразу), ждать их незачем
+      fadeOut(st, REDUCED_FADE_MS);
       return;
     }
     if (delay === 0) {
@@ -587,8 +588,33 @@
 
   ensureCanvas();
 
-  /* Спрайты ударов — заранее: иначе на хостинге первый удар теряет начальные кадры */
-  FX_SPRITES.forEach(name => { new Image().src = 'assets/fx/' + name + '.webp'; });
+  /* Спрайты ударов — заранее: иначе на хостинге первый удар теряет начальные кадры.
+   * Не на разборе скрипта: ~490 КБ спорили бы с PNG камней первого поля. Ждём
+   * загрузки страницы и простоя, грузим с низким приоритетом и просим
+   * декодировать, чтобы первый кадр удара не ждал битмап. Всё необязательное:
+   * на старых браузерах без fetchPriority, decode и requestIdleCallback — просто
+   * загрузка, из file:// тоже. */
+  const preloaded = [];           // держим ссылки: декодированный битмап не должен уйти раньше удара
+  function preloadSprites() {
+    FX_SPRITES.forEach(name => {
+      try {
+        const img = new Image();
+        if ('fetchPriority' in img) img.fetchPriority = 'low';
+        img.src = 'assets/fx/' + name + '.webp';
+        preloaded.push(img);
+        if (typeof img.decode === 'function') img.decode().catch(() => {});
+      } catch (e) { /* спрайты догрузятся при первом ударе */ }
+    });
+  }
+  function schedulePreload() {
+    const go = () => {
+      if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(preloadSprites, { timeout: 4000 });
+      else setTimeout(preloadSprites, 0);
+    };
+    setTimeout(go, 1500);
+  }
+  if (document.readyState === 'complete') schedulePreload();
+  else window.addEventListener('load', schedulePreload, { once: true });
 
   /* Открылся любой оверлей (пауза, конец уровня, карта…) — эффекты убрать */
   const overlayObs = new MutationObserver(list => {
