@@ -78,7 +78,7 @@
   `{ "plate": [1672, 941], "wf": { "x": 0.011962, "y": 0, "w": 0.089713, "h": 0.961743 }, "tile": 0.701382, "moon": 256, "clouds": [1086, 362] }`
   `wf` — прямоугольник воды в долях плиты, `tile` — высота плитки текстуры в долях высоты плиты (660/941). Числа взяты из пробника (`spike/geom.json`); если скрипт даст другие, правдой считать вывод скрипта, а задачи 3 и 4 берут их из JSON.
 
-- [ ] **Шаг 1: написать `tools/pack_backdrop.py`** — запуск `python3 tools/pack_backdrop.py --land 1` (пути по умолчанию: `art-src/phase2/backdrop/src` → `assets/backdrop/land1`). Только PIL, без numpy (в системном python3 numpy нет). Алгоритмы — как в пробнике `art-src/phase2/backdrop/make_spike.py` (там пути `gen-*/image.png`, теперь это `src/*.png`):
+- [x] **Шаг 1: написать `tools/pack_backdrop.py`** — запуск `python3 tools/pack_backdrop.py --land 1` (пути по умолчанию: `art-src/phase2/backdrop/src` → `assets/backdrop/land1`). Только PIL, без numpy (в системном python3 numpy нет). Алгоритмы — как в пробнике `art-src/phase2/backdrop/make_spike.py` (там пути `gen-*/image.png`, теперь это `src/*.png`):
   - вырезка воды — прямоугольник плиты x 20–170, y 0–905;
   - маска: размытая на 10 px яркость, порог `(L−45)/40`, умноженный на синеву `(B−R+5)/30`, оба ограничены 0…1. Потом размытие 6 px и затухание: сверху на 40 px, снизу на 60 px. Сохранить как **альфа**-канал белой картинки WebP lossless: `mask` в CSS по умолчанию берёт альфу, а серая PNG без альфы не маскирует ничего (так было в пробнике);
   - струи: кусок y 150–750 вырезки, «высокие частоты» `(s − blur7(s))·2.2 + 8`, растяжение по вертикали ×1,3, бесшовность — последние 120 строк плавно переходят в первые 120, которые потом отбрасываются;
@@ -86,9 +86,9 @@
   - облака: альфа = `max(R,G,B)`, нормированная к 99,9-му процентилю, со степенью 0,8; цвет постоянный бледно-серо-голубой (190, 205, 225); уменьшить вдвое;
   - плита: WebP q 86, остальное — `cwebp`/PIL q 85–88;
   - печатать JSON, писать `backdrop.json` и размеры файлов.
-- [ ] **Шаг 2: запустить и проверить.** `python3 tools/pack_backdrop.py --land 1`. Ожидается: шесть файлов, сумма ≤ 450 КБ. В `water-mask.webp` есть альфа (`Image.open(...).mode == 'RGBA'`, минимум альфы 0, максимум 255). У `moon.webp` в центре альфа 255, в углах 0. Шов струй: средняя разность строк на стыке «последняя → первая» не больше средней разности соседних строк × 1,5 (скрипт печатает оба числа).
-- [ ] **Шаг 3: глазами.** Собрать лист `art-src/phase2/backdrop/check.png`: маска, плитка струй (две копии одна над другой — шов посередине), луна на `#0d1b2e`, облака на `#0d1b2e`. Посмотреть: шов не виден, у луны нет светлой или тёмной каймы.
-- [ ] **Шаг 4: коммит.**
+- [x] **Шаг 2: запустить и проверить.** `python3 tools/pack_backdrop.py --land 1`. Ожидается: шесть файлов, сумма ≤ 450 КБ. В `water-mask.webp` есть альфа (`Image.open(...).mode == 'RGBA'`, минимум альфы 0, максимум 255). У `moon.webp` в центре альфа 255, в углах 0. Шов струй: средняя разность строк на стыке «последняя → первая» не больше средней разности соседних строк × 1,5 (скрипт печатает оба числа).
+- [x] **Шаг 3: глазами.** Собрать лист `art-src/phase2/backdrop/check.png`: маска, плитка струй (две копии одна над другой — шов посередине), луна на `#0d1b2e`, облака на `#0d1b2e`. Посмотреть: шов не виден, у луны нет светлой или тёмной каймы.
+- [x] **Шаг 4: коммит.**
 
 ```bash
 git add tools/pack_backdrop.py assets/backdrop art-src/phase2/backdrop art-src/phase2/samples/backdrop-* art-src/phase2/PROMPTS.md
@@ -112,7 +112,7 @@ git commit -m "Живой фон: слои первой земли из карт
   - `spawnPoint(rects, w, h, rand, tries = 60) -> {x, y} | null` — `x ∈ [4, w−4]`, `y ∈ [0.15h, h−6]`; `rand` — функция `() => [0,1)`; `null`, если за `tries` попыток места нет.
   - Внутри нет `Math.random()`, `Date.now()` и DOM.
 
-- [ ] **Шаг 1: тесты (падают).**
+- [x] **Шаг 1: тесты (падают).**
 
 ```js
 const BC = require('../js/backdrop-core.js');
@@ -154,10 +154,10 @@ test('геометрия land-01 совпадает с assets/backdrop/land1/bac
 ```
 
   Последние два теста зависят от задачи 4. До неё пусть падают, а в задаче 4 их нужно сделать зелёными.
-- [ ] **Шаг 2:** `node --test tests/backdrop-core.test.js`. Ожидается: FAIL, «Cannot find module '../js/backdrop-core.js'».
-- [ ] **Шаг 3:** написать `js/backdrop-core.js` по Interfaces. Шапка-комментарий — как у `fire-core.js`.
-- [ ] **Шаг 4:** `node --test tests/backdrop-core.test.js`. Ожидается: проходят все, кроме двух, зависящих от задачи 4.
-- [ ] **Шаг 5: коммит** `"Живой фон: логика и пределы (js/backdrop-core.js) с тестами"`.
+- [x] **Шаг 2:** `node --test tests/backdrop-core.test.js`. Ожидается: FAIL, «Cannot find module '../js/backdrop-core.js'».
+- [x] **Шаг 3:** написать `js/backdrop-core.js` по Interfaces. Шапка-комментарий — как у `fire-core.js`.
+- [x] **Шаг 4:** `node --test tests/backdrop-core.test.js`. Ожидается: проходят все, кроме двух, зависящих от задачи 4.
+- [x] **Шаг 5: коммит** `"Живой фон: логика и пределы (js/backdrop-core.js) с тестами"`.
 
 ### Задача 4: Слои в игре и браузерные проверки
 
@@ -179,17 +179,17 @@ test('геометрия land-01 совпадает с assets/backdrop/land1/bac
   - `body[data-bd]` — `run | paused | still` (ставит `visuals-backdrop.js` по `BackdropCore.modeFor`);
   - при `?debug`: `window.__BD = { frames, mode, flies: () => [{x, y}], busy: () => rects }`.
 
-- [ ] **Шаг 1: `css/backdrop.css`** — перенести правила из `art-src/phase2/backdrop/spike/spike.css`. Отличия:
+- [x] **Шаг 1: `css/backdrop.css`** — перенести правила из `art-src/phase2/backdrop/spike/spike.css`. Отличия:
   - пути — от `css/` (`../assets/backdrop/land1/...`), но плитку, маску и облака задаёт JS через custom properties `--bd-tex`, `--bd-mask`, `--bd-clouds`, `--bd-tile` у слоя, чтобы CSS не знал номер земли;
   - `--bd-tile: calc(max(100vh, 56.25vw) * <tile>)`, отношение сторон сцены — из `plate` (`16:9` ≈ 1672/941; `max(100vw, 177.7vh)` / `max(100vh, 56.27vw)`);
   - `body:not([data-bd="run"]) .bd-anim { animation-play-state: paused; }`;
   - `body[data-bd="still"] .bd-anim { animation: none; }`;
   - `body.has-backdrop .light-shaft, body.has-backdrop #fireflies, body.has-backdrop #leaves { display: none; }`, `body.has-backdrop .jungle::before { display: none; }`, `body.has-backdrop .vignette { opacity: .55; }`;
   - `-webkit-mask` и `mask` обе строки (Safari).
-- [ ] **Шаг 2: `js/visuals-backdrop.js`** — по Interfaces. Светлячки — как в `spike.js`, числа из `BackdropCore.FIREFLY`, мерцание `BackdropCore.fireflyAlpha`, места `BackdropCore.spawnPoint`/`isFree`. Если светлячок упирается в занятое место или край, он разворачивается. Прямоугольники занятых мест: `.hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .hint-bar, .combo-badge` с видимым размером. Пересчёт — на `resize` (с задержкой 120 мс), после `document.fonts.ready`, при открытии и закрытии оверлеев. После пересчёта светлячки, оказавшиеся на занятом месте, перерождаются. Режим пересчитывается при изменении класса любого `.overlay`, на `visibilitychange`, на `change` у `matchMedia` для reduced-motion и телефона и при изменении `body[data-fx]`. Цикл `requestAnimationFrame` работает только при `fliesOn(mode, low)`; при выходе из режима canvas очищается. Шаг времени — не больше 50 мс. DPR — не больше 2. На слое `aria-hidden="true"`.
-- [ ] **Шаг 3: данные и подключение** — `land-01.js`, `visuals.js`, `index.html` по Files. `node --test tests/` — все 138 старых тестов и новые проходят.
-- [ ] **Шаг 4: глазами.** Скриншоты на 1366×768, 1366×650, 1920×1080, 1024×768, 390×844 (игра и стартовый экран) сравнить с `art-src/phase2/samples/backdrop-bare-1366.png` и видео. Нужно убедиться: водопад и луна на месте, облака проходят по луне, светлячки не на табличках, на телефоне всё стоит, на земле 2 прежний фон.
-- [ ] **Шаг 5: e2e «12 backdrop»** в `tools/e2e/run.js`:
+- [x] **Шаг 2: `js/visuals-backdrop.js`** — по Interfaces. Светлячки — как в `spike.js`, числа из `BackdropCore.FIREFLY`, мерцание `BackdropCore.fireflyAlpha`, места `BackdropCore.spawnPoint`/`isFree`. Если светлячок упирается в занятое место или край, он разворачивается. Прямоугольники занятых мест: `.hud-plaque, .plate-btn, .board-frame, .brazier-bowl, .brazier-fire, .sun-stone, .hint-bar, .combo-badge` с видимым размером. Пересчёт — на `resize` (с задержкой 120 мс), после `document.fonts.ready`, при открытии и закрытии оверлеев. После пересчёта светлячки, оказавшиеся на занятом месте, перерождаются. Режим пересчитывается при изменении класса любого `.overlay`, на `visibilitychange`, на `change` у `matchMedia` для reduced-motion и телефона и при изменении `body[data-fx]`. Цикл `requestAnimationFrame` работает только при `fliesOn(mode, low)`; при выходе из режима canvas очищается. Шаг времени — не больше 50 мс. DPR — не больше 2. На слое `aria-hidden="true"`.
+- [x] **Шаг 3: данные и подключение** — `land-01.js`, `visuals.js`, `index.html` по Files. `node --test tests/` — все 138 старых тестов и новые проходят.
+- [x] **Шаг 4: глазами.** Скриншоты на 1366×768, 1366×650, 1920×1080, 1024×768, 390×844 (игра и стартовый экран) сравнить с `art-src/phase2/samples/backdrop-bare-1366.png` и видео. Нужно убедиться: водопад и луна на месте, облака проходят по луне, светлячки не на табличках, на телефоне всё стоит, на земле 2 прежний фон.
+- [x] **Шаг 5: e2e «12 backdrop»** в `tools/e2e/run.js`:
   - окна 1366×768, 1366×650, 1920×1080, 1024×768, 390×844, уровень 1-01;
   - у `.bd-stage`, `.bd-sky`, `.bd-flies` `aria-hidden` и вычисленный `pointer-events: none`;
   - луна: сетка 7×7 точек по рамке `.bd-moon`, в каждой `document.elementFromPoint` — элемент внутри `.jungle`. Открыто не меньше 60 % при 1366×768, 1366×650 и 1920×1080; на 1024×768 только записать долю;
@@ -200,9 +200,9 @@ test('геометрия land-01 совпадает с assets/backdrop/land1/bac
   - скриншоты `<окно>-L4-backdrop.png`.
 
   В сценарии «11 prefers-reduced-motion» добавить: `data-bd="still"`, холст светлячков пуст.
-- [ ] **Шаг 6: file://** — в `smokeFile` пять картинок фона (`plate`, `water`, `mask`, `moon`, `clouds` из `Campaign` для земли 1) грузятся через `new Image()` с `naturalWidth > 0`, `getComputedStyle(.bd-wf).maskImage` (или `webkitMaskImage`) не `none`.
-- [ ] **Шаг 7: прогон.** `node --test tests/` — всё проходит. `NODE_PATH=/tmp/pw/node_modules node tools/e2e/run.js` (сервер `python3 -m http.server 8775` отдельно), по очереди Firefox, WebKit, Chromium. Ожидается: 0 FAIL. Старые сценарии про огонь и раскладку не сломаны. Обновить счёт сценариев и описание в `tools/e2e/README.md`.
-- [ ] **Шаг 8: коммит** `"Живой фон первой земли: водопад, луна, облака, светлячки; проверки e2e"`.
+- [x] **Шаг 6: file://** — в `smokeFile` пять картинок фона (`plate`, `water`, `mask`, `moon`, `clouds` из `Campaign` для земли 1) грузятся через `new Image()` с `naturalWidth > 0`, `getComputedStyle(.bd-wf).maskImage` (или `webkitMaskImage`) не `none`.
+- [x] **Шаг 7: прогон.** `node --test tests/` — всё проходит. `NODE_PATH=/tmp/pw/node_modules node tools/e2e/run.js` (сервер `python3 -m http.server 8775` отдельно), по очереди Firefox, WebKit, Chromium. Ожидается: 0 FAIL. Старые сценарии про огонь и раскладку не сломаны. Обновить счёт сценариев и описание в `tools/e2e/README.md`.
+- [x] **Шаг 8: коммит** `"Живой фон первой земли: водопад, луна, облака, светлячки; проверки e2e"`.
 
 ### Задача 5: Документация
 
@@ -211,8 +211,8 @@ test('геометрия land-01 совпадает с assets/backdrop/land1/bac
 - Modify: `docs/superpowers/STATUS.md` — шаг 3 сделан (что вошло, что отложено), следующий шаг.
 - Modify: этот план — отметить шаги.
 
-- [ ] **Шаг 1:** написать тексты (простым языком, по-русски, как в соседних разделах).
-- [ ] **Шаг 2: коммит** `"Живой фон: README и STATUS"`.
+- [x] **Шаг 1:** написать тексты (простым языком, по-русски, как в соседних разделах).
+- [x] **Шаг 2: коммит** `"Живой фон: README и STATUS"`.
 
 ### Задача 6: Земля 2 «Храм Змея» (ворота — образец)
 
@@ -221,8 +221,8 @@ test('геометрия land-01 совпадает с assets/backdrop/land1/bac
 - Create: `assets/backdrop/land2/plate.webp`, `backdrop.json` (без воды; луна и облака — копии из `land1`, без дублирования файлов: пути в данных земли 2 указывают на `land1/moon.webp` и `land1/clouds.webp`)
 - Modify: `tools/pack_backdrop.py` (`--land 2`, без воды), `js/campaign/land-02.js:54`, `tools/e2e/run.js` (ожидание `has-backdrop` для земли 2)
 
-- [ ] **Шаг 1: образец.** Бриф в том же языке, что `brief-plate.txt`. Ночь, тот же синий лунный свет. В правой трети большой ступенчатый храм со змеиными головами у лестницы. Небо справа вверху пустое, под луну. Центр — спокойная дымка. Без воды. Показать пользователю кадр игры 1366×768 с этим фоном (через пробник `spike-rec.js` или уже через игру) и спросить «да».
-- [ ] **Шаг 2 (только после «да»):** собрать `land2`, подключить `backdrop` у земли 2 (`waterfall: false` — `.bd-wf` и `.bd-mist` не строятся), `land.bg` → новая плита, `mosaic` без изменений. Тесты и e2e по задаче 4, шаг 7.
-- [ ] **Шаг 3: коммит** `"Живой фон второй земли: плита храма, луна, облака, светлячки"`.
+- [x] **Шаг 1: образец.** Бриф в том же языке, что `brief-plate.txt`. Ночь, тот же синий лунный свет. В правой трети большой ступенчатый храм со змеиными головами у лестницы. Небо справа вверху пустое, под луну. Центр — спокойная дымка. Без воды. Показать пользователю кадр игры 1366×768 с этим фоном (через пробник `spike-rec.js` или уже через игру) и спросить «да».
+- [x] **Шаг 2 (только после «да»):** собрать `land2`, подключить `backdrop` у земли 2 (`waterfall: false` — `.bd-wf` и `.bd-mist` не строятся), `land.bg` → новая плита, `mosaic` без изменений. Тесты и e2e по задаче 4, шаг 7.
+- [x] **Шаг 3: коммит** `"Живой фон второй земли: плита храма, луна, облака, светлячки"`.
 
   Если «да» нет, задача закрывается без изменений кода, а в STATUS это записывается как отложенное.
