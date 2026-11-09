@@ -22,6 +22,11 @@ function rec(browser, scenario, ok, notes) {
 }
 function assert(c, msg) { if (!c) throw new Error('assert: ' + msg); }
 
+// Все открытые контексты. Сценарий, упавший до своего ctx.close(), не оставляет
+// живую страницу: scenario() закрывает всё, что он открыл. Иначе страница с
+// огнём и живым фоном анимируется до конца набора и грузит компьютер.
+const openContexts = new Set();
+
 async function newPage(browser, bname, label, viewport, opts) {
   opts = opts || {};
   const ctx = await browser.newContext({ viewport: viewport || { width: 1366, height: 768 }, ...(opts.reducedMotion ? { reducedMotion: 'reduce' } : {}) });
@@ -30,6 +35,8 @@ async function newPage(browser, bname, label, viewport, opts) {
     // огонь: полный режим, чтобы медленный headless не включил слабый (без искр) сам
     if (fxFull) { try { localStorage.setItem('sun-keeper-fx', 'full'); } catch (e) {} }
   }, !!opts.fxFull);
+  openContexts.add(ctx);
+  ctx.on('close', () => openContexts.delete(ctx));
   const page = await ctx.newPage();
   const key = bname + '/' + label;
   consoleLog[key] = consoleLog[key] || [];
@@ -86,8 +93,14 @@ const dbg = (page) => ev(page, () => ({ levelId: __SUN.state.levelId, difficulty
 
 async function scenario(bname, name, fn) {
   if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
+  const before = new Set(openContexts);
   try { const notes = await fn(); rec(bname, name, true, notes); }
   catch (e) { rec(bname, name, false, e.message.split('\n')[0]); }
+  finally {
+    const left = [...openContexts].filter(c => !before.has(c));
+    await Promise.all(left.map(c => c.close().catch(() => {})));
+    left.forEach(c => openContexts.delete(c));
+  }
 }
 
 async function suite(bt, bname, url) {
