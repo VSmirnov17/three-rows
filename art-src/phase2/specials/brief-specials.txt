@@ -1,0 +1,10 @@
+$imagegen
+Asset: premium match-3 game "power-up" emblems, 4 icons in a 2x2 grid, one image, TRANSPARENT background (real alpha channel)
+Image 1: style and material reference only (the regular game pieces these emblems will sit on top of). Match its painting manner exactly: carved stone, polished enamel and gemstone, gold trims, crisp dark outline, strong top-left highlight, deep 3D through lighting only. Do not copy its shapes.
+Request: four Aztec power-up emblems, each seen STRICTLY FROM THE FRONT (orthographic, symmetrical). Bodies of polished black obsidian and carved gold so they stand out on red, gold, green, turquoise, purple and silver pieces. Each has a bold, instantly readable silhouette.
+(1) top-left LIGHTNING: a four-armed cross of thick gold arrowheads pointing up, down, left, right, a turquoise jagged lightning-bolt inlay running through the centre.
+(2) top-right SUN: a gold disc with twelve sharp carved rays, centre an inset faceted ruby, stern and solemn, no cute face.
+(3) bottom-left BOMB: a round polished obsidian sphere with a carved gold band and a short gold fuse capped by a single glowing ember.
+(4) bottom-right TOTEM: a stern carved jade mask, ancient and solemn, with gold inlay on brow, eyes and mouth, a short crest of gold and jade feathers on top. Serious, not cartoonish, no smile.
+Composition: every emblem the same size, centred in its grid cell with generous empty transparent padding; emblems never touch.
+Constraints: no text, no letters, no numbers, no drop shadow, no glow halo, no floor, no background, no checkerboard pattern, no frame around the sheet.
