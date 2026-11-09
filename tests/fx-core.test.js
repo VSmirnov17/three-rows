@@ -48,6 +48,7 @@ test('TIMING заморожен', () => {
   assert.equal(TIMING.sunStepMs, 35);
   assert.equal(TIMING.sunMaxDelayMs, 260);
   assert.equal(TIMING.waveStepMs, 30);
+  assert.equal(TIMING.lineStepMs, 18);
   assert.equal(TIMING.waveMaxDelayMs, 240);
   assert.equal(TIMING.cleanupMs, 1100);
 });
@@ -210,7 +211,7 @@ test('strikeTargets line: lineDir col даёт только столбец', () 
   assert.equal(out.length, 8);
   for (const t of out) assert.equal(t.c, 5);
   assert.equal(out.find((t) => t.r === 3).delay, 0);
-  /* (0,5): dist 3 → round(3 * 30 * 0.6) = 54 */
+  /* (0,5): dist 3 → 3 * lineStepMs (18) = 54 */
   assert.equal(out.find((t) => t.r === 0).delay, 54);
   /* (7,5): dist 4 → 72 */
   assert.equal(out.find((t) => t.r === 7).delay, 72);

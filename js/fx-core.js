@@ -26,6 +26,7 @@
     sunStepMs: 35,
     sunMaxDelayMs: 260,
     waveStepMs: 30,
+    lineStepMs: 18,
     waveMaxDelayMs: 240,
     cleanupMs: 1100
   });
@@ -164,7 +165,7 @@
         const col = t.lineDir === 'col';
         if (col ? dc === 0 : dr === 0) {
           const dist = Math.abs(col ? dr : dc);
-          delay = Math.min(TIMING.waveMaxDelayMs, Math.round(dist * TIMING.waveStepMs * 0.6));
+          delay = Math.min(TIMING.waveMaxDelayMs, dist * TIMING.lineStepMs);
         }
       } else if (t.type === 'bomb') {
         if (Math.abs(dr) <= 1 && Math.abs(dc) <= 1) delay = 0;

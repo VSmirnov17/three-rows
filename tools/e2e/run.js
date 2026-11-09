@@ -1378,10 +1378,12 @@ async function suite(bt, bname, url) {
       assert(ch.maxNodes >= 40, 'цепочка: подозрительно мало узлов, сценарий не сработал: ' + ch.maxNodes);
       clean('цепочка', ch);
 
-      // reduced — в самом конце сценария: по наблюдению, после возврата 'no-preference' Firefox
-      // оставляет matchMedia(prefers-reduced-motion) в прежнем состоянии.
+      // Fx.mode() сразу видит смену prefers-reduced-motion. MediaQueryList, который
+      // держали с загрузки, в Playwright Firefox отставал: сразу после emulateMedia
+      // .matches ещё старый (через 300 мс верный), свежий matchMedia верен сразу.
       await idle();
       await page.emulateMedia({ reducedMotion: 'reduce' });
+      assert(await ev(page, () => window.Fx.mode().reduced) === true, 'Fx.mode().reduced не видит reduce сразу');
       const br = await bomb('reduced');
       assert(br.added === 0 && br.embers === 0, 'бомба reduced: взрыв ' + br.added + ', углей ' + br.embers + ' (ждали 0)');
       await idle();
@@ -1391,6 +1393,7 @@ async function suite(bt, bname, url) {
       await idle();
       const tRed = await strikeProbe({ r: 2, c: 2, type: 'totem', sel: '.fx-wave' });
       await page.emulateMedia({ reducedMotion: 'no-preference' });
+      assert(await ev(page, () => window.Fx.mode().reduced) === false, 'Fx.mode().reduced не видит no-preference сразу');
       assert(sRed.added === 0 && lRed.added === 0 && tRed.added === 0, 'reduced: узлы удара есть: ' + [sRed.added, lRed.added, tRed.added]);
 
       const w = await ev(page, () => window.__fxWatch);
@@ -1450,6 +1453,14 @@ async function smokeFile(bt, bname) {
         return new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = m[1]; });
       });
       assert(bombW > 0, 'bomb sheet not loaded from file://');
+      // Все спрайты ударов — по тем же адресам, что предзагружает Fx (js/visuals-fx.js)
+      const strikeSprites = await ev(page, async () => {
+        const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src; });
+        const sizes = {};
+        for (const n of ['bomb', 'beam-turquoise', 'ray-gold', 'wave-jade', 'glow-cores']) sizes[n] = await load('assets/fx/' + n + '.webp');
+        return sizes;
+      });
+      assert(Object.values(strikeSprites).every(w => w > 0), 'strike sprites not loaded from file://: ' + JSON.stringify(strikeSprites));
       // Живой фон земли 1 с диска: пять картинок грузятся, маска воды задана.
       // Маска — data: URI (assets/backdrop/land1/water-mask.js): CSS-маску по
       // file:// Chromium и WebKit не грузят (CORS), и струи легли бы на весь прямоугольник.
@@ -1486,7 +1497,7 @@ async function smokeFile(bt, bname) {
       await page.waitForSelector('#startScreen.show');
       const kept = await ev(page, () => !!Game.getSave().levels['1-01']);
       await ctx.close();
-      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bombSheet=${bombW}px bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: land2=${JSON.stringify(bd2.sizes)} savePersistsAfterReload=${kept}`;
+      return `file:// level=${d.levelId} fontPhilosopher=${fontOk} fireSheet=${fire.calmW}px bombSheet=${bombW}px strikeSprites=${JSON.stringify(strikeSprites)} bowl=${fire.bowlW}px backdrop=${JSON.stringify(bd.sizes)} mask=data: land2=${JSON.stringify(bd2.sizes)} savePersistsAfterReload=${kept}`;
     });
   } finally { await browser.close(); }
 }

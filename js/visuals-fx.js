@@ -38,7 +38,6 @@
   const T = FC.TIMING;
   const layer = document.getElementById('fx');
   const body = document.body;
-  const reduceMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const rand = Math.random;
 
   const CELL = 12.5;              // клетка, % поля
@@ -70,7 +69,9 @@
   function mode() {
     return {
       calm: body.dataset.difficulty === 'calm',
-      reduced: !!(reduceMq && reduceMq.matches),
+      // Каждый раз заново: MediaQueryList, взятый при загрузке, в Firefox
+      // обновляется с запаздыванием (свежий запрос верен сразу)
+      reduced: !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
       low: body.dataset.fx === 'low'
     };
   }
@@ -276,7 +277,7 @@
   }
 
   /* Молния: два луча в разные стороны вдоль линии. Луч выезжает с той же
-   * скоростью, с какой идёт раскол (mergeDelays: 0,6 waveStepMs на клетку) —
+   * скоростью, с какой идёт раскол (TIMING.lineStepMs на клетку) —
    * камень трескается, когда кончик до него доходит. */
   function lineStrike(t, m) {
     const b = FC.budget(m);
@@ -284,13 +285,12 @@
     const dur = T.strikeMs.line;
     const col = t.lineDir === 'col';
     const pos = col ? t.r : t.c;
-    const stepMs = T.waveStepMs * 0.6;
     const arms = [
       { deg: col ? 90 : 0, cells: BOARD - (pos + 0.5) },
       { deg: col ? -90 : 180, cells: pos + 0.5 }
     ].filter(x => x.cells > 0.5);
     reserve(arms.length * 2 + 1, dur + 40);
-    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, BEAM_THICK, 'fx-line', Math.max(40, x.cells * stepMs), dur, a, 0.4));
+    arms.forEach(x => arm(t.r, t.c, x.deg, x.cells, BEAM_THICK, 'fx-line', Math.max(40, x.cells * T.lineStepMs), dur, a, 0.4));
     coreGlow(t.r, t.c, LINE_FLARE, 'line', Math.round(dur * 0.75), a, 18);
   }
 
