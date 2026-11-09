@@ -55,8 +55,9 @@ test('TIMING заморожен', () => {
 test('budget: full/calm/low/reduced', () => {
   assert.deepEqual(FxCore.budget(plain),
     { shards: 6, dust: 10, glints: 2, embers: 18, beamAlpha: 1 });
+  // Спокойно: осколки — сам рисунок камня, не яркие, их не убавляем (R4)
   assert.deepEqual(FxCore.budget({ calm: true }),
-    { shards: 3, dust: 6, glints: 1, embers: 10, beamAlpha: 0.6 });
+    { shards: 6, dust: 6, glints: 1, embers: 10, beamAlpha: 0.6 });
   assert.deepEqual(FxCore.budget({ low: true }),
     { shards: 3, dust: 0, glints: 0, embers: 0, beamAlpha: 1 });
   assert.deepEqual(FxCore.budget({ calm: true, low: true }),
@@ -69,10 +70,24 @@ test('budget: full/calm/low/reduced', () => {
 
 test('shardsFor: меньше осколков при большом числе клеток', () => {
   assert.equal(FxCore.shardsFor(1, plain), 6);
-  assert.equal(FxCore.shardsFor(21, plain), 4);
-  assert.equal(FxCore.shardsFor(60, plain), 2);
+  assert.equal(FxCore.shardsFor(21, plain), 5);
+  assert.equal(FxCore.shardsFor(60, plain), 1);
+  assert.equal(FxCore.shardsFor(64, plain), 1);
+  assert.equal(FxCore.shardsFor(1, { calm: true }), 6);
   assert.equal(FxCore.shardsFor(5, { low: true }), 3);
+  assert.equal(FxCore.shardsFor(5, { calm: true, low: true }), 3);
   assert.equal(FxCore.shardsFor(5, { reduced: true }), 0);
+});
+
+test('shardsFor: осколков за шаг не больше 110 (узлы #fx ≤ 120)', () => {
+  for (const mode of [plain, { calm: true }, { low: true }]) {
+    for (let n = 1; n <= 64; n++) {
+      const k = FxCore.shardsFor(n, mode);
+      assert.ok(k >= 1, `n=${n}: ${k}`);
+      if (k > 1) assert.ok(k * n <= 110, `n=${n}: ${k}×${n} > 110`);
+      else assert.ok(n <= 64);
+    }
+  }
 });
 
 test('shardPolygons(6): куски покрывают квадрат, центры не в середине', () => {

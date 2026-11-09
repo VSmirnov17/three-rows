@@ -9,8 +9,10 @@
  *                   копия .fx-standin; через delayMs она распадается на осколки
  *                   .fx-shard (копии рисунка, обрезанные clip-path), они летят
  *                   и гаснут за TIMING.shatterMs; на canvas — пыль цвета камня
- *                   и золотые блики. opts: { cells — сколько клеток гаснет
- *                   в этом шаге (для FxCore.shardsFor), color — цвет пыли }.
+ *                   и золотые блики. Вызывающий передаёт opts { cells — сколько
+ *                   клеток гаснет в этом шаге (для FxCore.shardsFor), color —
+ *                   цвет пыли }; без cells считается худший случай (всё поле,
+ *                   1 осколок), чтобы не выйти за бюджет узлов.
  *                   reduced: копия просто гаснет за 200 мс, больше ничего.
  * Fx.canvas       — один <canvas class="fx-canvas"> в #fx; цикл
  *                   requestAnimationFrame идёт, только пока есть живые частицы.
@@ -27,6 +29,7 @@
   const rand = Math.random;
 
   const CELL = 12.5;              // клетка, % поля
+  const BOARD_CELLS = 64;         // худший случай, если opts.cells не передан
   const REDUCED_FADE_MS = 200;
   const SAG = 18;                 // осколок проседает к концу полёта, % клетки
   const MAX_PARTICLES = 260;      // потолок частиц на canvas
@@ -91,7 +94,7 @@
   }
 
   function burst(r, c, inner, opts, m) {
-    const n = FC.shardsFor(Math.max(1, opts.cells || 1), m);
+    const n = FC.shardsFor(Math.max(1, opts.cells || BOARD_CELLS), m);
     const polys = FC.shardPolygons(n, rand);
     const shards = polys.map(poly => {
       const el = cellBox('fx-shard', r, c, inner);

@@ -33,17 +33,18 @@
   const CALM_FACTOR = 0.6;
   const CALM_BEAM = 0.6;
   const LOW_SHARDS = 3;
+  const SHARDS_PER_STEP = 110;
   const MID = 50;           // центр квадрата клетки, %
 
   /* Бюджет частиц. mode: { calm, reduced, low }.
-   * reduced — всё по нулям; calm — частицы ×0,6 вниз, луч слабее;
+   * reduced — всё по нулям; calm — пыль, блики и угли ×0,6 вниз, луч слабее,
+   * а осколки полные: это сам рисунок камня, он не яркий;
    * low — не больше 3 осколков, без пыли, бликов и углей. */
   function budget(mode) {
     const m = mode || {};
     if (m.reduced) return { shards: 0, dust: 0, glints: 0, embers: 0, beamAlpha: 0 };
     const b = { ...FULL };
     if (m.calm) {
-      b.shards = Math.floor(b.shards * CALM_FACTOR);
       b.dust = Math.floor(b.dust * CALM_FACTOR);
       b.glints = Math.floor(b.glints * CALM_FACTOR);
       b.embers = Math.floor(b.embers * CALM_FACTOR);
@@ -58,12 +59,13 @@
     return b;
   }
 
-  /* Осколков на камень: чем больше клеток гаснет разом, тем меньше на каждую
-   * (всего порядка сотни), но не меньше 2 и не больше бюджета. cellCount ≥ 1. */
+  /* Осколков на камень: чем больше клеток гаснет разом, тем меньше на каждую —
+   * всего за шаг не больше SHARDS_PER_STEP (узлов в #fx не больше 120);
+   * не меньше 1 и не больше бюджета. cellCount ≥ 1. */
   function shardsFor(cellCount, mode) {
     const m = mode || {};
     if (m.reduced) return 0;
-    return Math.min(budget(m).shards, Math.max(2, Math.floor(100 / cellCount)));
+    return Math.max(1, Math.min(budget(m).shards, Math.floor(SHARDS_PER_STEP / cellCount)));
   }
 
   /* Площадь и центр тяжести многоугольника (шнурование). */

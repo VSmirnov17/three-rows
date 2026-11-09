@@ -615,6 +615,8 @@
 
   function spawnBoard() {
     dom.tiles.innerHTML = '';
+    // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
+    if (window.Fx) Fx.clear();
     dom.fx.innerHTML = '';
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
