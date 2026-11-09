@@ -30,11 +30,12 @@ const openContexts = new Set();
 async function newPage(browser, bname, label, viewport, opts) {
   opts = opts || {};
   const ctx = await browser.newContext({ viewport: viewport || { width: 1366, height: 768 }, ...(opts.reducedMotion ? { reducedMotion: 'reduce' } : {}) });
-  await ctx.addInitScript((fxFull) => {
+  await ctx.addInitScript((fxMode) => {
     try { localStorage.setItem('sun-treasures-muted', '1'); } catch (e) {}
-    // огонь: полный режим, чтобы медленный headless не включил слабый (без искр) сам
-    if (fxFull) { try { localStorage.setItem('sun-keeper-fx', 'full'); } catch (e) {} }
-  }, !!opts.fxFull);
+    // огонь: полный режим, чтобы медленный headless не включил слабый (без искр) сам;
+    // opts.fx = 'low' включает слабый режим нарочно
+    if (fxMode) { try { localStorage.setItem('sun-keeper-fx', fxMode); } catch (e) {} }
+  }, opts.fx || (opts.fxFull ? 'full' : ''));
   openContexts.add(ctx);
   ctx.on('close', () => openContexts.delete(ctx));
   const page = await ctx.newPage();
@@ -1165,11 +1166,12 @@ async function suite(bt, bname, url) {
       await playRealMove(page);
       const mv = await ev(page, () => {
         const W = window.__fxWatch;
-        return { gone: W.gone.length, shards: W.shards.length, lag: W.shards.length && W.gone.length ? W.shards[0].t - W.gone[0] : -1 };
+        return { gone: W.gone.length, shards: W.shards.length, lag: W.shards.length && W.gone.length ? W.shards[0].t - W.gone[0] : null };
       });
       assert(mv.gone > 0, 'после хода ни один камень не спрятан (fx-gone)');
       assert(mv.shards > 0, 'после хода нет .fx-shard');
-      assert(mv.lag >= 0 && mv.lag <= 150, 'осколки появились не за 150 мс: ' + mv.lag.toFixed(0));
+      // Два наблюдателя доставляют записи в своём порядке (в WebKit осколки бывали «раньше» на доли мс), поэтому ниже нуля допуск 20 мс
+      assert(mv.lag !== null && mv.lag >= -20 && mv.lag <= 150, 'осколки появились не за 150 мс: ' + (mv.lag === null ? 'нет данных' : mv.lag.toFixed(0)));
       await page.waitForTimeout(700);
       const left = await ev(page, () => document.querySelectorAll('#fx .fx-shard, #fx .fx-standin').length);
       assert(left === 0, 'через 700 мс в #fx осталось осколков/копий: ' + left);
@@ -1405,6 +1407,210 @@ async function suite(bt, bname, url) {
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
       return `move: gone ${mv.gone}, shards ${mv.shards}, lag ${mv.lag.toFixed(0)} ms, shard life ≤ ${mv.lifeMax.toFixed(0)} ms; line: row3 shards ${vr.row3}, (3,5) snapped & alive; bomb: off ${bf.off.toFixed(3)} cell, ${bf.cells.toFixed(2)} cells wide, embers ${bf.embers}/low ${bl.embers}/calm ${bc.embers}/reduced ${br.embers}, life ${bf.life.toFixed(0)} ms, nodes ≤ ${bf.maxNodes}, opacity ${bf.opacity.toFixed(2)}/calm ${bc.opacity.toFixed(2)}; line ${lr.firstAt.toFixed(0)}/${lc.firstAt.toFixed(0)} ms, sun ${sn.added} rays, totem ${tm.added} waves, chain peak ${ch.maxNodes} nodes; flash 0, shake 0, ring 0; console errors 0`;
+    });
+
+    // ---- 13 strikes: режимы и граничные случаи (имена с «13 strikes» — ONLY="13 strikes" берёт все) ----
+    const startNormal = async (page) => {
+      await startFresh(page, url);
+      await page.click('#startScreen [data-difficulty-btn="normal"]');
+      await page.click('#playBtn');
+      await waitStarted(page);
+      await page.waitForFunction(() => __SUN.state.running && !__SUN.state.busy, null, { timeout: 10000 });
+    };
+    // Наблюдатель за #fx и полем: какие узлы эффектов появились, сколько камней спрятано, пик частиц
+    const installWatch = (page) => ev(page, () => {
+      const W = window.__modeWatch = { shards: {}, nShards: 0, other: {}, gone: 0, partsMax: 0 };
+      const OTHER = ['fx-ray', 'fx-wave', 'fx-line', 'fx-bomb', 'fx-strip', 'fx-strike'];
+      new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => {
+        if (!n.classList) return;
+        if (n.classList.contains('fx-shard')) { W.nShards++; W.shards[n.dataset.cell] = (W.shards[n.dataset.cell] || 0) + 1; }
+        OTHER.forEach(k => { if (n.classList.contains(k)) W.other[k] = (W.other[k] || 0) + 1; });
+      }))).observe(document.getElementById('fx'), { childList: true, subtree: true });
+      new MutationObserver(list => list.forEach(m => {
+        if (m.target.classList && m.target.classList.contains('fx-gone')) W.gone++;
+      })).observe(document.getElementById('tiles'), { attributes: true, attributeFilter: ['class'], subtree: true });
+      setInterval(() => { W.partsMax = Math.max(W.partsMax, window.Fx.particles()); }, 30);
+    });
+    const FXLEFT = '#fx .fx-strike, #fx .fx-strip, #fx .fx-shard, #fx .fx-standin';
+
+    // Слабый режим: у раскола ровно 3 осколка на клетку, частиц на canvas нет
+    await scenario(bname, '13 strikes low: exactly 3 shards per cell, no canvas particles', async () => {
+      const key = 's13low';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fx: 'low' });
+      await startNormal(page);
+      assert(await ev(page, () => window.Fx.mode().low) === true, 'sun-keeper-fx=low не включил слабый режим');
+      await installWatch(page);
+      await playRealMove(page);
+      await page.waitForTimeout(1500);
+      const w = await ev(page, () => window.__modeWatch);
+      const cells = Object.keys(w.shards);
+      assert(cells.length > 0, 'low: осколков нет совсем');
+      const bad = cells.filter(k => w.shards[k] !== 3);
+      assert(!bad.length, 'low: у клеток не по 3 осколка: ' + bad.map(k => k + '=' + w.shards[k]).join(' '));
+      assert(w.partsMax === 0, 'low: на canvas были частицы: ' + w.partsMax);
+      const left = await ev(page, (sel) => document.querySelectorAll(sel).length, FXLEFT);
+      assert(left === 0, 'low: через 1,5 с остались узлы: ' + left);
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return `low: ${cells.length} cells x 3 shards, max particles ${w.partsMax}`;
+    });
+
+    // reduced-motion с самой загрузки: ни осколков, ни узлов ударов, ни частиц;
+    // камни всё равно исчезают; апгрейд и перетасовка приходят в верное состояние без element.animate
+    await scenario(bname, '13 strikes reduced: no shards, rays, waves, lines or bombs; gems still vanish', async () => {
+      const key = 's13red';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { reducedMotion: true, fxFull: true });
+      await startNormal(page);
+      assert(await ev(page, () => window.Fx.mode().reduced) === true, 'reduced: Fx.mode().reduced не видит reduce');
+      await installWatch(page);
+      await playRealMove(page);
+      const mv = await ev(page, () => ({ ...window.__modeWatch }));
+      assert(mv.gone > 0, 'reduced: после хода камни не исчезли (fx-gone)');
+      assert(mv.nShards === 0, 'reduced: .fx-shard появлялись: ' + mv.nShards);
+      assert(mv.partsMax === 0, 'reduced: частицы на canvas: ' + mv.partsMax);
+      await page.waitForTimeout(700);
+      const after = await ev(page, () => ({
+        gone: document.querySelectorAll('#tiles .fx-gone').length,
+        gems: document.querySelectorAll('#tiles .gem').length,
+        left: document.querySelectorAll('#fx .fx-strike, #fx .fx-strip, #fx .fx-shard, #fx .fx-standin').length
+      }));
+      assert(after.gone === 0 && after.gems === 64, `reduced: после хода спрятанных камней ${after.gone}, всего ${after.gems} (ждали 0 и 64)`);
+      assert(after.left === 0, 'reduced: через 700 мс остались узлы эффектов: ' + after.left);
+
+      // Все четыре удара: узлов ударов нет, частиц нет, камни целей исчезают
+      const types = [['bomb', undefined], ['line', 'row'], ['sun', undefined], ['totem', undefined]];
+      for (const [type, dir] of types) {
+        await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+        const r = await ev(page, async ({ type, dir }) => {
+          const S = window.__SUN, W = window.__modeWatch;
+          S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+          W.other = {}; W.nShards = 0; W.gone = 0; W.partsMax = 0;
+          await S.strike(3, 3, type, dir);
+          await new Promise(res => setTimeout(res, 300));
+          return { other: { ...W.other }, shards: W.nShards, gone: W.gone, parts: Math.max(W.partsMax, window.Fx.particles()) };
+        }, { type, dir });
+        assert(Object.keys(r.other).length === 0, `reduced ${type}: узлы эффектов ${JSON.stringify(r.other)}`);
+        assert(r.shards === 0 && r.parts === 0, `reduced ${type}: осколков ${r.shards}, частиц ${r.parts}`);
+        assert(r.gone > 0, `reduced ${type}: камни не исчезли`);
+      }
+
+      // Апгрейд камня: итоговое состояние верное, движения (element.animate) нет
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const up = await ev(page, () => {
+        const S = window.__SUN;
+        const g = S.gemAt(5, 5);
+        S.upgradeGem(g, 'bomb');
+        const inner = g.el.querySelector('.gem-inner');
+        return { special: g.special, cls: g.el.className, anims: inner ? inner.getAnimations().length : -1, hasInner: !!inner };
+      });
+      assert(up.special === 'bomb' && up.hasInner && /special-bomb|bomb/.test(up.cls), 'reduced: камень не стал бомбой: ' + JSON.stringify(up));
+      assert(up.anims === 0, 'reduced: апгрейд запустил анимацию (element.animate): ' + up.anims);
+
+      // Отказ для камня в лианах: покачивания нет
+      const rf = await ev(page, async () => {
+        const S = window.__SUN;
+        S.setVines([[2, 2]]);
+        const g = S.gemAt(2, 2);
+        const [mr, mc] = [[2, 3], [1, 2], [3, 2]].find(([r, c]) => S.gemAt(r, c));
+        await S.attemptSwap({ r: 2, c: 2 }, { r: mr, c: mc });
+        const parts = g.el.querySelectorAll('.gem-inner, .vine-overlay');
+        const anims = [...parts].reduce((n, p) => n + p.getAnimations().length, 0);
+        const still = S.gemAt(2, 2) === g && g.locked;
+        S.setVines([]);
+        return { anims, still, parts: parts.length };
+      });
+      assert(rf.parts > 0 && rf.still, 'reduced: отказ — не тот камень/лианы сняты: ' + JSON.stringify(rf));
+      assert(rf.anims === 0, 'reduced: отказ для лиан качает камень (element.animate): ' + rf.anims);
+
+      // Перетасовка: камни возвращаются на поле, анимаций на них нет
+      await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+      const sh = await ev(page, async () => {
+        const S = window.__SUN;
+        const run = S.reshuffleBoard(false);
+        await new Promise(res => setTimeout(res, 420));
+        const anims = [...document.querySelectorAll('#tiles .gem-inner')].reduce((n, e) => n + e.getAnimations().length, 0);
+        await run;
+        await new Promise(res => setTimeout(res, 100));
+        const visible = [...document.querySelectorAll('#tiles .gem')].filter(e => e.style.opacity === '' || +getComputedStyle(e).opacity === 1).length;
+        return { anims, visible, total: document.querySelectorAll('#tiles .gem').length };
+      });
+      assert(sh.anims === 0, 'reduced: перетасовка запустила element.animate на камнях: ' + sh.anims);
+      assert(sh.total === 64 && sh.visible === 64, 'reduced: после перетасовки камней ' + sh.total + ', видимых ' + sh.visible);
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return `reduced: move gone ${mv.gone}, shards 0, strikes bomb/line/sun/totem clean, upgrade/refuse/reshuffle without animate`;
+    });
+
+    // Пауза посреди удара: через 1,5 с узлов эффектов нет, частиц нет
+    await scenario(bname, '13 strikes pause: overlay mid-strike leaves no nodes or particles', async () => {
+      const key = 's13pause';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 }, { fxFull: true });
+      await startNormal(page);
+      const out = [];
+      for (const [type, dir] of [['bomb', undefined], ['line', 'row'], ['sun', undefined]]) {
+        await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+        await ev(page, ({ type, dir }) => {
+          const S = window.__SUN;
+          S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+          window.__pauseRun = S.strike(4, 4, type, dir);
+        }, { type, dir });
+        await page.waitForTimeout(150);
+        const mid = await ev(page, (sel) => ({ nodes: document.querySelectorAll(sel).length, parts: window.Fx.particles() }), FXLEFT);
+        assert(mid.nodes + mid.parts > 0, `пауза ${type}: на 150 мс удара ещё ничего нет, проверка пустая`);
+        // Кнопка паузы во время хода не работает (pauseGame отказывает при busy), поэтому
+        // оверлей открываем так же, как это делают экраны игры: через Game.openOverlay
+        await ev(page, () => window.Game.openOverlay('pauseScreen'));
+        await page.waitForSelector('#pauseScreen.show');
+        await page.waitForTimeout(60);
+        // Оверлей сразу убрал всё, что играло
+        const cut = await ev(page, (sel) => ({ nodes: document.querySelectorAll(sel).length, parts: window.Fx.particles() }), FXLEFT);
+        assert(cut.nodes === 0 && cut.parts === 0, `пауза ${type}: через 60 мс после оверлея узлов ${cut.nodes}, частиц ${cut.parts}`);
+        // Ход под оверлеем доигрывается (логика не останавливается), после него ничего не висит
+        await ev(page, () => window.__pauseRun);
+        await page.waitForTimeout(1500);
+        const end = await ev(page, (sel) => ({ nodes: document.querySelectorAll(sel).length, parts: window.Fx.particles() }), FXLEFT);
+        assert(end.nodes === 0 && end.parts === 0, `пауза ${type}: через 1,5 с после удара узлов ${end.nodes}, частиц ${end.parts}`);
+        await ev(page, () => window.Game.closeAllOverlays());
+        await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+        out.push(`${type} ${mid.nodes}n/${mid.parts}p -> 0`);
+      }
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return 'pause mid-strike: ' + out.join(', ');
+    });
+
+    // Телефон 390×844: центр .fx-bomb в 5 % клетки от центра клетки удара
+    await scenario(bname, '13 strikes phone: bomb centre within 5% of its cell at 390x844', async () => {
+      const key = 's13phone';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 390, height: 844 }, { fxFull: true });
+      await startNormal(page);
+      const offs = [];
+      for (const [r, c] of [[4, 4], [2, 5]]) {
+        await page.waitForFunction(() => !__SUN.state.busy, null, { timeout: 15000 });
+        const o = await ev(page, async ({ r, c }) => {
+          const S = window.__SUN, fx = document.getElementById('fx');
+          S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+          const run = S.strike(r, c, 'bomb');
+          await new Promise(res => setTimeout(res, 150));
+          const el = fx.querySelector('.fx-bomb');
+          let off = -1;
+          if (el) {
+            const b = el.getBoundingClientRect(), f = fx.getBoundingClientRect(), cell = f.width / 8;
+            off = Math.hypot(b.left + b.width / 2 - (f.left + (c + 0.5) * cell), b.top + b.height / 2 - (f.top + (r + 0.5) * cell)) / cell;
+          }
+          await run;
+          return off;
+        }, { r, c });
+        assert(o >= 0 && o <= 0.05, `телефон: центр .fx-bomb в (${r},${c}) дальше 5 % клетки: ${o.toFixed(3)}`);
+        offs.push(o.toFixed(3));
+      }
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return 'phone bomb off ' + offs.join(', ') + ' cells';
     });
   } finally {
     await browser.close();

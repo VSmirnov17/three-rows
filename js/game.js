@@ -578,10 +578,17 @@
   /* Мягкий отказ для камня в лианах: небольшое покачивание, без звука
      ошибки и без красного. Повторные нажатия подряд не накладываются. */
   let lastRefuseAt = 0;
+  /* prefers-reduced-motion читаем заново при каждом вызове: MediaQueryList,
+     который держали с загрузки, в Firefox отстаёт после смены настройки. */
+  function reducedMotion() {
+    if (window.Fx && Fx.mode) return !!Fx.mode().reduced;
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
   function refuseLocked(gems) {
     const t = Date.now();
     if (t - lastRefuseAt < 380) return;
     lastRefuseAt = t;
+    if (reducedMotion()) return;
     gems.forEach(gem => {
       if (!gem || !gem.el) return;
       gem.el.querySelectorAll('.gem-inner, .vine-overlay').forEach(part => {
@@ -851,7 +858,7 @@
     gem.el.className = 'gem ' + (SPECIAL_CLASS[type] || 'special-line');
     gem.el.innerHTML = ART.gemInner(gem.color, type);
     const inner = gem.el.querySelector('.gem-inner');
-    if (inner && inner.animate) {
+    if (inner && inner.animate && !reducedMotion()) {
       inner.animate(
         [{ transform: 'scale(.2) rotate(-30deg)' }, { transform: 'scale(1.3) rotate(6deg)' }, { transform: 'scale(1)' }],
         { duration: 420, easing: 'cubic-bezier(.2,.8,.3,1.3)' }
@@ -889,12 +896,13 @@
       applyPos(gem);
     });
     void dom.tiles.offsetWidth;
+    const still = reducedMotion();
     movable.forEach(gem => {
       const node = gem.el;
       node.style.transition = 'opacity .35s ease';
       node.style.opacity = '1';
       const inner = node.querySelector('.gem-inner');
-      if (inner && inner.animate) {
+      if (inner && inner.animate && !still) {
         inner.animate(
           [{ transform: 'scale(.3) rotate(-20deg)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
           { duration: 420, easing: 'cubic-bezier(.2,.8,.3,1.2)' }
