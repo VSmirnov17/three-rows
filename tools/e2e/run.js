@@ -865,7 +865,10 @@ async function suite(bt, bname, url) {
       assert(live.flare, 'перед паузой вспышки нет: ' + JSON.stringify(live));
       await page.click('#menuBtn');
       await page.waitForSelector('#pauseScreen.show');
-      await page.waitForTimeout(400);
+      // Огонь сходит на нет за 0,32 с от первого кадра после открытия окна; кадр под нагрузкой приходит позже
+      const pauseT0 = Date.now();
+      await page.waitForFunction(() => !__FIRE.state().running, null, { timeout: 1000 }).catch(() => {});
+      console.log(`[${bname}] fire settled ${Date.now() - pauseT0}ms after pause`);
       const paused = await ev(page, () => ({ st: __FIRE.state(), flare: !!document.querySelector('.brazier[data-flare]') }));
       assert(paused.st.sparks === 0 && !paused.flare && !paused.st.running, 'на паузе огонь не успокоился: ' + JSON.stringify(paused));
       await page.click('#resumeBtn');
@@ -1445,8 +1448,10 @@ async function suite(bt, bname, url) {
       const w = await ev(page, () => window.__modeWatch);
       const cells = Object.keys(w.shards);
       assert(cells.length > 0, 'low: осколков нет совсем');
-      const bad = cells.filter(k => w.shards[k] !== 3);
-      assert(!bad.length, 'low: у клеток не по 3 осколка: ' + bad.map(k => k + '=' + w.shards[k]).join(' '));
+      // Каскад может разбить ту же клетку ещё раз (волны идут с разницей около 700 мс), счётчик копится:
+      // кратно 3, и хотя бы одна клетка ровно 3 (в обычном режиме по 6 осколков — такое условие не пройдёт)
+      const bad = cells.filter(k => w.shards[k] % 3 !== 0);
+      assert(!bad.length && cells.some(k => w.shards[k] === 3), 'low: у клеток не по 3 осколка: ' + cells.map(k => k + '=' + w.shards[k]).join(' '));
       assert(w.partsMax === 0, 'low: на canvas были частицы: ' + w.partsMax);
       const left = await ev(page, (sel) => document.querySelectorAll(sel).length, FXLEFT);
       assert(left === 0, 'low: через 1,5 с остались узлы: ' + left);
@@ -1702,6 +1707,69 @@ async function suite(bt, bname, url) {
 async function smokeFile(bt, bname) {
   const browser = await bt.launch(launchOpts(bname));
   try {
+    await scenario(bname, '14 transitions: veil on screen change, shard flies to mosaic, nothing left behind', async () => {
+      const { ctx, page } = await newPage(browser, bname, 's14');
+      await startFresh(page, HTTP);
+      await page.click('#mapBtn');
+      await page.waitForSelector('#mapScreen.show');
+      const during = await ev(page, () => ({ tx: document.body.dataset.tx, go: !!document.querySelector('.screen-veil.go') }));
+      assert(during.tx === 'dip' && during.go, 'veil during map open: ' + JSON.stringify(during));
+      await page.waitForFunction(() => !document.body.dataset.tx, null, { timeout: 2000 });
+      assert(await ev(page, () => !document.querySelector('.screen-veil.go')), 'veil left on');
+      const wave = await ev(page, () => {
+        window.__SUN.beginLevel('1-01'); // поле строится синхронно, до первого await
+        return new Set([...document.querySelectorAll('.gem')].map(g => g.style.transitionDelay)).size;
+      });
+      assert(wave > 5, 'stones pour as a wave, distinct delays: ' + wave);
+      await waitStarted(page);
+      await forceWin(page);
+      await page.waitForTimeout(600);
+      await page.click('#endHomeBtn');
+      await page.waitForSelector('#mapScreen.show');
+      const fly = await ev(page, () => ({
+        nodes: document.querySelectorAll('.shard-fly').length,
+        pending: document.querySelector('.land-card.selected .mosaic-cell').classList.contains('shard-pending')
+      }));
+      assert(fly.nodes === 1 && fly.pending, 'shard flight started: ' + JSON.stringify(fly));
+      await page.waitForFunction(() => !document.querySelector('.shard-fly'), null, { timeout: 4000 });
+      const cls = await page.locator('.land-card.selected .mosaic-cell').first().getAttribute('class');
+      assert(/tier-stone/.test(cls) && !/shard-pending/.test(cls), 'cell after flight: ' + cls);
+      // Уход с карты посреди полёта не оставляет осколка над игрой
+      await ev(page, () => { window.__SUN.beginLevel('1-02'); });
+      await waitStarted(page);
+      await forceWin(page);
+      await page.waitForTimeout(600);
+      await page.click('#endHomeBtn');
+      await page.waitForSelector('.shard-fly', { state: 'attached' });
+      await page.click('#mapBackBtn');
+      await page.waitForSelector('#startScreen.show');
+      const left = await ev(page, () => document.querySelectorAll('.shard-fly, .shard-pending').length);
+      assert(left === 0, 'flight leftovers: ' + left);
+      await ctx.close();
+      return `veil=${during.tx} cell="${cls}"`;
+    });
+
+    await scenario(bname, '14 transitions reduced: no veil, no flight, instant board', async () => {
+      const { ctx, page } = await newPage(browser, bname, 's14r', { width: 1366, height: 768 }, { reducedMotion: true });
+      await startFresh(page, HTTP);
+      await page.click('#mapBtn');
+      await page.waitForSelector('#mapScreen.show');
+      assert(await ev(page, () => !document.body.dataset.tx && !document.querySelector('.screen-veil.go')), 'veil in reduced');
+      const inFlight = await ev(page, () => {
+        window.__SUN.beginLevel('1-01'); // поле строится синхронно, до первого await
+        return [...document.querySelectorAll('.gem')].filter(g => g.style.transitionDelay).length;
+      });
+      await waitStarted(page);
+      assert(inFlight === 0, 'gems with wave delay: ' + inFlight);
+      await forceWin(page);
+      await page.waitForTimeout(600);
+      await page.click('#endHomeBtn');
+      await page.waitForSelector('#mapScreen.show');
+      assert(await ev(page, () => document.querySelectorAll('.shard-fly').length === 0), 'flight in reduced');
+      await ctx.close();
+      return 'ok';
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
