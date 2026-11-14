@@ -16,7 +16,7 @@
     4: { calm: [2600, 3800], normal: [3300, 5300], challenge: [2950, 4650] },
     5: { calm: [2700, 3650], normal: [3300, 5000], challenge: [2950, 4450] },
     6: { calm: [3600, 4800], normal: [5300, 7500], challenge: [4850, 7500] },
-    7: { calm: [3150, 4200], normal: [3750, 5800], challenge: [3550, 5400] },
+    7: { calm: [3150, 4200], normal: [4100, 6300], challenge: [3900, 5800] },
     8: { calm: [1900, 2650], normal: [2700, 4250], challenge: [2500, 3950] },
     9: { calm: [4250, 5400], normal: [6500, 9200], challenge: [5900, 8700] },
     10: { calm: [3650, 5100], normal: [4750, 7000], challenge: [4200, 6300] },
@@ -29,7 +29,7 @@
     17: { calm: [6600, 8700], normal: [9500, 12800], challenge: [8200, 11700] },
     18: { calm: [8400, 11200], normal: [12000, 16300], challenge: [11300, 15500] },
     19: { calm: [8900, 11700], normal: [13300, 17700], challenge: [12100, 16500] },
-    20: { calm: [8900, 11500], normal: [12600, 16800], challenge: [11100, 16000] }
+    20: { calm: [8300, 10400], normal: [12400, 16500], challenge: [11100, 16000] }
   };
 
   const STARS = n => {
@@ -75,7 +75,14 @@
     id: 3,
     key: 'moon',
     name: 'Лунные пещеры',
-    bg: 'assets/art/bg-moon.webp',
+    bg: 'assets/backdrop/land3/plate.webp',
+    /* Живой фон пещеры (js/visuals-backdrop.js): только плита и общие светлячки,
+       без воды, луны и облаков (неба в пещере нет). Размер плиты — из
+       assets/backdrop/land3/backdrop.json (tools/pack_backdrop.py --land 3) */
+    backdrop: {
+      plate: 'assets/backdrop/land3/plate.webp',
+      waterfall: false
+    },
     mosaic: 'assets/art/bg-moon.webp',
     mechanic: 'plates',
     scenes: {
@@ -145,7 +152,7 @@
         '.oooooo.',
         '..oooo..',
         '...++...']),
-      lvl(7, 'Первые корни', 175, [[0, 26]], [
+      lvl(7, 'Первые корни', 200, [[0, 26]], [
         '........',
         '.oo..oo.',
         '.oo..oo.',
@@ -263,14 +270,14 @@
         'o#oooo#o',
         'oooooooo']),
       lvl(20, 'Сердце Луны', 385, [[0, 42], [2, 38], [4, 34]], [
-        'oooooooo',
+        '+oooooo+',
         'oooooooo',
         'ooo##ooo',
         'oo#++#oo',
         'oo#++#oo',
         'ooo##ooo',
         'oooooooo',
-        'oooooooo'])
+        '+oooooo+'])
     ]
   };
 

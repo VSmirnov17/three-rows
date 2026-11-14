@@ -54,7 +54,7 @@
       // Высота плитки струй — доля высоты сцены (высота сцены — как в css/backdrop.css)
       layer.style.setProperty("--bd-tile", "calc(max(100vh, 56.27vw) * " + b.tile + ")");
     }
-    layer.style.setProperty("--bd-clouds", cssUrl(b.clouds));
+    if (b.clouds) layer.style.setProperty("--bd-clouds", cssUrl(b.clouds));
 
     const stage = el("div", "bd-stage");
     stage.setAttribute("aria-hidden", "true");
@@ -84,18 +84,23 @@
       stage.appendChild(mist);
     }
 
+    // Небо (луна, облака) — только если земля их задаёт; у пещеры земли 3 неба нет
     const sky = el("div", "bd-sky");
     sky.setAttribute("aria-hidden", "true");
-    const moonWrap = el("div", "bd-moon-wrap");
-    moonWrap.appendChild(el("div", "bd-halo bd-anim"));
-    const moon = el("img", "bd-moon");
-    moon.alt = "";
-    moon.src = b.moon;
-    moonWrap.appendChild(moon);
-    sky.appendChild(moonWrap);
-    const clouds = el("div", "bd-clouds");
-    clouds.appendChild(el("div", "bd-cloud-track bd-anim"));
-    sky.appendChild(clouds);
+    if (b.moon) {
+      const moonWrap = el("div", "bd-moon-wrap");
+      moonWrap.appendChild(el("div", "bd-halo bd-anim"));
+      const moon = el("img", "bd-moon");
+      moon.alt = "";
+      moon.src = b.moon;
+      moonWrap.appendChild(moon);
+      sky.appendChild(moonWrap);
+    }
+    if (b.clouds) {
+      const clouds = el("div", "bd-clouds");
+      clouds.appendChild(el("div", "bd-cloud-track bd-anim"));
+      sky.appendChild(clouds);
+    }
 
     layer.appendChild(stage);
     layer.appendChild(sky);

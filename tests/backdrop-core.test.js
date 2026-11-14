@@ -185,6 +185,35 @@ test('все файлы assets/backdrop/land2 вместе не больше 250
   assert.ok(total <= 250 * 1024, `${total} байт`);
 });
 
+test('земля 3: плита пещеры без воды, луны и облаков, размер совпадает с backdrop.json', () => {
+  const land = require('../js/campaign/land-03.js');
+  const root = path.join(__dirname, '..');
+  const bd = land.backdrop;
+  assert.ok(bd, 'у земли 3 нет backdrop');
+  assert.equal(bd.waterfall, false);
+  assert.ok(!bd.moon && !bd.clouds && !bd.wf && !bd.water && !bd.mask && bd.tile === undefined, 'в пещере нет ни неба, ни воды');
+  assert.equal(bd.plate, 'assets/backdrop/land3/plate.webp');
+  assert.ok(fs.existsSync(path.join(root, bd.plate)), 'нет файла ' + bd.plate);
+  assert.equal(land.bg, bd.plate);
+  assert.equal(land.mosaic, 'assets/art/bg-moon.webp');
+  const json = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land3', 'backdrop.json'), 'utf8'));
+  assert.deepEqual(Object.keys(json), ['plate']);
+  const buf = fs.readFileSync(path.join(root, bd.plate));
+  assert.equal(buf.toString('ascii', 8, 12), 'WEBP');
+  assert.equal(buf.toString('ascii', 12, 16), 'VP8 ');
+  assert.deepEqual([buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff], json.plate);
+  const j1 = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land1', 'backdrop.json'), 'utf8'));
+  assert.deepEqual(json.plate, j1.plate);
+});
+
+test('все файлы assets/backdrop/land3 вместе не больше 250 КБ', () => {
+  const dir = path.join(__dirname, '..', 'assets', 'backdrop', 'land3');
+  const names = fs.readdirSync(dir).sort();
+  assert.deepEqual(names, ['backdrop.json', 'plate.webp']);
+  const total = names.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
+  assert.ok(total <= 250 * 1024, `${total} байт`);
+});
+
 /* линейный конгруэнтный генератор для симуляций */
 function lcgRand(seed) {
   let s = seed >>> 0;
