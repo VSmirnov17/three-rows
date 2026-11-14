@@ -446,6 +446,40 @@
     return { removed, unlocked };
   }
 
+  /* ---------- Золотые плиты ----------
+     Слой клеток отдельно от камней: камни падают и меняются местами, а плита
+     лежит на своей клетке. plates[r][c] — сколько слоёв осталось (0 — пусто). */
+  function makePlates(list) {
+    const plates = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    (list || []).forEach(v => { plates[v[0]][v[1]] = 1; });
+    return plates;
+  }
+
+  function platesLeft(plates) {
+    let n = 0;
+    plates.forEach(row => row.forEach(v => { n += v; }));
+    return n;
+  }
+
+  /* Снимает по слою с плит, которых коснулся шаг каскада plan: это убранные
+     камни, рождающиеся спецкамни (ряд над плитой собран, хотя камень остался)
+     и камни с сорванной лианой. Меняет plates, возвращает снятые { r, c, left }. */
+  function hitPlates(plates, plan) {
+    if (!plates) return [];
+    const cells = new Set(plan.clear);
+    (plan.unlocks || []).forEach(k => cells.add(k));
+    (plan.creates || []).forEach(cr => cells.add(keyOf(cr.r, cr.c)));
+    const hits = [];
+    cells.forEach(k => {
+      const { r, c } = parseKey(k);
+      if (plates[r][c] > 0) {
+        plates[r][c]--;
+        hits.push({ r, c, left: plates[r][c] });
+      }
+    });
+    return hits;
+  }
+
   /* ---------- Обрушение ----------
      Камни в каждом столбце падают вниз, сверху досыпаются новые через
      spawn(r, c) -> gem (ядро DOM не создаёт). Меняет grid и r/c камней.
@@ -682,6 +716,9 @@
     expandSpecials,
     planCascade,
     applyCascade,
+    makePlates,
+    platesLeft,
+    hitPlates,
     collapse,
     generateGrid,
     shuffle,
