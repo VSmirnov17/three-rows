@@ -22,6 +22,7 @@
     board: $('board'),
     boardFrame: document.querySelector('.board-frame'),
     tiles: $('tiles'),
+    plates: $('plates'),
     fx: $('fx'),
     score: $('scoreValue'),
     level: $('levelValue'),
@@ -64,6 +65,8 @@
 
   const state = {
     grid: [],
+    // Слой золотых плит 8×8 (Board.makePlates): 1 — плита лежит
+    plates: [],
     gemSeq: 0,
     selected: null,
     dragStart: null,
@@ -131,7 +134,7 @@
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => {
       if (state.running && !state.ended && !state.paused) {
-        setHint(currentLevel().name + ' — ' + hintMessages.default);
+        setHint(levelHint(currentLevel()));
       }
     }, ms);
   }
@@ -140,8 +143,15 @@
     default: 'Соединяй камни в ряд из трёх и более',
     swap: 'Меняй местами соседние камни',
     bad: 'Так нельзя — нужен ряд из трёх',
-    vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним'
+    vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним',
+    plates: 'Собирай ряды на золотых плитах — очисти все плиты'
   };
+
+  /* Подсказка уровня: на уровнях с плитами — про плиты (обучение земли 3). */
+  function levelHint(level) {
+    const plates = level && level.plates && level.plates.length;
+    return level.name + ' — ' + (plates ? hintMessages.plates : hintMessages.default);
+  }
 
   function setHint(text, tone) {
     dom.hintBar.textContent = text;
@@ -212,11 +222,15 @@
   function renderGoals() {
     dom.goalList.innerHTML = state.goals.map((g, i) => {
       const vines = g.type === 'vines';
+      const plates = g.type === 'plates';
+      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : '';
+      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : ART.gemSvg(g.color, 'mini-gem');
+      const name = vines ? 'Лианы' : plates ? 'Плиты' : ART.GEMS[g.color].name;
       return `
-      <div class="goal-chip${vines ? ' goal-vines' : ''}" data-i="${i}">
-        ${vines ? GOAL_VINE_ICON : ART.gemSvg(g.color, 'mini-gem')}
+      <div class="goal-chip${cls}" data-i="${i}">
+        ${icon}
         <div class="goal-meta">
-          <span class="goal-name">${vines ? 'Лианы' : ART.GEMS[g.color].name}</span>
+          <span class="goal-name">${name}</span>
           <span class="goal-count">${goalCountText(g)}</span>
         </div>
         <span class="goal-check"><svg viewBox="0 0 100 100"><use href="#icon-check"></use></svg></span>
@@ -501,8 +515,8 @@
     setBodyState('levelId', level.id);
     setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    state.goals = level.goals.map(g => g.type === 'vines'
-      ? { type: 'vines', need: g.need, got: 0 }
+    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates')
+      ? { type: g.type, need: g.need, got: 0 }
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
     state.timeLeft = level.timer != null ? level.timer : level.econTime;
@@ -521,7 +535,7 @@
     updateSunStone();
     updateTimerUI();
     updateShuffleUI();
-    setHint(level.name + ' — ' + hintMessages.default);
+    setHint(levelHint(level));
   }
 
   /* ---------- Поле и камни ---------- */
@@ -563,6 +577,19 @@
     '<svg class="mini-gem goal-vine-icon" viewBox="0 0 100 100" aria-hidden="true">' +
     '<rect x="5" y="5" width="90" height="90" rx="20" fill="#c9b58a" stroke="#f3e2b0" stroke-width="4"/>' +
     VINE_SVG.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '') +
+    '</svg>';
+
+  /* Значок цели «Плиты»: золотая плитка со светлой кромкой и тёмным контуром,
+     как плита на поле. */
+  const GOAL_PLATE_ICON =
+    '<svg class="mini-gem goal-plate-icon" viewBox="0 0 100 100" aria-hidden="true">' +
+    '<defs><linearGradient id="goalPlateGold" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#fff0b0"/><stop offset=".3" stop-color="#f2c14a"/>' +
+    '<stop offset=".65" stop-color="#d99a1c"/><stop offset="1" stop-color="#a86a0c"/>' +
+    '</linearGradient></defs>' +
+    '<rect x="6" y="6" width="88" height="88" rx="14" fill="url(#goalPlateGold)" stroke="#3a2206" stroke-width="6"/>' +
+    '<rect x="14" y="14" width="72" height="72" rx="9" fill="none" stroke="#ffeeaa" stroke-width="4" opacity=".9"/>' +
+    '<path d="M24 50 L50 24 M30 70 L70 30 M50 76 L76 50" stroke="#7a4808" stroke-width="5" stroke-linecap="round" opacity=".35"/>' +
     '</svg>';
 
   /* Включает/выключает лианы на камне: класс и оверлей. */
@@ -637,10 +664,45 @@
   function generateGridData() {
     const vines = state.level ? state.level.vines : [];
     state.grid = Board.generateGrid({ colors: TYPES, vines }, Math.random, () => ++state.gemSeq);
+    state.plates = Board.makePlates(state.level ? state.level.plates : []);
+  }
+
+  /* Слой золотых плит под камнями: узел на каждую клетку с плитой. */
+  function renderPlates() {
+    if (!dom.plates) return;
+    dom.plates.innerHTML = '';
+    (state.plates || []).forEach((row, r) => row.forEach((v, c) => {
+      if (v <= 0) return;
+      const node = document.createElement('div');
+      node.className = 'gold-plate';
+      node.dataset.r = String(r);
+      node.dataset.c = String(c);
+      node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+      dom.plates.appendChild(node);
+    }));
+  }
+
+  /* Снятые плиты (hits ядра { r, c, left }): плита без слоёв вспыхивает и
+     уходит за 800 мс; при prefers-reduced-motion — сразу. */
+  function liftPlates(hits) {
+    if (!dom.plates || !hits.length) return;
+    const still = reducedMotion();
+    hits.forEach(h => {
+      if (h.left !== 0) return;
+      const node = dom.plates.querySelector(`.gold-plate[data-r="${h.r}"][data-c="${h.c}"]:not(.lift)`);
+      if (!node) return;
+      if (still) {
+        node.remove();
+        return;
+      }
+      node.classList.add('lift');
+      setTimeout(() => node.remove(), 800);
+    });
   }
 
   function spawnBoard() {
     dom.tiles.innerHTML = '';
+    renderPlates();
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
     fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
@@ -980,7 +1042,7 @@
     hintTimeout = setTimeout(() => {
       clearHints();
       if (state.running && !state.ended && !state.paused) {
-        setHint(currentLevel().name + ' — ' + hintMessages.default);
+        setHint(levelHint(currentLevel()));
       }
     }, 3200);
   }
@@ -1103,6 +1165,14 @@
       state.goals.forEach(goal => {
         if (goal.type === 'vines') goal.got = Math.min(goal.need, goal.got + unlockArr.length);
       });
+    }
+    // Цель «Плиты»: каждая снятая плита — один шаг (очков не даёт)
+    const hits = Board.hitPlates(state.plates, plan);
+    if (hits.length) {
+      state.goals.forEach(goal => {
+        if (goal.type === 'plates') goal.got = Math.min(goal.need, goal.got + hits.length);
+      });
+      fxSafe(() => liftPlates(hits));
     }
     const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
     if (changed >= 0) updateGoals(changed);
@@ -1354,7 +1424,7 @@
     state.totalTime = level.econTime;
     state.lastAction = now();
     updateTimerUI();
-    setHint(level.name + ' — ' + hintMessages.default);
+    setHint(levelHint(level));
   }
 
   async function runCountdown(session) {
@@ -1461,7 +1531,7 @@
     state.paused = false;
     state.lastAction = now();
     SFX.musicResume();
-    setHint(currentLevel().name + ' — ' + hintMessages.default);
+    setHint(levelHint(currentLevel()));
   }
 
   /* Стартовый экран; за ним — поле текущего уровня кампании. */
@@ -1773,6 +1843,17 @@
         }
       },
       reshuffleBoard,
+      // Клетки с плитами: [[r, c], …]
+      plates() {
+        const out = [];
+        (state.plates || []).forEach((row, r) => row.forEach((v, c) => { if (v > 0) out.push([r, c]); }));
+        return out;
+      },
+      // Кладёт плиты в клетки [[r, c], …] (остальные снимает) и перестраивает слой
+      setPlates(cells) {
+        state.plates = Board.makePlates(cells || []);
+        renderPlates();
+      },
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)
       setVines(cells) {
         const want = new Set((cells || []).map(([r, c]) => r + ',' + c));

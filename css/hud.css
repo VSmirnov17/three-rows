@@ -528,7 +528,7 @@
     filter: drop-shadow(0 10px 18px rgba(0, 0, 0, .6));
   }
   .board { border-radius: 2px; border-width: 1px; }
-  .tiles, .fx-layer, .board-bg { inset: 0; }
+  .tiles, .fx-layer, .board-bg, .plates-layer { inset: 0; }
   .gem-inner { inset: 1%; }
   .gem.selected::after { border-width: 3px; }
   /* Нижний край значка — на внутренней кромке рамки (10 px), камни верхнего ряда не закрыты */
@@ -639,7 +639,7 @@
   .menu-btn { height: 56px; }
 
   .board-frame { padding: calc(var(--frame) * .075); }
-  .tiles, .fx-layer, .board-bg { inset: 0; }
+  .tiles, .fx-layer, .board-bg, .plates-layer { inset: 0; }
   .gem-inner { inset: 1%; }
   .gem.selected::after { border-width: 3px; }
   .combo-badge { font-size: 18px; padding: 1px 12px 2px; }

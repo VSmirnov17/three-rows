@@ -1,0 +1,76 @@
+/* Золотые плиты (земля 3): слой под камнями, та же сетка, что .tiles.
+   Камень закрывает 86–92 % клетки, поэтому плита — во всю клетку, насыщенное
+   золото со светлой кромкой и тёмным контуром: из-под камня видна яркая рамка.
+   Вид временный, нарисованный кодом; картинку можно заменить позже.
+   Позицию клетки задаёт инлайн-transform узла (как у камня), поэтому
+   анимация снятия идёт на ::before и ::after, а не на самом узле. */
+.plates-layer {
+  position: absolute;
+  inset: 2%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gold-plate {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12.5%;
+  height: 12.5%;
+  box-sizing: border-box;
+}
+
+.gold-plate::before,
+.gold-plate::after {
+  content: '';
+  position: absolute;
+  inset: 3%;
+  border-radius: 14%;
+}
+
+.gold-plate::before {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 244, 196, .55) 0%, rgba(255, 244, 196, 0) 62%),
+    repeating-linear-gradient(45deg, rgba(120, 72, 8, .22) 0 6%, rgba(255, 230, 150, 0) 6% 14%),
+    linear-gradient(145deg, #fff0b0 0%, #f2c14a 28%, #d99a1c 60%, #a86a0c 100%);
+  border: 2px solid #3a2206;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 238, 170, .9),
+    inset 0 -4px 8px rgba(110, 58, 0, .45),
+    0 0 10px rgba(255, 196, 70, .45);
+}
+
+/* Светлая вспышка при снятии: отдельный слой, меняется только opacity */
+.gold-plate::after {
+  background: radial-gradient(circle at 50% 50%, rgba(255, 252, 230, .95) 0%, rgba(255, 236, 160, .6) 55%, rgba(255, 220, 120, 0) 100%);
+  opacity: 0;
+}
+
+/* Плита снята: коротко светлеет, приподнимается и тает */
+.gold-plate.lift::before {
+  animation: plate-lift .55s ease-out forwards;
+}
+
+.gold-plate.lift::after {
+  animation: plate-flash .55s ease-out forwards;
+}
+
+@keyframes plate-lift {
+  0%   { opacity: 1; transform: scale(1); }
+  35%  { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+@keyframes plate-flash {
+  0%   { opacity: 0; transform: scale(1); }
+  35%  { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+body[data-difficulty="calm"] .gold-plate.lift::before,
+body[data-difficulty="calm"] .gold-plate.lift::after { animation-duration: .7s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gold-plate.lift::before,
+  .gold-plate.lift::after { animation: none; opacity: 0; }
+}

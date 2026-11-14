@@ -1849,6 +1849,140 @@ async function smokeFile(bt, bname) {
       return notes.join('; ');
     });
 
+    await scenario(bname, '16 land 3 plates: plates on board and in goals, lift, reshuffle, retry, phone, reduced', async () => {
+      const notes = [];
+      // Следит за #plates: была ли у какой-нибудь плиты метка lift
+      const watchLift = (page) => ev(page, () => {
+        window.__liftSeen = false;
+        if (window.__liftObs) window.__liftObs.disconnect();
+        const check = n => { if (n.nodeType === 1 && n.classList.contains('lift')) window.__liftSeen = true; };
+        window.__liftObs = new MutationObserver(list => list.forEach(m => {
+          check(m.target);
+          m.addedNodes.forEach(check);
+        }));
+        window.__liftObs.observe(document.getElementById('plates'), { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+      });
+      const platesDom = (page) => ev(page, () => ({
+        all: document.querySelectorAll('#plates .gold-plate').length,
+        live: document.querySelectorAll('#plates .gold-plate:not(.lift)').length,
+        lifting: document.querySelectorAll('#plates .gold-plate.lift').length,
+        state: __SUN.plates().length
+      }));
+      const chipOf = (page) => ev(page, () => {
+        const chips = document.querySelectorAll('.goal-chip.goal-plates');
+        return { n: chips.length, text: chips[0] ? chips[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+      });
+
+      // ---- 3-01: 8 плит, чип «Плиты 0 / 8», подсказка про плиты ----
+      const key = 's16';
+      const { page } = await newPage(browser, bname, key);
+      await startFresh(page, HTTP);
+      await ev(page, () => { window.__SUN.start('3-01'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const d0 = await platesDom(page);
+      assert(d0.all === 8 && d0.state === 8, '3-01 plates: ' + JSON.stringify(d0));
+      const c0 = await chipOf(page);
+      assert(c0.n === 1 && c0.text.includes('Плиты') && c0.text.includes('0 / 8'), '3-01 chip: ' + JSON.stringify(c0));
+      const hint = await page.textContent('#hintBar');
+      assert(hint.includes('золотых плитах'), 'hint: ' + hint);
+      await shot(page, bname, 'desktop-plates-level');
+
+      // ---- strike: ряд 3 снимает плиты строки 3, снятые уходят за 800 мс ----
+      await watchLift(page);
+      await ev(page, async () => { await __SUN.strike(3, 2, 'line', 'row'); });
+      await page.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+      const left = await ev(page, () => __SUN.plates());
+      assert(!left.some(([r]) => r === 3), 'row 3 plates left: ' + JSON.stringify(left));
+      const d1 = await platesDom(page);
+      assert(d1.live === left.length, 'plate nodes vs state: ' + JSON.stringify(d1));
+      const c1 = await chipOf(page);
+      assert(c1.text.includes((8 - left.length) + ' / 8'), 'chip after strike: ' + JSON.stringify(c1) + ' left ' + left.length);
+      assert(await ev(page, () => window.__liftSeen), 'no plate got .lift');
+      await page.waitForTimeout(850);
+      const d1b = await platesDom(page);
+      assert(d1b.lifting === 0 && d1b.all === d1b.state, 'lifted plates still in DOM after 800ms: ' + JSON.stringify(d1b));
+      notes.push('strike left=' + left.length);
+
+      // ---- reshuffle: плиты на месте ----
+      const ps0 = JSON.stringify(await ev(page, () => __SUN.plates()));
+      await ev(page, async () => { await __SUN.reshuffleBoard(false, true); __SUN.state.busy = false; });
+      const ps1 = JSON.stringify(await ev(page, () => __SUN.plates()));
+      assert(ps0 === ps1, 'plates changed on reshuffle: ' + ps0 + ' -> ' + ps1);
+      const d2 = await platesDom(page);
+      assert(d2.all === d2.state, 'plate nodes after reshuffle: ' + JSON.stringify(d2));
+
+      // ---- retry: 3-02 — ровно 12 плит, без остатков 3-01 ----
+      await ev(page, () => { window.__SUN.start('3-02'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const d3 = await platesDom(page);
+      assert(d3.all === 12 && d3.state === 12, '3-02 plates: ' + JSON.stringify(d3));
+
+      // ---- no win while plates left ----
+      const w = await ev(page, () => {
+        const S = window.__SUN;
+        S.state.goals.forEach(g => { if (g.type === 'color') g.got = g.need; });
+        S.checkEnd();
+        const ended1 = S.state.ended;
+        S.state.goals.forEach(g => { if (g.type === 'plates') g.got = g.need; });
+        S.checkEnd();
+        return { ended1, ended2: S.state.ended, types: S.state.goals.map(g => g.type) };
+      });
+      assert(w.ended1 === false, 'won with plates left: ' + JSON.stringify(w));
+      assert(w.ended2 === true, 'no win after plates done: ' + JSON.stringify(w));
+
+      // ---- 1-01: плит нет ----
+      await ev(page, () => { window.__SUN.start('1-01'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const d4 = await ev(page, () => ({ plates: document.querySelectorAll('.gold-plate').length, chips: document.querySelectorAll('.goal-plates').length }));
+      assert(d4.plates === 0 && d4.chips === 0, '1-01 has plates: ' + JSON.stringify(d4));
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      assert(errs.length === 0, 'console: ' + errs.join(' | '));
+
+      // ---- phone 390×844: плита точно под камнем своей клетки ----
+      {
+        const { page: ph } = await newPage(browser, bname, 's16-phone', { width: 390, height: 844 });
+        await startFresh(ph, HTTP);
+        await ev(ph, () => { window.__SUN.start('3-01'); });
+        await waitStarted(ph);
+        await ph.waitForTimeout(1100); // волна появления камней закончилась
+        const a = await ev(ph, () => {
+          const p = document.querySelector('#plates .gold-plate');
+          const g = document.querySelector(`#tiles .gem[data-r="${p.dataset.r}"][data-c="${p.dataset.c}"]`);
+          const b = e => { const x = e.getBoundingClientRect(); return { x: x.x, y: x.y, w: x.width, h: x.height }; };
+          return { cell: [p.dataset.r, p.dataset.c], plate: b(p), gem: g ? b(g) : null };
+        });
+        assert(a.gem && Math.abs(a.plate.x - a.gem.x) <= 2 && Math.abs(a.plate.y - a.gem.y) <= 2, 'phone align: ' + JSON.stringify(a));
+        await shot(ph, bname, 'mobile-plates-level');
+        const errsPh = (consoleLog[bname + '/s16-phone'] || []).filter(l => !/warning/.test(l));
+        assert(errsPh.length === 0, 'phone console: ' + errsPh.join(' | '));
+        notes.push('phone dx=' + (a.plate.x - a.gem.x).toFixed(2) + ' dy=' + (a.plate.y - a.gem.y).toFixed(2));
+      }
+
+      // ---- reduced: снятая плита исчезает сразу, без lift ----
+      {
+        const { page: rd } = await newPage(browser, bname, 's16-reduced', { width: 1366, height: 768 }, { reducedMotion: true });
+        await startFresh(rd, HTTP);
+        await ev(rd, () => { window.__SUN.start('3-01'); });
+        await waitStarted(rd);
+        await rd.waitForTimeout(300);
+        assert(await ev(rd, () => matchMedia('(prefers-reduced-motion: reduce)').matches), 'browser did not apply reducedMotion');
+        await watchLift(rd);
+        await ev(rd, async () => { await __SUN.strike(3, 2, 'line', 'row'); });
+        await rd.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        const r = await platesDom(rd);
+        const seen = await ev(rd, () => window.__liftSeen);
+        assert(!seen, 'plate got .lift in reduced');
+        assert(r.state < 8 && r.all === r.state && r.lifting === 0, 'reduced plates: ' + JSON.stringify(r));
+        const errsRd = (consoleLog[bname + '/s16-reduced'] || []).filter(l => !/warning/.test(l));
+        assert(errsRd.length === 0, 'reduced console: ' + errsRd.join(' | '));
+        notes.push('reduced left=' + r.state);
+      }
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
