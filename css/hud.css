@@ -473,6 +473,20 @@
   .goal-count { font-size: 24px; }
   .goal-check { left: calc(50% + 4px); bottom: auto; top: 16px; width: 16px; height: 16px; padding: 2px; }
 
+  /* Пять целей (земля 3, уровни 18–20): три в ряд при счётчике 24 px не
+     помещаются («41 / 42» — около 90 px на чип). Поэтому по две в ряд и
+     пятая по центру — всегда три ряда, при любом числе цифр (иначе поле
+     прыгало бы вниз посреди уровня, когда счёт доходит до «10 / 42»).
+     Подписи «Цели» нет, камни как на невысоком телефоне, счётчик тот же. */
+  .goal-card:has(.goal-chip:nth-child(5)) { padding-top: 4px; }
+  .goal-card:has(.goal-chip:nth-child(5)) .card-title { display: none; }
+  .goal-card:has(.goal-chip:nth-child(5)) .goal-list { display: grid; grid-template-columns: repeat(2, max-content); justify-content: center; }
+  .goal-card:has(.goal-chip:nth-child(5)) .goal-chip:nth-child(5) { grid-column: 1 / -1; justify-self: center; }
+  .goal-card:has(.goal-chip:nth-child(5)) .mini-gem { width: 26px; height: 26px; }
+  .goal-card:has(.goal-chip:nth-child(5)) .goal-count { line-height: 1; }
+  /* Третий ряд целей — поле на столько же ниже */
+  .game-shell:has(.goal-chip:nth-child(5)) { --above: 311px; }
+
   .plate-btn {
     border-width: 8px;
     border-image-width: 8px;
@@ -567,6 +581,7 @@
   .goal-card:has(.goal-chip:nth-child(3)) .mini-gem { width: 26px; height: 26px; }
   .goal-card:has(.goal-chip:nth-child(3)) .goal-count { line-height: 1; }
   .game-shell:has(.goal-chip:nth-child(3)) { --above: 252px; }
+  .game-shell:has(.goal-chip:nth-child(5)) { --above: 313px; }
 }
 
 /* Узкий телефон: цифры чуть меньше, чтобы «12 345» и «12 / 20» не упирались в рамку */
@@ -625,6 +640,12 @@
   .goal-meta { flex: 0 1 auto; }
   .goal-count { font-size: 24px; }
   .goal-check { left: 20px; bottom: 0; width: 16px; height: 16px; padding: 2px; }
+  /* Пять целей: без подписи «Цели» и плотнее — столбец не выше, чем с четырьмя */
+  .goal-card:has(.goal-chip:nth-child(5)) { padding-top: 4px; }
+  .goal-card:has(.goal-chip:nth-child(5)) .card-title { display: none; }
+  .goal-card:has(.goal-chip:nth-child(5)) .goal-list { gap: 1px; }
+  .goal-card:has(.goal-chip:nth-child(5)) .goal-chip { padding-block: 0; }
+  .goal-card:has(.goal-chip:nth-child(5)) .mini-gem { width: 26px; height: 26px; }
 
   .plate-btn {
     height: 56px;

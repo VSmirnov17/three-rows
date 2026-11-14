@@ -1979,6 +1979,37 @@ async function smokeFile(bt, bname) {
         const errsPh = (consoleLog[bname + '/s16-phone'] || []).filter(l => !/warning/.test(l));
         assert(errsPh.length === 0, 'phone console: ' + errsPh.join(' | '));
         notes.push('phone dx=' + (a.plate.x - a.gem.x).toFixed(2) + ' dy=' + (a.plate.y - a.gem.y).toFixed(2));
+
+        // ---- пять целей (3-20) на телефоне: подсказка над панелью кнопок,
+        // поле целиком в окне, страница не длиннее, чем с четырьмя целями (3-17).
+        // Счётчики двузначные («41 / 42»): с ними чипы шире, чем в начале уровня.
+        const layout = async (lvl, wide) => {
+          await ev(ph, l => { window.__SUN.start(l); }, lvl);
+          await waitStarted(ph);
+          await ph.waitForTimeout(400);
+          if (wide) await ev(ph, () => { __SUN.state.goals.forEach(g => { g.got = g.need - 1; }); __SUN.updateGoals(); });
+          await ph.waitForTimeout(100);
+          return ev(ph, () => {
+            const b = s => { const c = document.querySelector(s).getBoundingClientRect(); return { t: c.top, b: c.bottom, l: c.left, r: c.right }; };
+            return { chips: document.querySelectorAll('.goal-chip').length, frame: b('.board-frame'), hint: b('#hintBar'), bar: b('.tool-row'), sh: document.scrollingElement.scrollHeight, iw: innerWidth, ih: innerHeight };
+          });
+        };
+        for (const vp of [{ width: 390, height: 844 }, { width: 360, height: 740 }]) {
+          await ph.setViewportSize(vp);
+          const tag = vp.width + 'x' + vp.height + ' ';
+          const four = await layout('3-17', true);
+          const fresh = await layout('3-20', false);
+          const five = await layout('3-20', true);
+          assert(four.chips === 4 && five.chips === 5, tag + 'chips: ' + four.chips + '/' + five.chips);
+          const f = five.frame;
+          assert(f.t >= 0 && f.l >= -1 && f.r <= five.iw + 1 && f.b <= five.ih, tag + '3-20 board outside window: ' + JSON.stringify(f));
+          assert(f.b <= five.hint.t + 1, tag + '3-20 board over hint: ' + JSON.stringify({ f, hint: five.hint }));
+          assert(five.hint.b <= five.bar.t + 1, tag + '3-20 hint under button bar: ' + JSON.stringify({ hint: five.hint, bar: five.bar }));
+          assert(five.sh <= four.sh, tag + '3-20 page taller than 3-17: ' + five.sh + ' > ' + four.sh);
+          assert(Math.abs(fresh.frame.t - five.frame.t) <= 1, tag + 'board jumps when counts get two digits: ' + fresh.frame.t + ' -> ' + five.frame.t);
+          if (vp.width === 390) await shot(ph, bname, 'mobile-five-goals');
+          notes.push(tag + 'five goals frame ' + Math.round(f.r - f.l) + ' hint.b ' + Math.round(five.hint.b) + ' bar.t ' + Math.round(five.bar.t) + ' sh ' + five.sh + '/' + four.sh);
+        }
       }
 
       // ---- reduced: снятая плита исчезает сразу, без lift ----

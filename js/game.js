@@ -1172,7 +1172,14 @@
       state.goals.forEach(goal => {
         if (goal.type === 'plates') goal.got = Math.min(goal.need, goal.got + hits.length);
       });
-      fxSafe(() => liftPlates(hits));
+      // Снять плиты с поля — это состояние игры, а не эффект: вызываем
+      // напрямую, чтобы золото ушло и без скриптов Fx/FxCore
+      // (reducedMotion() без Fx сам спрашивает matchMedia).
+      try {
+        liftPlates(hits);
+      } catch (err) {
+        console.error('[plates] ' + (err && err.message ? err.message : err), err);
+      }
     }
     const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
     if (changed >= 0) updateGoals(changed);
@@ -1818,7 +1825,7 @@
   if (new URLSearchParams(location.search).has('debug')) {
     window.__SUN = {
       state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
-      checkEnd, upgradeGem, applyPos, beginLevel, showHint,
+      checkEnd, upgradeGem, applyPos, beginLevel, showHint, updateGoals,
       // Запускает уровень кампании: __SUN.start('2-01')
       start: levelId => startLevel(levelId),
       setScore,
