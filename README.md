@@ -18,7 +18,7 @@ python3 -m http.server 8080
 
 ```bash
 node --test tests/                           # тесты ядра поля, кампании, прогресса, бота
-node tools/level-bot.js --check --lands 1-2  # бот проходит все уровни земель 1–2
+node tools/level-bot.js --check --lands 1-3  # бот проходит все уровни земель 1–3
 ```
 
 ## Выкладка
