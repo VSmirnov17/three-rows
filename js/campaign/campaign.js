@@ -14,7 +14,7 @@
 })(function () {
   'use strict';
 
-  const LAND_FILES = ['./land-01.js', './land-02.js'];
+  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js'];
   const DIFFICULTIES = ['calm', 'normal', 'challenge'];
   const ROWS = 8;
   const COLS = 8;
@@ -74,13 +74,17 @@
     const lv = e.level;
     const hard = difficulty === 'challenge';
 
-    let vines = (lv.vines || []).map(v => [v[0], v[1]]);
-    if (hard && lv.challenge && lv.challenge.vines) {
-      vines = vines.concat(lv.challenge.vines.map(v => [v[0], v[1]]));
-    }
+    /* Клетки слоя key (лианы, плиты); на «Испытании» — с добавкой challenge */
+    const cellsOf = key => {
+      const extra = (hard && lv.challenge && lv.challenge[key]) || [];
+      return (lv[key] || []).concat(extra).map(v => [v[0], v[1]]);
+    };
+    const vines = cellsOf('vines');
+    const plates = cellsOf('plates');
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };
+      if (g.type === 'plates') return { type: 'plates', need: plates.length };
       const need = hard ? Math.ceil(g.need * CHALLENGE_NEED) : g.need;
       return { type: g.type, color: g.color, need };
     });
@@ -96,6 +100,7 @@
       econTime,
       goals,
       vines,
+      plates,
       stars: stars.slice()
     };
   }
@@ -134,27 +139,29 @@
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }
               if (!(g.need > 0)) errors.push(tag + ': need цели должен быть > 0');
-            } else if (g.type !== 'vines') {
+            } else if (g.type !== 'vines' && g.type !== 'plates') {
               errors.push(tag + ': неизвестный тип цели ' + g.type);
             }
           });
         }
 
-        const base = lv.vines || [];
-        const extra = (lv.challenge && lv.challenge.vines) || [];
-        const cells = new Set();
-        base.concat(extra).forEach(v => {
-          if (!inBoard(v)) {
-            errors.push(tag + ': лиана вне поля ' + JSON.stringify(v));
-            return;
+        [['vines', 'лиана', 'лиан'], ['plates', 'плита', 'плит']].forEach(([key, one, many]) => {
+          const base = lv[key] || [];
+          const extra = (lv.challenge && lv.challenge[key]) || [];
+          const cells = new Set();
+          base.concat(extra).forEach(v => {
+            if (!inBoard(v)) {
+              errors.push(tag + ': ' + one + ' вне поля ' + JSON.stringify(v));
+              return;
+            }
+            const cell = v[0] * COLS + v[1];
+            if (cells.has(cell)) errors.push(tag + ': ' + one + ' повторяется ' + JSON.stringify(v));
+            cells.add(cell);
+          });
+          if (lv.goals.some(g => g.type === key) && base.length === 0) {
+            errors.push(tag + ': цель ' + key + ' без ' + many);
           }
-          const key = v[0] * COLS + v[1];
-          if (cells.has(key)) errors.push(tag + ': лиана повторяется ' + JSON.stringify(v));
-          cells.add(key);
         });
-        if (lv.goals.some(g => g.type === 'vines') && base.length === 0) {
-          errors.push(tag + ': цель vines без лиан');
-        }
 
         DIFFICULTIES.forEach(d => {
           const s = lv.stars && lv.stars[d];

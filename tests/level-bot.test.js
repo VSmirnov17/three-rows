@@ -126,3 +126,23 @@ test('parseArgs отвергает мусорные значения', () => {
   assert.throws(() => parseArgs(['--check', '--bogus']));
   assert.equal(parseArgs(['--check', '--seed-offset', '1000']).offset, 1000);
 });
+
+test('runMove: плиты под рядом идут в прогресс, очков не добавляют', () => {
+  const plates = Board.makePlates([[0, 0], [0, 1], [5, 5]]);
+  const r = runMove(build(), MOVE[0], MOVE[1], SEED, { colorLeft: new Map(), vinesLeft: 0, platesLeft: 3 }, [TOTAL * 0.5], TOTAL, plates);
+  assert.equal(r.gained.plates, 2);
+  assert.equal(r.progress, 2);
+  assert.equal(r.score, expectedScore(3, 0, TOTAL * 0.5));
+  assert.equal(Board.platesLeft(plates), 1, 'слой плит меняется');
+});
+
+test('playLevel: уровень только с плитами проходится, пока плиты не сняты', () => {
+  const resolved = {
+    id: 't-plates', timer: null, econTime: 300, vines: [],
+    plates: [[3, 3], [3, 4], [4, 3], [4, 4]],
+    goals: [{ type: 'plates', need: 4 }]
+  };
+  const r = playLevel(resolved, 1, { policy: 'greedy' });
+  assert.equal(r.won, true);
+  assert.ok(r.moves >= 1);
+});

@@ -626,3 +626,74 @@ test('shuffle: если перестановки не помогают, пере
   assert.equal(Board.hasMove(out), true);
   out.forEach(row => row.forEach(g => assert.ok(g.color >= 0 && g.color < 5)));
 });
+
+/* ---------- Золотые плиты ---------- */
+
+const TRIPLE = [
+  '000.....', '........', '........', '........',
+  '........', '........', '........', '........'
+];
+
+test('makePlates: плита стоит только в указанных клетках', () => {
+  const plates = Board.makePlates([[0, 1], [7, 7]]);
+  assert.equal(plates[0][1], 1);
+  assert.equal(plates[7][7], 1);
+  assert.equal(plates[0][0], 0);
+  assert.equal(Board.platesLeft(plates), 2);
+});
+
+test('makePlates без списка даёт пустой слой', () => {
+  assert.equal(Board.platesLeft(Board.makePlates()), 0);
+  assert.equal(Board.platesLeft(Board.makePlates([])), 0);
+});
+
+test('hitPlates снимает плиты под собранным рядом и не трогает остальные', () => {
+  const plan = Board.planCascade(gridFrom(TRIPLE), null);
+  const plates = Board.makePlates([[0, 0], [0, 2], [3, 3]]);
+  const hits = Board.hitPlates(plates, plan);
+  assert.deepEqual(hits.map(h => [h.r, h.c]).sort(), [[0, 0], [0, 2]]);
+  assert.equal(Board.platesLeft(plates), 1);
+  assert.equal(plates[3][3], 1);
+});
+
+test('hitPlates: повторное попадание по пустой клетке ничего не даёт', () => {
+  const plan = Board.planCascade(gridFrom(TRIPLE), null);
+  const plates = Board.makePlates([[0, 0]]);
+  assert.equal(Board.hitPlates(plates, plan).length, 1);
+  assert.equal(Board.hitPlates(plates, plan).length, 0);
+  assert.equal(plates[0][0], 0);
+});
+
+test('hitPlates: плита под рождающимся спецкамнем снимается', () => {
+  const grid = gridFrom([
+    '0000....', '........', '........', '........',
+    '........', '........', '........', '........'
+  ]);
+  const plan = Board.planCascade(grid, { r: 0, c: 1 });
+  assert.equal(plan.creates.length, 1);
+  assert.equal(plan.clear.has('0,1'), false, 'камень на месте спецкамня не убирается');
+  const plates = Board.makePlates([[0, 1]]);
+  assert.equal(Board.hitPlates(plates, plan).length, 1);
+});
+
+test('hitPlates: срыв лианы над плитой снимает и плиту', () => {
+  const plan = Board.planCascade(gridFrom(TRIPLE, { '0,1': { locked: true } }), null);
+  assert.ok(plan.unlocks.has('0,1'));
+  const plates = Board.makePlates([[0, 1]]);
+  assert.equal(Board.hitPlates(plates, plan).length, 1);
+});
+
+test('hitPlates: удар спецкамня снимает плиты по всей своей линии', () => {
+  const grid = gridFrom([
+    '00012345', '........', '........', '........',
+    '........', '........', '........', '........'
+  ], { '0,0': { special: 'line', lineDir: 'row' } });
+  const plan = Board.planCascade(grid, null);
+  const plates = Board.makePlates([[0, 7]]);
+  assert.equal(Board.hitPlates(plates, plan).length, 1);
+});
+
+test('hitPlates без слоя плит безопасен', () => {
+  const plan = Board.planCascade(gridFrom(TRIPLE), null);
+  assert.deepEqual(Board.hitPlates(null, plan), []);
+});

@@ -5,15 +5,17 @@ const assert = require('node:assert/strict');
 
 const Campaign = require('../js/campaign/campaign.js');
 
-test('в кампании 2 земли и 40 уровней с уникальными id', () => {
-  assert.equal(Campaign.lands().length, 2);
+test('в кампании 3 земли и 60 уровней с уникальными id', () => {
+  assert.equal(Campaign.lands().length, 3);
   const ids = Campaign.allLevelIds();
-  assert.equal(ids.length, 40);
-  assert.equal(new Set(ids).size, 40);
+  assert.equal(ids.length, 60);
+  assert.equal(new Set(ids).size, 60);
   assert.equal(ids[0], '1-01');
   assert.equal(ids[19], '1-20');
   assert.equal(ids[20], '2-01');
   assert.equal(ids[39], '2-20');
+  assert.equal(ids[40], '3-01');
+  assert.equal(ids[59], '3-20');
 });
 
 test('validate() пуст', () => {
@@ -94,14 +96,15 @@ test('в земле 2 в каждом уровне есть лианы, в зе�
   for (const id of Campaign.allLevelIds()) {
     const lvl = Campaign.level(id);
     if (id.startsWith('2-')) assert.ok(lvl.vines.length > 0, id);
-    else assert.ok(!lvl.vines || lvl.vines.length === 0, id);
+    else if (id.startsWith('1-')) assert.ok(!lvl.vines || lvl.vines.length === 0, id);
   }
 });
 
 test('nextLevelId', () => {
   assert.equal(Campaign.nextLevelId('1-01'), '1-02');
   assert.equal(Campaign.nextLevelId('1-20'), '2-01');
-  assert.equal(Campaign.nextLevelId('2-20'), null);
+  assert.equal(Campaign.nextLevelId('2-20'), '3-01');
+  assert.equal(Campaign.nextLevelId('3-20'), null);
   assert.equal(Campaign.nextLevelId('9-99'), null);
 });
 
@@ -154,4 +157,45 @@ test('тексты: пролог и сцены земель короткие', (
 
 test('DIFFICULTIES', () => {
   assert.deepEqual(Campaign.DIFFICULTIES, ['calm', 'normal', 'challenge']);
+});
+
+test('resolve: need цели plates = число плит, на challenge включает доп. плиты', () => {
+  const id = Campaign.allLevelIds()[0];
+  const lv = Campaign.level(id);
+  const saved = { goals: lv.goals, plates: lv.plates, challenge: lv.challenge };
+  lv.goals = [{ type: 'plates' }];
+  lv.plates = [[0, 0], [1, 1]];
+  lv.challenge = { plates: [[2, 2]] };
+  try {
+    const normal = Campaign.resolve(id, 'normal');
+    assert.equal(normal.goals[0].need, 2);
+    assert.deepEqual(normal.plates, [[0, 0], [1, 1]]);
+    const hard = Campaign.resolve(id, 'challenge');
+    assert.equal(hard.goals[0].need, 3);
+    assert.equal(hard.plates.length, 3);
+  } finally {
+    Object.assign(lv, saved);
+  }
+});
+
+test('validate() ловит ошибки в плитах', () => {
+  const lv = Campaign.level(Campaign.allLevelIds()[0]);
+  const saved = { goals: lv.goals, plates: lv.plates };
+  lv.plates = [[0, 0], [0, 0], [9, 1]];
+  lv.goals = saved.goals.concat([{ type: 'plates' }]);
+  const errs = Campaign.validate();
+  lv.plates = [];
+  const errsEmpty = Campaign.validate();
+  Object.assign(lv, saved);
+  assert.ok(errs.some(e => e.includes('плита повторяется')));
+  assert.ok(errs.some(e => e.includes('плита вне поля')));
+  assert.ok(errsEmpty.some(e => e.includes('цель plates без плит')));
+});
+
+test('в земле 3 в каждом уровне есть плиты и цель plates', () => {
+  Campaign.allLevelIds().filter(id => id.startsWith('3-')).forEach(id => {
+    const lvl = Campaign.level(id);
+    assert.ok(lvl.plates.length > 0, id);
+    assert.ok(lvl.goals.some(g => g.type === 'plates'), id);
+  });
 });
