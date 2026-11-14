@@ -75,7 +75,14 @@
     id: 3,
     key: 'moon',
     name: 'Лунные пещеры',
-    bg: 'assets/art/bg-moon.webp',
+    bg: 'assets/backdrop/land3/plate.webp',
+    /* Живой фон пещеры (js/visuals-backdrop.js): только плита и общие светлячки,
+       без воды, луны и облаков (неба в пещере нет). Размер плиты — из
+       assets/backdrop/land3/backdrop.json (tools/pack_backdrop.py --land 3) */
+    backdrop: {
+      plate: 'assets/backdrop/land3/plate.webp',
+      waterfall: false
+    },
     mosaic: 'assets/art/bg-moon.webp',
     mechanic: 'plates',
     scenes: {

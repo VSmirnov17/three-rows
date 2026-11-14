@@ -25,6 +25,12 @@
 берёт <src>/plate-land2.png и пишет assets/backdrop/land2/{plate.webp,
 backdrop.json}. Луна и облака земли 2 — те же файлы land1/moon.webp и
 land1/clouds.webp (пути в js/campaign/land-02.js), копий не делается.
+
+Земля 3 («Лунные пещеры») — то же самое, только плита, q 86:
+  python3 tools/pack_backdrop.py --land 3
+берёт <src>/plate-land3.png и пишет assets/backdrop/land3/{plate.webp,
+backdrop.json}. Луны и облаков нет (в пещере неба нет): в js/campaign/land-03.js
+у backdrop только plate и waterfall: false.
 """
 import argparse
 import base64

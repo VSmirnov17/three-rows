@@ -1886,6 +1886,26 @@ async function smokeFile(bt, bname) {
       assert(c0.n === 1 && c0.text.includes('Плиты') && c0.text.includes('0 / 8'), '3-01 chip: ' + JSON.stringify(c0));
       const hint = await page.textContent('#hintBar');
       assert(hint.includes('золотых плитах'), 'hint: ' + hint);
+      // Фон земли 3: плита пещеры, без воды, луны и облаков
+      const bdProbe = (pg) => ev(pg, () => {
+        const l3 = document.querySelector('.theme-bg[data-theme="3"]');
+        const plate = l3 && l3.querySelector('.bd-plate');
+        return {
+          land: document.body.dataset.land,
+          on: !!l3 && l3.classList.contains('on'),
+          stage: !!(l3 && l3.querySelector('.bd-stage')),
+          plateSrc: plate ? plate.src : '',
+          plateW: plate ? plate.naturalWidth : 0,
+          extra: l3 ? l3.querySelectorAll('.bd-wf, .bd-mist, .bd-moon, .bd-cloud-track').length : -1,
+          hb: document.body.classList.contains('has-backdrop')
+        };
+      });
+      await page.waitForFunction(() => { const l = document.querySelector('.theme-bg[data-theme="3"] .bd-plate'); return l && l.naturalWidth > 0; }, null, { timeout: 15000 });
+      const bd3 = await bdProbe(page);
+      assert(bd3.land === '3' && bd3.on && bd3.stage && bd3.hb, '3-01 backdrop: ' + JSON.stringify(bd3));
+      assert(/assets\/backdrop\/land3\/plate\.webp$/.test(bd3.plateSrc) && bd3.plateW === 1672, '3-01 plate: ' + bd3.plateSrc + ' ' + bd3.plateW);
+      assert(bd3.extra === 0, '3-01 backdrop has water/moon/clouds layers: ' + bd3.extra);
+      notes.push('backdrop plate ' + bd3.plateW + 'px');
       await shot(page, bname, 'desktop-plates-level');
 
       // ---- strike: ряд 3 снимает плиты строки 3, снятые уходят за 800 мс ----
@@ -1979,6 +1999,19 @@ async function smokeFile(bt, bname) {
         const errsRd = (consoleLog[bname + '/s16-reduced'] || []).filter(l => !/warning/.test(l));
         assert(errsRd.length === 0, 'reduced console: ' + errsRd.join(' | '));
         notes.push('reduced left=' + r.state);
+      }
+      // ---- file://: плита пещеры видна ----
+      {
+        const { page: fp } = await newPage(browser, bname, 's16-file');
+        await startFresh(fp, FILE);
+        await ev(fp, () => { window.__SUN.start('3-01'); });
+        await waitStarted(fp);
+        await fp.waitForFunction(() => { const l = document.querySelector('.theme-bg[data-theme="3"] .bd-plate'); return l && l.naturalWidth > 0; }, null, { timeout: 15000 });
+        const bf = await bdProbe(fp);
+        assert(bf.on && bf.plateW === 1672 && bf.extra === 0, 'file:// backdrop: ' + JSON.stringify(bf));
+        const errsF = (consoleLog[bname + '/s16-file'] || []).filter(l => !/warning/.test(l));
+        assert(errsF.length === 0, 'file console: ' + errsF.join(' | '));
+        notes.push('file:// plate ' + bf.plateW + 'px');
       }
       return notes.join('; ');
     });
