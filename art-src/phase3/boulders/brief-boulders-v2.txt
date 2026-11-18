@@ -1,0 +1,5 @@
+$imagegen
+Edit Image 1 (base to edit).
+Change: in the middle and right boulders, make every crack about twice as wide and much brighter: a hot glowing amber-orange core with a soft warm glow spilling onto the stone around each crack, so the damage reads clearly even when the sprite is shown at 32 px. The right boulder should look the most broken and the most brightly glowing.
+Preserve: the left boulder unchanged; the same three rocks, their shapes, sizes, positions, granite texture, lighting and colours; transparent background; the crack layout itself (only width and brightness change).
+Constraints: no text, no new objects, no background, no glow outside the rock silhouettes.

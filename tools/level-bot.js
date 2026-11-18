@@ -79,23 +79,26 @@ function makeProgress(resolved) {
   const colorLeft = new Map();
   let vinesLeft = 0;
   let platesLeft = 0;
+  let bouldersLeft = 0;
   resolved.goals.forEach(g => {
     if (g.type === 'color') colorLeft.set(g.color, (colorLeft.get(g.color) || 0) + g.need);
     else if (g.type === 'vines') vinesLeft += g.need;
     else if (g.type === 'plates') platesLeft += g.need;
+    else if (g.type === 'boulders') bouldersLeft += g.need;
   });
-  return { colorLeft, vinesLeft, platesLeft };
+  return { colorLeft, vinesLeft, platesLeft, bouldersLeft };
 }
 
 function isDone(p) {
   if (p.vinesLeft > 0) return false;
   if (p.platesLeft > 0) return false;
+  if (p.bouldersLeft > 0) return false;
   for (const left of p.colorLeft.values()) if (left > 0) return false;
   return true;
 }
 
 function cloneProgress(p) {
-  return { colorLeft: new Map(p.colorLeft), vinesLeft: p.vinesLeft, platesLeft: p.platesLeft };
+  return { colorLeft: new Map(p.colorLeft), vinesLeft: p.vinesLeft, platesLeft: p.platesLeft, bouldersLeft: p.bouldersLeft };
 }
 
 /* ---------- Один ход ---------- */
@@ -107,11 +110,14 @@ function cloneProgress(p) {
    Возвращает null, если обмен недопустим; иначе
    { progress, score, gained: {colors: Map, vines, plates} }.
    plates — слой плит (необязателен); МЕНЯЕТСЯ, для оценки хода передавать копию.
-   Плиты, как и лианы, очков не дают (js/game.js playStep). */
-function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates) {
+   Плиты, как и лианы, очков не дают (js/game.js playStep).
+   boulders — слой валунов (необязателен), тоже МЕНЯЕТСЯ. Очков не дают; для
+   выбора хода каждая трещина — единица прогресса (иначе бот не бил бы крепкие
+   валуны), в цель (gained.boulders) идут только разбитые. */
+function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, boulders) {
   const rng = mulberry32(turnSeed);
   let idCounter = 1000000;
-  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS });
+  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS, boulders });
   if (!res) return null;
 
   const left = new Map(progress.colorLeft);
@@ -162,10 +168,13 @@ function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates) {
     });
   });
 
+  const bouldersGain = Math.min(res.boulderHits.filter(h => h.left === 0).length, progress.bouldersLeft || 0);
+  progressUnits += res.boulderHits.length;
+
   if (offset !== res.removed.length) {
     throw new Error('runMove: removed (' + res.removed.length + ') не совпадает с суммой clear (' + offset + ') — ядро поля изменилось');
   }
-  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain } };
+  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain } };
 }
 
 /* Все обмены, дающие совпадение (проверка как в Board.findMove). */
@@ -215,8 +224,9 @@ function playLevel(resolved, seed, opts) {
   let idCounter = 0;
   const nextId = () => ++idCounter;
 
-  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines }, rng, nextId);
+  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines, boulders: resolved.boulders }, rng, nextId);
   const plates = Board.makePlates(resolved.plates);
+  const boulders = Board.makeBoulders(resolved.boulders);
   const progress = makeProgress(resolved);
 
   let moves = 0;
@@ -236,7 +246,7 @@ function playLevel(resolved, seed, opts) {
 
     const cands = [];
     legalMoves(grid).forEach((mv, order) => {
-      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()));
+      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()), boulders.map(row => row.slice()));
       if (r) cands.push({ mv, order, progress: r.progress, score: r.score });
     });
     if (!cands.length) break;
@@ -248,7 +258,7 @@ function playLevel(resolved, seed, opts) {
       pick = cands[Math.floor(pickRng() * top)];
     }
 
-    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates);
+    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates, boulders);
     moves++;
     r.scores.forEach((v, k) => { scores[k] += v; });
     r.gained.colors.forEach((n, color) => {
@@ -256,6 +266,7 @@ function playLevel(resolved, seed, opts) {
     });
     progress.vinesLeft -= r.gained.vines;
     progress.platesLeft -= r.gained.plates;
+    progress.bouldersLeft -= r.gained.boulders;
   }
 
   return { won: isDone(progress), moves, score: scores[0], scores, shuffles };

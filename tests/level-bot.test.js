@@ -146,3 +146,14 @@ test('playLevel: уровень только с плитами проходит�
   assert.equal(r.won, true);
   assert.ok(r.moves >= 1);
 });
+
+test('playLevel: уровень с валунами проходится, пока валуны не разбиты', () => {
+  const resolved = {
+    id: 't-boulders', timer: null, econTime: 300, vines: [], plates: [],
+    boulders: [[3, 3, 1], [4, 4, 2]],
+    goals: [{ type: 'boulders', need: 2 }]
+  };
+  const r = playLevel(resolved, 1, { policy: 'greedy' });
+  assert.equal(r.won, true);
+  assert.ok(r.moves >= 2, 'крепкому валуну нужно два удара');
+});
