@@ -73,6 +73,7 @@
     busy: true,
     running: false,
     paused: false,
+    pauseRequested: false,
     ended: false,
     timeUp: false,
     overlay: true,
@@ -1292,6 +1293,7 @@
     state.ended = true;
     state.running = false;
     state.paused = false;
+    state.pauseRequested = false;
     clearSelection();
     clearHints();
     SFX.setUrgency(0);
@@ -1333,6 +1335,7 @@
     state.ended = true;
     state.running = false;
     state.paused = false;
+    state.pauseRequested = false;
     clearSelection();
     clearHints();
     SFX.setUrgency(0);
@@ -1406,6 +1409,7 @@
     state.score = 0;
     state.ended = false;
     state.paused = false;
+    state.pauseRequested = false;
     state.timeUp = false;
     state.started = false;
     clearSelection();
@@ -1426,6 +1430,7 @@
     const level = currentLevel();
     state.running = true;
     state.paused = false;
+    state.pauseRequested = false;
     state.started = true;
     state.timeLeft = level.timer != null ? level.timer : level.econTime;
     state.totalTime = level.econTime;
@@ -1461,6 +1466,7 @@
     state.pendingShard = null;
     state.running = false;
     state.paused = false;
+    state.pauseRequested = false;
     state.ended = false;
     state.started = false;
     clearSelection();
@@ -1524,7 +1530,14 @@
   }
 
   function pauseGame() {
-    if (!state.running || state.ended || state.paused || state.busy) return;
+    if (!state.running || state.ended || state.paused) return;
+    if (state.busy) {
+      // Ход доигрывается, потом цикл откроет паузу; время и ввод пока стоят.
+      state.pauseRequested = true;
+      setHint('Пауза после хода…');
+      return;
+    }
+    state.pauseRequested = false;
     state.paused = true;
     SFX.musicPause();
     SFX.setUrgency(0);
@@ -1536,6 +1549,7 @@
     if (!state.paused) return;
     closeOverlay('pauseScreen');
     state.paused = false;
+    state.pauseRequested = false;
     state.lastAction = now();
     SFX.musicResume();
     setHint(levelHint(currentLevel()));
@@ -1547,6 +1561,7 @@
     state.pendingShard = null;
     state.running = false;
     state.paused = false;
+    state.pauseRequested = false;
     state.ended = false;
     state.started = false;
     state.busy = true;
@@ -1631,7 +1646,7 @@
   }
 
   function canPlay() {
-    return state.running && !state.busy && !state.ended && !state.paused && !state.overlay;
+    return state.running && !state.busy && !state.ended && !state.paused && !state.pauseRequested && !state.overlay;
   }
 
   function onPointerDown(e) {
@@ -1778,7 +1793,9 @@
     const dt = Math.min(0.25, (t - lastFrame) / 1000);
     lastFrame = t;
 
-    if (state.running && !state.paused && !state.overlay && !state.ended) {
+    if (state.pauseRequested && !state.busy) pauseGame();
+
+    if (state.running && !state.paused && !state.pauseRequested && !state.overlay && !state.ended) {
       if (isTimed()) state.timeLeft = Math.max(0, state.timeLeft - dt);
 
       const cdBefore = state.shuffleCd;
