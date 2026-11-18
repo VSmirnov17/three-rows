@@ -529,6 +529,52 @@
     return hits;
   }
 
+  /* ---------- Идолы (земля 5) ----------
+     Слой клеток, как валуны: в сетке клетка идола пустая, камни падают
+     сквозь неё. idols[r][c] — null или { color, left }: сколько даров
+     (рядов цвета color рядом) идолу ещё нужно. list — [[r, c, color, need], …]. */
+  const AROUND = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+
+  function makeIdols(list) {
+    const idols = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    (list || []).forEach(v => { idols[v[0]][v[1]] = { color: v[2], left: v[3] || 1 }; });
+    return idols;
+  }
+
+  function idolsLeft(idols) {
+    let n = 0;
+    idols.forEach(row => row.forEach(v => { if (v) n++; }));
+    return n;
+  }
+
+  /* Дар: шаг каскада plan убрал (clear) или превратил в спецкамень (creates)
+     камень цвета идола в одной из восьми клеток вокруг (и по диагонали). За шаг не больше одного
+     дара на идола. grid — ДО applyCascade (по нему видны цвета). Идол без
+     оставшихся даров уходит со слоя. Возвращает { r, c, left }. */
+  function feedIdols(idols, grid, plan) {
+    if (!idols) return [];
+    const cells = new Set(plan.clear);
+    (plan.creates || []).forEach(cr => cells.add(keyOf(cr.r, cr.c)));
+    const hits = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idol = idols[r][c];
+        if (!idol) continue;
+        const fed = AROUND.some(([dr, dc]) => {
+          const rr = r + dr;
+          const cc = c + dc;
+          const gem = cells.has(keyOf(rr, cc)) && gemAt(grid, rr, cc);
+          return gem && gem.color === idol.color;
+        });
+        if (!fed) continue;
+        idol.left--;
+        hits.push({ r, c, left: idol.left });
+        if (idol.left <= 0) idols[r][c] = null;
+      }
+    }
+    return hits;
+  }
+
   /* ---------- Обрушение ----------
      Камни в каждом столбце падают вниз, сверху досыпаются новые через
      spawn(r, c) -> gem (ядро DOM не создаёт). Меняет grid и r/c камней.
@@ -578,13 +624,15 @@
      попыток. level.colors — число цветов (по умолчанию 6); rng() в [0,1);
      nextId() выдаёт свежие id камней. level.vines — [[r, c], …]: эти камни
      в лианах (locked); в совпадениях и ходах они участвуют как обычные.
-     level.boulders — [[r, c, hp], …]: эти клетки остаются пустыми (null). */
+     level.boulders — [[r, c, hp], …] и level.idols — [[r, c, …], …]: эти
+     клетки остаются пустыми (null). */
   function generateGrid(level, rng, nextId) {
     const colors = (level && level.colors) || DEFAULT_COLORS;
     const random = rng || Math.random;
     const newId = nextId || (() => ++fallbackId);
     const vineKeys = new Set(((level && level.vines) || []).map(v => keyOf(v[0], v[1])));
-    const boulderKeys = new Set(((level && level.boulders) || []).map(v => keyOf(v[0], v[1])));
+    const boulderKeys = new Set(((level && level.boulders) || []).concat((level && level.idols) || [])
+      .map(v => keyOf(v[0], v[1])));
     let grid;
     let attempts = 0;
     do {
@@ -704,7 +752,8 @@
      null, если обмен недопустим (не соседи, пустая клетка или нет
      совпадения) — сетка при этом остаётся как была.
      opts.colors — число цветов для досыпки (по умолчанию 6); opts.boulders —
-     слой валунов (меняется), задетые валуны — в boulderHits. */
+     слой валунов (меняется), задетые валуны — в boulderHits; opts.idols —
+     слой идолов (меняется), дары — в idolHits. */
   function simulateMove(grid, a, b, rng, nextId, opts) {
     if (!a || !b) return null;
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
@@ -743,19 +792,24 @@
       el: null
     });
     const boulders = opts && opts.boulders;
-    const blocked = boulders ? (r, c) => boulders[r][c] > 0 : null;
+    const idols = opts && opts.idols;
+    const blocked = (boulders || idols)
+      ? (r, c) => (boulders && boulders[r][c] > 0) || !!(idols && idols[r][c])
+      : null;
     const cascades = [];
     const removed = [];
     const boulderHits = [];
+    const idolHits = [];
     for (let guard = 0; guard < 200; guard++) {
       const plan = planCascade(grid, swapCell);
       if (!plan) break;
       cascades.push(plan);
+      if (idols) idolHits.push(...feedIdols(idols, grid, plan));
       removed.push(...applyCascade(grid, plan).removed);
       if (boulders) boulderHits.push(...hitBoulders(boulders, plan));
       collapse(grid, spawn, blocked);
     }
-    return { cascades, removed, boulderHits };
+    return { cascades, removed, boulderHits, idolHits };
   }
 
   return {
@@ -781,6 +835,9 @@
     makeBoulders,
     bouldersLeft,
     hitBoulders,
+    makeIdols,
+    idolsLeft,
+    feedIdols,
     collapse,
     generateGrid,
     shuffle,

@@ -1,0 +1,88 @@
+/* Идолы (земля 5): узлы .idol в слое #boulders (поверх камней, касания
+   пропускает, см. css/boulders.css). Позицию клетки задаёт инлайн-transform,
+   анимации идут на детях. --c — цвет камня, который идол ждёт в дар:
+   ореол и значок в углу (образец Б с ореолом выбран пользователем). */
+.idol {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12.5%;
+  height: 12.5%;
+}
+
+.idol-halo {
+  position: absolute;
+  inset: 2%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--c) 35%, #10100c) 0%,
+    color-mix(in srgb, var(--c) 70%, #10100c) 56%,
+    color-mix(in srgb, var(--c) 80%, transparent) 64%,
+    transparent 71%);
+}
+
+.idol-img {
+  position: absolute;
+  inset: 9%;
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 2px var(--c)) drop-shadow(0 3px 3px rgba(0, 0, 0, .5));
+}
+
+/* Сколько даров осталось: кружок цвета дара в углу */
+.idol-left {
+  position: absolute;
+  right: -4%;
+  bottom: -4%;
+  width: 44%;
+  height: 44%;
+}
+
+.idol-left circle {
+  fill: #1c120c;
+  stroke: var(--c);
+  stroke-width: 4;
+}
+
+.idol-left text {
+  fill: #fff3cf;
+  font: 700 26px "PT Serif", Georgia, serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Дар принят: идол вздрагивает */
+.idol.knock .idol-img { animation: idol-knock .4s ease-out; }
+
+/* Все дары: ореол вспыхивает, идол приподнимается и тает */
+.idol.break .idol-img { animation: idol-wake .7s ease-out forwards; }
+.idol.break .idol-halo { animation: idol-glow .7s ease-out forwards; }
+.idol.break .idol-left { opacity: 0; }
+
+@keyframes idol-knock {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+@keyframes idol-wake {
+  0%   { opacity: 1; transform: scale(1); }
+  35%  { opacity: 1; transform: scale(1.2) translateY(-6%); }
+  100% { opacity: 0; transform: scale(1.05) translateY(-30%); }
+}
+
+@keyframes idol-glow {
+  0%   { opacity: 1; transform: scale(1); }
+  35%  { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+/* Значок цели */
+.goal-idol-icon { object-fit: contain; }
+
+@media (prefers-reduced-motion: reduce) {
+  .idol.knock .idol-img,
+  .idol.break .idol-img,
+  .idol.break .idol-halo { animation: none; }
+}

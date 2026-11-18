@@ -1,0 +1,6 @@
+$imagegen
+Asset: game sprite sheet for a match-three board, square image, transparent background, two sprites in one horizontal row with a wide transparent gap
+Request: two alternative designs of a small ancient golden idol (a sacred relic the player lowers to the bottom of the board). Left: a squat seated figure with a stern feathered mask face and arms on its knees, jade-green inlaid eyes. Right: a compact golden head-and-shoulders statuette in a stepped temple headdress, jade-green inlaid eyes and a jade ear ornament
+Look: same painterly-3D manner, material quality and lighting as the gems in Image 1 (style reference only); polished warm gold with deep bronze shadows, carved Mesoamerican-inspired details, warm amber rim light from below, cool highlight from top-left; solemn, not cartoonish
+Composition: each idol front view, upright, fills a square cell, chunky simple silhouette that reads at 40 px and is clearly a figurine, not a round gem and not a rock
+Constraints: no text, no gems, no base or pedestal, no ground, no shadow outside the figure, no border

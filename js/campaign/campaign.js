@@ -14,7 +14,7 @@
 })(function () {
   'use strict';
 
-  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js', './land-04.js'];
+  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js', './land-04.js', './land-05.js'];
   const DIFFICULTIES = ['calm', 'normal', 'challenge'];
   const ROWS = 8;
   const COLS = 8;
@@ -84,11 +84,14 @@
     /* Валуны — [r, c, прочность] */
     const boulders = (lv.boulders || []).concat((hard && lv.challenge && lv.challenge.boulders) || [])
       .map(v => [v[0], v[1], v[2] || 1]);
+    /* Идолы — [r, c, цвет, даров] (на всех сложностях одинаковые) */
+    const idols = (lv.idols || []).map(v => [v[0], v[1], v[2], v[3] || 1]);
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };
       if (g.type === 'plates') return { type: 'plates', need: plates.length };
       if (g.type === 'boulders') return { type: 'boulders', need: boulders.length };
+      if (g.type === 'idols') return { type: 'idols', need: idols.length };
       const need = hard ? Math.ceil(g.need * CHALLENGE_NEED) : g.need;
       return { type: g.type, color: g.color, need };
     });
@@ -106,6 +109,7 @@
       vines,
       plates,
       boulders,
+      idols,
       stars: stars.slice()
     };
   }
@@ -144,7 +148,7 @@
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }
               if (!(g.need > 0)) errors.push(tag + ': need цели должен быть > 0');
-            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders') {
+            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders' && g.type !== 'idols') {
               errors.push(tag + ': неизвестный тип цели ' + g.type);
             }
           });
@@ -190,6 +194,27 @@
         });
         if (lv.goals.some(g => g.type === 'boulders') && (lv.boulders || []).length === 0) {
           errors.push(tag + ': цель boulders без валунов');
+        }
+
+        /* Идолы: [r, c, цвет 0..5, даров 1..4], не на валуне, плите или лиане
+           (с клетками «Испытания») */
+        const idolCells = new Set();
+        (lv.idols || []).forEach(v => {
+          if (!Array.isArray(v) || !inBoard(v.slice(0, 2))) {
+            errors.push(tag + ': идол вне поля ' + JSON.stringify(v));
+            return;
+          }
+          if (!Number.isInteger(v[2]) || v[2] < 0 || v[2] >= COLORS) errors.push(tag + ': цвет идола вне 0..' + (COLORS - 1) + ' ' + JSON.stringify(v));
+          if (!Number.isInteger(v[3]) || v[3] < 1 || v[3] > 4) errors.push(tag + ': даров идолу вне 1..4 ' + JSON.stringify(v));
+          const cell = v[0] * COLS + v[1];
+          if (idolCells.has(cell)) errors.push(tag + ': идол повторяется ' + JSON.stringify(v));
+          if (boulderCells.has(cell)) errors.push(tag + ': идол на валуне ' + JSON.stringify(v));
+          if (plateCells.has(cell)) errors.push(tag + ': идол на плите ' + JSON.stringify(v));
+          if (vineCells.has(cell)) errors.push(tag + ': идол на лиане ' + JSON.stringify(v));
+          idolCells.add(cell);
+        });
+        if (lv.goals.some(g => g.type === 'idols') && (lv.idols || []).length === 0) {
+          errors.push(tag + ': цель idols без идолов');
         }
 
         DIFFICULTIES.forEach(d => {

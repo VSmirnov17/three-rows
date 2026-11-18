@@ -1,0 +1,8 @@
+$imagegen
+Asset: game background plate, landscape 16:9, one image, no game interface
+Request: the same world as Image 1 and Image 2, now the Lake City: an ancient Mesoamerican city built on wooden stilts and stone platforms in the middle of a calm dark lake. On the LEFT edge, a stepped stone temple on a platform with wooden walkways and reed thatch huts frames the picture. On the RIGHT side, more stilt houses, a long wooden bridge and a small pyramid shrine on an island. The lower third is still lake water with soft reflections of the buildings. The center of the frame is calm, dark, low-detail water and mist (it will be hidden behind the game board).
+Sky: dawn is coming, clearly further along than Image 2: no moon; over the RIGHT half of the picture the sky glows from soft lavender up high to a wide warm rose-pink and pale peach band along the horizon behind the right-hand buildings, the glow reflected faintly in the water on the right; the upper-left sky is still deep blue with a few faint stars. No sun disc yet.
+Look: exactly the painting style and quality of Image 1 and Image 2: premium painterly game art, realistic; muted, low contrast, slightly soft focus; the left and center stay dark so bright game pieces stand out in front
+Composition: the TOP-RIGHT corner is open glowing sky; buildings stay below the top 30% of the frame
+Constraints: no moon, no sun, no sunbeams, no fire, no torches, no people, no boats with people, no animals, no text, no border, no game UI
+References: Image 1: style, palette and light reference only (land 1 plate); Image 2: the previous land with the first step of dawn — the new sky must be clearly brighter and warmer. Do not copy their scenery.

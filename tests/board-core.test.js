@@ -850,3 +850,54 @@ test('simulateMove с opts.boulders: живые валуны пусты, ост�
   }
   assert.ok(hitsTotal > 0, 'хоть один валун треснул');
 });
+
+/* ---------- Идолы (земля 5) ---------- */
+
+test('makeIdols и idolsLeft', () => {
+  const idols = Board.makeIdols([[1, 1, 3, 2], [4, 4, 0]]);
+  assert.deepEqual(idols[1][1], { color: 3, left: 2 });
+  assert.deepEqual(idols[4][4], { color: 0, left: 1 });
+  assert.equal(Board.idolsLeft(idols), 2);
+  assert.equal(Board.idolsLeft(Board.makeIdols()), 0);
+});
+
+test('feedIdols: ряд своего цвета рядом — один дар за шаг; чужой цвет и даль — нет', () => {
+  const grid = gridFrom(withRows({ 0: '.000....' }));
+  const plan = Board.planCascade(grid, null);
+  const idols = Board.makeIdols([[1, 1, 0, 3], [1, 5, 0, 1], [1, 2, 4, 1]]);
+  grid[1][1] = null; grid[1][5] = null; grid[1][2] = null;
+  const hits = Board.feedIdols(idols, grid, plan);
+  assert.deepEqual(hits, [{ r: 1, c: 1, left: 2 }], 'дар только идолу цвета 0 рядом с рядом, один за шаг');
+  assert.deepEqual(Board.feedIdols(null, grid, plan), []);
+});
+
+test('feedIdols: последний дар убирает идола со слоя', () => {
+  const grid = gridFrom(withRows({ 0: '.000....' }));
+  const plan = Board.planCascade(grid, null);
+  const idols = Board.makeIdols([[1, 2, 0, 1]]);
+  assert.deepEqual(Board.feedIdols(idols, grid, plan), [{ r: 1, c: 2, left: 0 }]);
+  assert.equal(idols[1][2], null);
+  assert.equal(Board.idolsLeft(idols), 0);
+});
+
+test('simulateMove с opts.idols: клетки живых идолов пусты, поле без дыр, дары идут', () => {
+  let fed = 0;
+  for (let seed = 1; seed <= 15; seed++) {
+    const list = [[3, 3, seed % 5, 3], [3, 4, (seed + 1) % 5, 3], [6, 1, (seed + 2) % 5, 3]];
+    const grid = Board.generateGrid({ colors: 5, idols: list }, seeded(seed), counter());
+    const idols = Board.makeIdols(list);
+    assert.equal(Board.hasAnyMatch(grid), false);
+    for (let turn = 0; turn < 8; turn++) {
+      const move = Board.findMove(grid);
+      if (!move) break;
+      const res = Board.simulateMove(grid, move.a, move.b, seeded(seed * 31 + turn), counter(), { colors: 5, idols });
+      assert.ok(res);
+      fed += res.idolHits.length;
+      grid.forEach((row, r) => row.forEach((g, c) => {
+        if (idols[r][c]) assert.equal(g, null, 'живой идол пуст: ' + r + ',' + c);
+        else assert.ok(g && g.r === r && g.c === c, 'нет дыр: ' + r + ',' + c);
+      }));
+    }
+  }
+  assert.ok(fed > 0, 'хоть один дар');
+});

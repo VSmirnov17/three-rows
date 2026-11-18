@@ -70,6 +70,8 @@
     plates: [],
     // Слой валунов 8×8 (Board.makeBoulders): прочность, 0 — пусто; в grid там null
     boulders: [],
+    // Слой идолов 8×8 (Board.makeIdols): null или { color, left }; в grid там null
+    idols: [],
     gemSeq: 0,
     selected: null,
     dragStart: null,
@@ -150,14 +152,16 @@
     vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним',
     plates: 'Собирай ряды на золотых плитах. Очисти все плиты',
     boulders: 'Собирай ряды рядом с валунами. Разбей все валуны',
-    boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет'
+    boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет',
+    idols: 'Собирай рядом с идолом ряды цвета его ореола. Разбуди всех идолов',
+    idol: 'Идол стоит на месте. Собери рядом с ним ряд цвета его ореола'
   };
 
-  /* Подсказка уровня: обучение новой механики земли (валуны — земля 4,
-     плиты — земля 3), иначе обычная. */
+  /* Подсказка уровня: обучение новой механики земли (идолы — земля 5,
+     валуны — земля 4, плиты — земля 3), иначе обычная. */
   function levelHint(level) {
     const has = key => level && level[key] && level[key].length;
-    const text = has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
+    const text = has('idols') ? hintMessages.idols : has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
     return level.name + ' — ' + text;
   }
 
@@ -232,9 +236,11 @@
       const vines = g.type === 'vines';
       const plates = g.type === 'plates';
       const boulders = g.type === 'boulders';
-      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : '';
-      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON : ART.gemSvg(g.color, 'mini-gem');
-      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : ART.GEMS[g.color].name;
+      const idols = g.type === 'idols';
+      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : idols ? ' goal-idols' : '';
+      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON
+        : idols ? GOAL_IDOL_ICON : ART.gemSvg(g.color, 'mini-gem');
+      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : idols ? 'Идолы' : ART.GEMS[g.color].name;
       return `
       <div class="goal-chip${cls}" data-i="${i}">
         ${icon}
@@ -524,7 +530,7 @@
     setBodyState('levelId', level.id);
     setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders')
+    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders' || g.type === 'idols')
       ? { type: g.type, need: g.need, got: 0 }
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
@@ -602,6 +608,7 @@
     '</svg>';
 
   const GOAL_BOULDER_ICON = '<img class="mini-gem goal-boulder-icon" src="assets/gems/boulder-3.webp" alt="" draggable="false">';
+  const GOAL_IDOL_ICON = '<img class="mini-gem goal-idol-icon" src="assets/gems/idol.webp" alt="" draggable="false">';
 
   /* Включает/выключает лианы на камне: класс и оверлей. */
   function setGemLocked(gem, locked) {
@@ -665,14 +672,16 @@
     flashHint(hintMessages.vines, undefined, 2800);
   }
 
-  /* Отказ на валуне: валун качнулся, подсказка — как его разбить. */
-  function refuseBoulder(cell) {
+  /* Отказ на валуне или идоле: узел качнулся, подсказка — что с ним делать. */
+  function refuseFixed(cell) {
     const t = Date.now();
     if (t - lastRefuseAt < 380) return;
     lastRefuseAt = t;
-    flashHint(hintMessages.boulder, undefined, 2800);
+    const idol = isIdol(cell);
+    flashHint(idol ? hintMessages.idol : hintMessages.boulder, undefined, 2800);
     if (reducedMotion() || !dom.boulders) return;
-    const node = dom.boulders.querySelector(`.boulder[data-r="${cell.r}"][data-c="${cell.c}"]:not(.break)`);
+    const kind = idol ? '.idol' : '.boulder';
+    const node = dom.boulders.querySelector(`${kind}[data-r="${cell.r}"][data-c="${cell.c}"]:not(.break)`);
     if (!node) return;
     node.classList.remove('knock');
     void node.offsetWidth;
@@ -681,6 +690,15 @@
 
   function isBoulder(cell) {
     return !!(cell && state.boulders[cell.r] && state.boulders[cell.r][cell.c] > 0);
+  }
+
+  function isIdol(cell) {
+    return !!(cell && state.idols[cell.r] && state.idols[cell.r][cell.c]);
+  }
+
+  /* Клетка без камня, которую не сдвинуть: валун или идол */
+  function isFixed(cell) {
+    return isBoulder(cell) || isIdol(cell);
   }
 
   function applyPos(gem) {
@@ -693,9 +711,11 @@
   function generateGridData() {
     const vines = state.level ? state.level.vines : [];
     const boulders = (state.level && state.level.boulders) || [];
-    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders }, Math.random, () => ++state.gemSeq);
+    const idols = (state.level && state.level.idols) || [];
+    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders, idols }, Math.random, () => ++state.gemSeq);
     state.plates = Board.makePlates(state.level ? state.level.plates : []);
     state.boulders = Board.makeBoulders(boulders);
+    state.idols = Board.makeIdols(idols);
   }
 
   /* Слой золотых плит под камнями: узел на каждую клетку с плитой. */
@@ -792,10 +812,68 @@
     });
   }
 
+  /* Идолы живут в том же слое, что валуны (#boulders: поверх камней, касания
+     пропускает). Ореол и значок в углу — цвета идола (--c), в значке —
+     сколько даров осталось. */
+  function setIdolLeft(node, left) {
+    node.dataset.left = String(left);
+    const t = node.querySelector('.idol-left text');
+    if (t) t.textContent = String(left);
+  }
+
+  function renderIdols() {
+    if (!dom.boulders) return;
+    dom.boulders.querySelectorAll('.idol').forEach(n => n.remove());
+    (state.idols || []).forEach((row, r) => row.forEach((v, c) => {
+      if (!v) return;
+      const node = document.createElement('div');
+      node.className = 'idol';
+      node.dataset.r = String(r);
+      node.dataset.c = String(c);
+      node.dataset.color = String(v.color);
+      node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+      node.style.setProperty('--c', GEM_COLORS[v.color]);
+      node.innerHTML = '<span class="idol-halo"></span>' +
+        '<img class="idol-img" src="assets/gems/idol.webp" alt="" draggable="false">' +
+        '<svg class="idol-left" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" />' +
+        '<text x="20" y="21">' + v.left + '</text></svg>';
+      setIdolLeft(node, v.left);
+      dom.boulders.appendChild(node);
+    }));
+  }
+
+  /* Дары (hits ядра { r, c, left }): идол вздрагивает и показывает, сколько
+     осталось; довольный вспыхивает и уходит за 800 мс; при
+     prefers-reduced-motion — сразу. */
+  function feedIdolNodes(hits) {
+    if (!dom.boulders || !hits.length) return;
+    const still = reducedMotion();
+    hits.forEach(h => {
+      const node = dom.boulders.querySelector(`.idol[data-r="${h.r}"][data-c="${h.c}"]:not(.break)`);
+      if (!node) return;
+      setIdolLeft(node, Math.max(0, h.left));
+      if (h.left > 0) {
+        if (still) return;
+        node.classList.remove('knock');
+        void node.offsetWidth;
+        node.classList.add('knock');
+        return;
+      }
+      if (still) {
+        node.remove();
+        return;
+      }
+      node.classList.add('break');
+      spawnBurst(h.r, h.c, '#ffd75a', 10);
+      setTimeout(() => node.remove(), 800);
+    });
+  }
+
   function spawnBoard() {
     dom.tiles.innerHTML = '';
     renderPlates();
     renderBoulders();
+    renderIdols();
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
     fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
@@ -909,7 +987,7 @@
     clearSelection();
     const gem = gemAt(cell.r, cell.c);
     if (!gem) {
-      if (isBoulder(cell)) refuseBoulder(cell);
+      if (isFixed(cell)) refuseFixed(cell);
       return;
     }
     if (gem.locked) {
@@ -925,12 +1003,12 @@
   async function attemptSwap(a, b) {
     if (!state.running || state.busy || state.ended || state.paused) return;
     if (!isAdjacent(a, b)) return;
-    // Валун не меняется местами: мягкий отказ, ход не тратится.
-    const rock = isBoulder(a) ? a : isBoulder(b) ? b : null;
+    // Валун и идол не меняются местами: мягкий отказ, ход не тратится.
+    const rock = isFixed(a) ? a : isFixed(b) ? b : null;
     if (rock) {
       clearSelection();
       state.lastAction = now();
-      refuseBoulder(rock);
+      refuseFixed(rock);
       return;
     }
     const ga = gemAt(a.r, a.c);
@@ -1285,6 +1363,22 @@
         console.error('[plates] ' + (err && err.message ? err.message : err), err);
       }
     }
+    // Цель «Идолы»: дары считаются по цветам камней, то есть до applyCascade
+    const gifts = Board.feedIdols(state.idols, state.grid, plan);
+    if (gifts.length) {
+      const woke = gifts.filter(h => h.left <= 0).length;
+      if (woke) {
+        state.goals.forEach(goal => {
+          if (goal.type === 'idols') goal.got = Math.min(goal.need, goal.got + woke);
+        });
+        SFX.special();
+      }
+      try {
+        feedIdolNodes(gifts);
+      } catch (err) {
+        console.error('[idols] ' + (err && err.message ? err.message : err), err);
+      }
+    }
     // Цель «Валуны»: удар до обрушения, чтобы разбитый валун освободил клетку
     // для досыпки этим же шагом (как в боте: Board.simulateMove)
     const rockHits = Board.hitBoulders(state.boulders, plan);
@@ -1352,7 +1446,7 @@
     const { moves, spawned } = Board.collapse(
       state.grid,
       (r, c) => makeGem(randomColor(), r, c),
-      (r, c) => state.boulders[r] && state.boulders[r][c] > 0
+      (r, c) => (state.boulders[r] && state.boulders[r][c] > 0) || !!(state.idols[r] && state.idols[r][c])
     );
 
     let maxDist = 0;
@@ -1767,7 +1861,7 @@
       // валуна дало отказ с подсказкой, а не пропало
       const b = dom.tiles.getBoundingClientRect();
       const cell = { r: Math.floor((y - b.top) / b.height * ROWS), c: Math.floor((x - b.left) / b.width * COLS) };
-      return isBoulder(cell) ? cell : null;
+      return isFixed(cell) ? cell : null;
     }
     const r = Number(node.dataset.r);
     const c = Number(node.dataset.c);
@@ -2025,6 +2119,26 @@
           }
         }));
         renderBoulders();
+        renderIdols();
+        await dropGems();
+      },
+      // Идолы: [[r, c, цвет, даров осталось], …]
+      idols() {
+        const out = [];
+        (state.idols || []).forEach((row, r) => row.forEach((v, c) => { if (v) out.push([r, c, v.color, v.left]); }));
+        return out;
+      },
+      // Ставит идолов [[r, c, цвет, даров], …] (остальных убирает): камни на их
+      // клетках исчезают, освобождённые клетки досыпаются
+      async setIdols(list) {
+        state.idols = Board.makeIdols(list || []);
+        state.grid.forEach((row, r) => row.forEach((gem, c) => {
+          if (gem && state.idols[r][c]) {
+            if (gem.el) gem.el.remove();
+            state.grid[r][c] = null;
+          }
+        }));
+        renderIdols();
         await dropGems();
       },
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)

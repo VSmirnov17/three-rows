@@ -279,31 +279,33 @@ test('светлячки за 10 минут не собираются у вер�
   assert.ok(respawns >= FIREFLY.count * 5, `перерождений ${respawns}`);
 });
 
-test('земля 4: своя плита с рассветом, облака общие с землёй 1, луны нет, мозаика — та же плита', () => {
-  const land = require('../js/campaign/land-04.js');
-  const root = path.join(__dirname, '..');
-  const bd = land.backdrop;
-  assert.ok(bd, 'у земли 4 нет backdrop');
-  assert.equal(bd.waterfall, false);
-  assert.ok(!bd.moon, 'луна у земли 4 уже зашла');
-  assert.ok(!bd.wf && !bd.water && !bd.mask && bd.tile === undefined, 'у земли 4 нет воды');
-  assert.equal(bd.plate, 'assets/backdrop/land4/plate.webp');
-  assert.equal(bd.clouds, 'assets/backdrop/land1/clouds.webp');
-  for (const k of ['plate', 'clouds']) assert.ok(fs.existsSync(path.join(root, bd[k])), `${k}: нет файла ${bd[k]}`);
-  assert.equal(land.bg, bd.plate);
-  assert.equal(land.mosaic, bd.plate);
-  const json = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land4', 'backdrop.json'), 'utf8'));
-  assert.deepEqual(Object.keys(json), ['plate']);
-  const buf = fs.readFileSync(path.join(root, bd.plate));
-  assert.equal(buf.toString('ascii', 8, 12), 'WEBP');
-  assert.equal(buf.toString('ascii', 12, 16), 'VP8 ');
-  assert.deepEqual([buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff], json.plate);
-});
+[4, 5].forEach(n => {
+  test('земля ' + n + ': своя плита с рассветом, облака общие с землёй 1, луны нет, мозаика — та же плита', () => {
+    const land = require('../js/campaign/land-0' + n + '.js');
+    const root = path.join(__dirname, '..');
+    const bd = land.backdrop;
+    assert.ok(bd, 'у земли ' + n + ' нет backdrop');
+    assert.equal(bd.waterfall, false);
+    assert.ok(!bd.moon, 'луна уже зашла');
+    assert.ok(!bd.wf && !bd.water && !bd.mask && bd.tile === undefined, 'нет воды');
+    assert.equal(bd.plate, 'assets/backdrop/land' + n + '/plate.webp');
+    assert.equal(bd.clouds, 'assets/backdrop/land1/clouds.webp');
+    for (const k of ['plate', 'clouds']) assert.ok(fs.existsSync(path.join(root, bd[k])), `${k}: нет файла ${bd[k]}`);
+    assert.equal(land.bg, bd.plate);
+    assert.equal(land.mosaic, bd.plate);
+    const json = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'backdrop', 'land' + n, 'backdrop.json'), 'utf8'));
+    assert.deepEqual(Object.keys(json), ['plate']);
+    const buf = fs.readFileSync(path.join(root, bd.plate));
+    assert.equal(buf.toString('ascii', 8, 12), 'WEBP');
+    assert.equal(buf.toString('ascii', 12, 16), 'VP8 ');
+    assert.deepEqual([buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff], json.plate);
+  });
 
-test('все файлы assets/backdrop/land4 вместе не больше 250 КБ', () => {
-  const dir = path.join(__dirname, '..', 'assets', 'backdrop', 'land4');
-  const names = fs.readdirSync(dir).sort();
-  assert.deepEqual(names, ['backdrop.json', 'plate.webp']);
-  const total = names.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
-  assert.ok(total <= 250 * 1024, `${total} байт`);
+  test('все файлы assets/backdrop/land' + n + ' вместе не больше 250 КБ', () => {
+    const dir = path.join(__dirname, '..', 'assets', 'backdrop', 'land' + n);
+    const names = fs.readdirSync(dir).sort();
+    assert.deepEqual(names, ['backdrop.json', 'plate.webp']);
+    const total = names.reduce((s, f) => s + fs.statSync(path.join(dir, f)).size, 0);
+    assert.ok(total <= 250 * 1024, `${total} байт`);
+  });
 });

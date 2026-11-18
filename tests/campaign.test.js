@@ -5,11 +5,11 @@ const assert = require('node:assert/strict');
 
 const Campaign = require('../js/campaign/campaign.js');
 
-test('в кампании 4 земли и 80 уровней с уникальными id', () => {
-  assert.equal(Campaign.lands().length, 4);
+test('в кампании 5 земель и 100 уровней с уникальными id', () => {
+  assert.equal(Campaign.lands().length, 5);
   const ids = Campaign.allLevelIds();
-  assert.equal(ids.length, 80);
-  assert.equal(new Set(ids).size, 80);
+  assert.equal(ids.length, 100);
+  assert.equal(new Set(ids).size, 100);
   assert.equal(ids[0], '1-01');
   assert.equal(ids[19], '1-20');
   assert.equal(ids[20], '2-01');
@@ -18,6 +18,8 @@ test('в кампании 4 земли и 80 уровней с уникальн�
   assert.equal(ids[59], '3-20');
   assert.equal(ids[60], '4-01');
   assert.equal(ids[79], '4-20');
+  assert.equal(ids[80], '5-01');
+  assert.equal(ids[99], '5-20');
 });
 
 test('validate() пуст', () => {
@@ -107,7 +109,8 @@ test('nextLevelId', () => {
   assert.equal(Campaign.nextLevelId('1-20'), '2-01');
   assert.equal(Campaign.nextLevelId('2-20'), '3-01');
   assert.equal(Campaign.nextLevelId('3-20'), '4-01');
-  assert.equal(Campaign.nextLevelId('4-20'), null);
+  assert.equal(Campaign.nextLevelId('4-20'), '5-01');
+  assert.equal(Campaign.nextLevelId('5-20'), null);
   assert.equal(Campaign.nextLevelId('9-99'), null);
 });
 
@@ -239,4 +242,39 @@ test('validate() ловит ошибки в валунах', () => {
   assert.ok(run({ boulders: [[0, 0, 1]], challenge: { plates: [[0, 0]] } }).some(e => e.includes('валун на плите')),
     'клетки «Испытания» тоже проверяются');
   assert.ok(run({ boulders: [] }).some(e => e.includes('цель boulders без валунов')));
+});
+
+/* ---------- Земля 5: идолы ---------- */
+
+test('в земле 5 в каждом уровне есть идолы и цель idols, не больше четырёх целей', () => {
+  Campaign.allLevelIds().filter(id => id.startsWith('5-')).forEach(id => {
+    const lvl = Campaign.level(id);
+    assert.ok(lvl.idols.length > 0, id);
+    assert.ok(lvl.goals.some(g => g.type === 'idols'), id);
+    assert.ok(lvl.goals.length <= 4, id + ': не больше четырёх целей');
+  });
+});
+
+test('resolve: идолы с цветом и дарами, need = число идолов, на всех сложностях одинаково', () => {
+  const base = Campaign.level('5-04').idols;
+  const normal = Campaign.resolve('5-04', 'normal');
+  const hard = Campaign.resolve('5-04', 'challenge');
+  assert.deepEqual(normal.idols, base);
+  assert.equal(normal.goals.find(g => g.type === 'idols').need, base.length);
+  assert.deepEqual(hard.idols, base);
+  assert.deepEqual(Campaign.resolve('1-01', 'normal').idols, []);
+});
+
+test('validate() ловит ошибки в идолах', () => {
+  const lv = Campaign.level('5-01');
+  const saved = { idols: lv.idols, boulders: lv.boulders, plates: lv.plates, vines: lv.vines, challenge: lv.challenge };
+  const run = patch => { Object.assign(lv, patch); const e = Campaign.validate(); Object.assign(lv, saved); return e; };
+  assert.ok(run({ idols: [[0, 0, 1, 2], [0, 0, 2, 2]] }).some(e => e.includes('идол повторяется')));
+  assert.ok(run({ idols: [[9, 0, 1, 2]] }).some(e => e.includes('идол вне поля')));
+  assert.ok(run({ idols: [[0, 0, 6, 2]] }).some(e => e.includes('цвет идола')));
+  assert.ok(run({ idols: [[0, 0, 1, 5]] }).some(e => e.includes('даров')));
+  assert.ok(run({ idols: [[0, 0, 1, 2]], boulders: [[0, 0, 1]] }).some(e => e.includes('идол на валуне')));
+  assert.ok(run({ idols: [[0, 0, 1, 2]], challenge: { plates: [[0, 0]] } }).some(e => e.includes('идол на плите')),
+    'клетки «Испытания» тоже проверяются');
+  assert.ok(run({ idols: [] }).some(e => e.includes('цель idols без идолов')));
 });
