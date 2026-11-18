@@ -10,11 +10,31 @@
   'use strict';
 
   /* Пороги звёзд [s2, s3]: node tools/level-bot.js --suggest --lands 4 --js */
-  const STARS_BY_LEVEL = {};
-  const PLACEHOLDER = { calm: [1000, 2000], normal: [1500, 3000], challenge: [1400, 2800] };
+  const STARS_BY_LEVEL = {
+    1: { calm: [290, 700], normal: [740, 1650], challenge: [700, 1600] },
+    2: { calm: [1850, 2700], normal: [2650, 4300], challenge: [2400, 4100] },
+    3: { calm: [2050, 2800], normal: [2800, 4450], challenge: [2350, 4000] },
+    4: { calm: [2250, 3100], normal: [2750, 4700], challenge: [2450, 4300] },
+    5: { calm: [2400, 3200], normal: [2800, 4600], challenge: [2450, 3900] },
+    6: { calm: [2450, 3250], normal: [3250, 5100], challenge: [2750, 4600] },
+    7: { calm: [2650, 3700], normal: [3350, 5300], challenge: [3000, 4750] },
+    8: { calm: [1900, 2650], normal: [2600, 4250], challenge: [2350, 4000] },
+    9: { calm: [2650, 3550], normal: [3700, 5700], challenge: [3250, 5300] },
+    10: { calm: [3000, 4050], normal: [3750, 5900], challenge: [3350, 5200] },
+    11: { calm: [3150, 4200], normal: [4500, 6700], challenge: [4050, 6200] },
+    12: { calm: [3050, 3900], normal: [4750, 6800], challenge: [4300, 6500] },
+    13: { calm: [3200, 4200], normal: [4400, 6100], challenge: [3650, 5500] },
+    14: { calm: [2050, 2800], normal: [2750, 4400], challenge: [2500, 4100] },
+    15: { calm: [5000, 7800], normal: [5100, 7400], challenge: [4300, 6200] },
+    16: { calm: [5100, 8300], normal: [6000, 8800], challenge: [5200, 7400] },
+    17: { calm: [3950, 5200], normal: [5800, 8000], challenge: [4950, 7200] },
+    18: { calm: [5500, 8600], normal: [5900, 8300], challenge: [5100, 7300] },
+    19: { calm: [5400, 8100], normal: [6100, 8700], challenge: [5000, 7300] },
+    20: { calm: [5200, 7400], normal: [6000, 8000], challenge: [4800, 6900] }
+  };
 
   const STARS = n => {
-    const s = STARS_BY_LEVEL[n] || PLACEHOLDER;
+    const s = STARS_BY_LEVEL[n];
     return { calm: s.calm.slice(), normal: s.normal.slice(), challenge: s.challenge.slice() };
   };
 
@@ -83,7 +103,7 @@
     levels: [
       lvl(1, 'Подножие', 120, [], [
         '........',
-        '........',
+        '...11...',
         '........',
         '..1..1..',
         '........',
@@ -216,7 +236,7 @@
         '..o33o..',
         'o.2..2.o',
         'oo.**.oo']),
-      lvl(16, 'Висячие сады', 300, [[1, 32]], [
+      lvl(16, 'Висячие сады', 340, [[1, 32]], [
         'o.o..o.o',
         '.2.vv.2.',
         'o.o..o.o',
@@ -228,9 +248,9 @@
       lvl(17, 'Стена великанов', 330, [[3, 34]], [
         '........',
         'oooooooo',
-        '..v..v..',
+        '.2v..v2.',
         '3.3..3.3',
-        '..v..v..',
+        '.2v..v2.',
         'oooooooo',
         '........',
         '..*..*..']),

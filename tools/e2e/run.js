@@ -2081,6 +2081,190 @@ async function smokeFile(bt, bname) {
       return notes.join('; ');
     });
 
+    await scenario(bname, '17 land 4 boulders: board, goals, crack, break, refuse, reshuffle, retry, phone, reduced', async () => {
+      const notes = [];
+      const rocks = (page) => ev(page, () => {
+        const S = window.__SUN;
+        const holes = [];
+        S.state.grid.forEach((row, r) => row.forEach((g, c) => {
+          const rock = S.state.boulders[r][c] > 0;
+          if (!!g === rock) holes.push([r, c, rock ? 'gem on boulder' : 'empty']);
+        }));
+        return {
+          live: document.querySelectorAll('#boulders .boulder:not(.break)').length,
+          all: document.querySelectorAll('#boulders .boulder').length,
+          state: S.boulders(),
+          holes
+        };
+      });
+      const chipOf = (page) => ev(page, () => {
+        const chips = document.querySelectorAll('.goal-chip.goal-boulders');
+        return { n: chips.length, text: chips[0] ? chips[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+      });
+      let stage = 'start';
+      const idle = async (page) => {
+        try {
+          await page.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        } catch (e) {
+          const st = await ev(page, () => ({ busy: __SUN.state.busy, running: __SUN.state.running, b: __SUN.boulders() })).catch(() => null);
+          throw new Error('busy at ' + stage + ': ' + JSON.stringify(st));
+        }
+      };
+      const hpOf = (page, r, c) => ev(page, ([r, c]) => {
+        const n = document.querySelector(`#boulders .boulder[data-r="${r}"][data-c="${c}"]:not(.break)`);
+        return n ? n.dataset.hp : null;
+      }, [r, c]);
+      // Центр клетки на экране
+      const cellXY = (page, r, c) => ev(page, ([r, c]) => {
+        const b = document.getElementById('tiles').getBoundingClientRect();
+        return { x: b.left + (c + 0.5) * b.width / 8, y: b.top + (r + 0.5) * b.height / 8, step: b.width / 8 };
+      }, [r, c]);
+      const gridIds = (page) => ev(page, () => window.__SUN.state.grid.map(row => row.map(g => (g ? g.id : 0)).join(',')).join(';'));
+
+      // ---- 4-01: валуны на поле и в целях, клетки валунов пусты ----
+      const key = 's17';
+      const { ctx, page } = await newPage(browser, bname, key);
+      await startFresh(page, HTTP);
+      await ev(page, () => { window.__SUN.start('4-01'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const want = await ev(page, () => window.Campaign.level('4-01').boulders.length);
+      const d0 = await rocks(page);
+      assert(d0.live === want && d0.state.length === want && d0.holes.length === 0, '4-01 boulders: ' + JSON.stringify(d0));
+      const c0 = await chipOf(page);
+      assert(c0.n === 1 && c0.text.includes('Валуны') && c0.text.includes('0 / ' + want), '4-01 chip: ' + JSON.stringify(c0));
+      const hint = await page.textContent('#hintBar');
+      assert(hint.includes('валунами'), 'hint: ' + hint);
+      await shot(page, bname, 'desktop-boulders-level');
+
+      // ---- прямой удар: молния по строке 4 трескает валун 2 -> 1, потом разбивает ----
+      stage = 'crack';
+      // Каскады после удара могут задеть валун ещё раз, поэтому проверяем, что
+      // прочность только убывает и валун разбит не больше чем за 3 удара
+      await ev(page, () => window.__SUN.setBoulders([[4, 4, 3]]));
+      await idle(page);
+      const hpSeq = [await hpOf(page, 4, 4)];
+      for (let i = 0; i < 3 && hpSeq[hpSeq.length - 1] !== null; i++) {
+        await ev(page, async () => { await window.__SUN.strike(4, 0, 'line', 'row'); });
+        await idle(page);
+        hpSeq.push(await hpOf(page, 4, 4));
+      }
+      const nums = hpSeq.map(v => (v === null ? 0 : Number(v)));
+      assert(nums[0] === 3 && nums.every((v, i) => i === 0 || v < nums[i - 1]) && nums[nums.length - 1] === 0,
+        'hp sequence ' + JSON.stringify(hpSeq));
+      notes.push('hp ' + nums.join('>'));
+      await page.waitForTimeout(850);
+      const d1 = await rocks(page);
+      assert(d1.all === 0 && d1.state.length === 0 && d1.holes.length === 0, 'after break: ' + JSON.stringify(d1));
+      const c1 = await chipOf(page);
+      assert(c1.text.includes('1 / ' + want), 'chip after break: ' + JSON.stringify(c1));
+
+      stage = 'neighbour';
+      // ---- соседство: ряд под валуном трескает его ----
+      await ev(page, () => window.__SUN.setBoulders([[2, 2, 1]]));
+      await idle(page);
+      await ev(page, async () => { await window.__SUN.strike(3, 0, 'line', 'row'); });
+      await idle(page);
+      await page.waitForTimeout(850);
+      const d2 = await rocks(page);
+      assert(d2.state.length === 0 && d2.holes.length === 0, 'neighbour crack: ' + JSON.stringify(d2));
+      notes.push('neighbour break');
+
+      stage = 'refuse';
+      // ---- отказ: касание валуна и свайп с камня на валун не меняют поле ----
+      await ev(page, () => window.__SUN.setBoulders([[3, 3, 2]]));
+      await idle(page);
+      const before = await gridIds(page);
+      const p = await cellXY(page, 3, 3);
+      await page.mouse.click(p.x, p.y);
+      await page.waitForTimeout(200);
+      const hintTap = await page.textContent('#hintBar');
+      assert(hintTap.includes('Валун не сдвинуть'), 'tap hint: ' + hintTap);
+      await page.waitForTimeout(450);
+      const q = await cellXY(page, 3, 2);
+      await page.mouse.move(q.x, q.y);
+      await page.mouse.down();
+      await page.mouse.move(q.x + q.step * 0.4, q.y, { steps: 3 });
+      await page.mouse.move(q.x + q.step * 0.9, q.y, { steps: 3 });
+      await page.mouse.up();
+      await idle(page);
+      await page.waitForTimeout(200);
+      assert(await gridIds(page) === before, 'grid changed after boulder tap/swipe');
+      assert(await hpOf(page, 3, 3) === '2', 'refusal must not crack the boulder');
+      notes.push('refuse tap+swipe');
+
+      stage = 'reshuffle';
+      // ---- перемешивание: валуны на месте, их клетки пусты ----
+      await ev(page, async () => { await window.__SUN.reshuffleBoard(false, true); window.__SUN.state.busy = false; });
+      await idle(page);
+      const d3 = await rocks(page);
+      assert(JSON.stringify(d3.state) === JSON.stringify([[3, 3, 2]]) && d3.holes.length === 0, 'reshuffle: ' + JSON.stringify(d3));
+
+      stage = 'wingate';
+      // ---- нельзя выиграть, пока стоят валуны ----
+      await ev(page, () => { window.__SUN.start('4-02'); });
+      await waitStarted(page);
+      await idle(page);
+      const want2 = await ev(page, () => window.Campaign.level('4-02').boulders.length);
+      const d4 = await rocks(page);
+      assert(d4.live === want2 && d4.holes.length === 0, 'retry 4-02 without leftovers: ' + JSON.stringify(d4));
+      const ended = await ev(page, () => {
+        const S = window.__SUN;
+        S.state.goals.forEach(g => { if (g.type === 'color') g.got = g.need; });
+        S.checkEnd();
+        const a = S.state.ended;
+        S.state.goals.forEach(g => { g.got = g.need; });
+        S.checkEnd();
+        return [a, S.state.ended];
+      });
+      assert(ended[0] === false && ended[1] === true, 'win gate: ' + JSON.stringify(ended));
+
+      // ---- земли 1–3 без валунов ----
+      await ev(page, () => { window.__SUN.start('1-01'); });
+      await waitStarted(page);
+      const d5 = await ev(page, () => ({ nodes: document.querySelectorAll('#boulders .boulder').length, chip: document.querySelectorAll('.goal-boulders').length }));
+      assert(d5.nodes === 0 && d5.chip === 0, '1-01 has boulders: ' + JSON.stringify(d5));
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(errs.length === 0, 'console: ' + errs.join(' | '));
+
+      // ---- телефон 390×844: валун совпадает с клеткой ----
+      {
+        const { ctx: pc, page: pp } = await newPage(browser, bname, 's17-phone', { width: 390, height: 844 });
+        await startFresh(pp, HTTP);
+        await ev(pp, () => { window.__SUN.start('4-01'); });
+        await waitStarted(pp);
+        await pp.waitForTimeout(300);
+        const box = await ev(pp, () => {
+          const n = document.querySelector('#boulders .boulder');
+          const r = +n.dataset.r, c = +n.dataset.c;
+          const b = n.getBoundingClientRect();
+          const t = document.getElementById('tiles').getBoundingClientRect();
+          return { dx: Math.abs(b.left - (t.left + c * t.width / 8)), dy: Math.abs(b.top - (t.top + r * t.height / 8)), w: b.width, cell: t.width / 8 };
+        });
+        assert(box.dx < 2 && box.dy < 2 && Math.abs(box.w - box.cell) < 2, 'phone align: ' + JSON.stringify(box));
+        await shot(pp, bname, 'phone-boulders-level');
+        await pc.close();
+        notes.push('phone cell ' + box.cell.toFixed(1) + 'px');
+      }
+
+      // ---- «уменьшить движение»: разбитый валун исчезает сразу ----
+      {
+        const { ctx: rc, page: rp } = await newPage(browser, bname, 's17-reduced', undefined, { reducedMotion: true });
+        await startFresh(rp, HTTP);
+        await ev(rp, () => { window.__SUN.start('4-01'); });
+        await waitStarted(rp);
+        await ev(rp, () => window.__SUN.setBoulders([[4, 4, 1]]));
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        await ev(rp, async () => { await window.__SUN.strike(4, 0, 'line', 'row'); });
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        const n = await ev(rp, () => document.querySelectorAll('#boulders .boulder').length);
+        assert(n === 0, 'reduced: boulder nodes left ' + n);
+        await rc.close();
+      }
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
