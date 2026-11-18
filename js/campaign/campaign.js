@@ -14,7 +14,7 @@
 })(function () {
   'use strict';
 
-  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js'];
+  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js', './land-04.js'];
   const DIFFICULTIES = ['calm', 'normal', 'challenge'];
   const ROWS = 8;
   const COLS = 8;
@@ -81,10 +81,14 @@
     };
     const vines = cellsOf('vines');
     const plates = cellsOf('plates');
+    /* Валуны — [r, c, прочность] */
+    const boulders = (lv.boulders || []).concat((hard && lv.challenge && lv.challenge.boulders) || [])
+      .map(v => [v[0], v[1], v[2] || 1]);
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };
       if (g.type === 'plates') return { type: 'plates', need: plates.length };
+      if (g.type === 'boulders') return { type: 'boulders', need: boulders.length };
       const need = hard ? Math.ceil(g.need * CHALLENGE_NEED) : g.need;
       return { type: g.type, color: g.color, need };
     });
@@ -101,6 +105,7 @@
       goals,
       vines,
       plates,
+      boulders,
       stars: stars.slice()
     };
   }
@@ -139,7 +144,7 @@
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }
               if (!(g.need > 0)) errors.push(tag + ': need цели должен быть > 0');
-            } else if (g.type !== 'vines' && g.type !== 'plates') {
+            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders') {
               errors.push(tag + ': неизвестный тип цели ' + g.type);
             }
           });
@@ -162,6 +167,30 @@
             errors.push(tag + ': цель ' + key + ' без ' + many);
           }
         });
+
+        /* Валуны: [r, c, прочность 1..3], не на плите и не на лиане — с учётом
+           клеток «Испытания», которые добавляются на этой сложности */
+        const allOf = key => (lv[key] || []).concat((lv.challenge && lv.challenge[key]) || []);
+        const cellSet = key => new Set(allOf(key).filter(inBoard).map(v => v[0] * COLS + v[1]));
+        const plateCells = cellSet('plates');
+        const vineCells = cellSet('vines');
+        const boulderCells = new Set();
+        allOf('boulders').forEach(v => {
+          if (!Array.isArray(v) || !inBoard(v.slice(0, 2))) {
+            errors.push(tag + ': валун вне поля ' + JSON.stringify(v));
+            return;
+          }
+          const hp = v[2] == null ? 1 : v[2];
+          if (!Number.isInteger(hp) || hp < 1 || hp > 3) errors.push(tag + ': прочность валуна вне 1..3 ' + JSON.stringify(v));
+          const cell = v[0] * COLS + v[1];
+          if (boulderCells.has(cell)) errors.push(tag + ': валун повторяется ' + JSON.stringify(v));
+          if (plateCells.has(cell)) errors.push(tag + ': валун на плите ' + JSON.stringify(v));
+          if (vineCells.has(cell)) errors.push(tag + ': валун на лиане ' + JSON.stringify(v));
+          boulderCells.add(cell);
+        });
+        if (lv.goals.some(g => g.type === 'boulders') && (lv.boulders || []).length === 0) {
+          errors.push(tag + ': цель boulders без валунов');
+        }
 
         DIFFICULTIES.forEach(d => {
           const s = lv.stars && lv.stars[d];

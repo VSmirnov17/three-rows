@@ -5,17 +5,19 @@ const assert = require('node:assert/strict');
 
 const Campaign = require('../js/campaign/campaign.js');
 
-test('в кампании 3 земли и 60 уровней с уникальными id', () => {
-  assert.equal(Campaign.lands().length, 3);
+test('в кампании 4 земли и 80 уровней с уникальными id', () => {
+  assert.equal(Campaign.lands().length, 4);
   const ids = Campaign.allLevelIds();
-  assert.equal(ids.length, 60);
-  assert.equal(new Set(ids).size, 60);
+  assert.equal(ids.length, 80);
+  assert.equal(new Set(ids).size, 80);
   assert.equal(ids[0], '1-01');
   assert.equal(ids[19], '1-20');
   assert.equal(ids[20], '2-01');
   assert.equal(ids[39], '2-20');
   assert.equal(ids[40], '3-01');
   assert.equal(ids[59], '3-20');
+  assert.equal(ids[60], '4-01');
+  assert.equal(ids[79], '4-20');
 });
 
 test('validate() пуст', () => {
@@ -104,7 +106,8 @@ test('nextLevelId', () => {
   assert.equal(Campaign.nextLevelId('1-01'), '1-02');
   assert.equal(Campaign.nextLevelId('1-20'), '2-01');
   assert.equal(Campaign.nextLevelId('2-20'), '3-01');
-  assert.equal(Campaign.nextLevelId('3-20'), null);
+  assert.equal(Campaign.nextLevelId('3-20'), '4-01');
+  assert.equal(Campaign.nextLevelId('4-20'), null);
   assert.equal(Campaign.nextLevelId('9-99'), null);
 });
 
@@ -198,4 +201,42 @@ test('в земле 3 в каждом уровне есть плиты и цел
     assert.ok(lvl.plates.length > 0, id);
     assert.ok(lvl.goals.some(g => g.type === 'plates'), id);
   });
+});
+
+/* ---------- Земля 4: валуны ---------- */
+
+test('в земле 4 в каждом уровне есть валуны и цель boulders, раскладка 8×8', () => {
+  Campaign.allLevelIds().filter(id => id.startsWith('4-')).forEach(id => {
+    const lvl = Campaign.level(id);
+    assert.ok(lvl.boulders.length > 0, id);
+    assert.ok(lvl.goals.some(g => g.type === 'boulders'), id);
+    assert.ok(lvl.goals.length <= 4, id + ': не больше четырёх целей');
+    lvl.boulders.forEach(v => assert.ok(v[2] >= 1 && v[2] <= 3, id + ' прочность'));
+  });
+});
+
+test('resolve: валуны с прочностью, need = число валунов, на challenge — с доп. валунами', () => {
+  const normal = Campaign.resolve('4-03', 'normal');
+  const hard = Campaign.resolve('4-03', 'challenge');
+  const base = Campaign.level('4-03').boulders.length;
+  assert.equal(normal.boulders.length, base);
+  assert.ok(normal.boulders.every(v => v.length === 3));
+  assert.equal(normal.goals.find(g => g.type === 'boulders').need, base);
+  assert.equal(hard.boulders.length, base + 2);
+  assert.equal(hard.goals.find(g => g.type === 'boulders').need, base + 2);
+  assert.deepEqual(Campaign.resolve('1-01', 'normal').boulders, []);
+});
+
+test('validate() ловит ошибки в валунах', () => {
+  const lv = Campaign.level('4-01');
+  const saved = { boulders: lv.boulders, plates: lv.plates, vines: lv.vines, challenge: lv.challenge };
+  const run = patch => { Object.assign(lv, patch); const e = Campaign.validate(); Object.assign(lv, saved); return e; };
+  assert.ok(run({ boulders: [[0, 0, 1], [0, 0, 2]] }).some(e => e.includes('валун повторяется')));
+  assert.ok(run({ boulders: [[9, 0, 1]] }).some(e => e.includes('валун вне поля')));
+  assert.ok(run({ boulders: [[0, 0, 4]] }).some(e => e.includes('прочность')));
+  assert.ok(run({ boulders: [[0, 0, 1]], plates: [[0, 0]] }).some(e => e.includes('валун на плите')));
+  assert.ok(run({ boulders: [[0, 0, 1]], vines: [[0, 0]] }).some(e => e.includes('валун на лиане')));
+  assert.ok(run({ boulders: [[0, 0, 1]], challenge: { plates: [[0, 0]] } }).some(e => e.includes('валун на плите')),
+    'клетки «Испытания» тоже проверяются');
+  assert.ok(run({ boulders: [] }).some(e => e.includes('цель boulders без валунов')));
 });

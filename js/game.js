@@ -23,6 +23,7 @@
     boardFrame: document.querySelector('.board-frame'),
     tiles: $('tiles'),
     plates: $('plates'),
+    boulders: $('boulders'),
     fx: $('fx'),
     score: $('scoreValue'),
     level: $('levelValue'),
@@ -67,6 +68,8 @@
     grid: [],
     // Слой золотых плит 8×8 (Board.makePlates): 1 — плита лежит
     plates: [],
+    // Слой валунов 8×8 (Board.makeBoulders): прочность, 0 — пусто; в grid там null
+    boulders: [],
     gemSeq: 0,
     selected: null,
     dragStart: null,
@@ -145,13 +148,17 @@
     swap: 'Меняй местами соседние камни',
     bad: 'Так нельзя — нужен ряд из трёх',
     vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним',
-    plates: 'Собирай ряды на золотых плитах. Очисти все плиты'
+    plates: 'Собирай ряды на золотых плитах. Очисти все плиты',
+    boulders: 'Собирай ряды рядом с валунами. Разбей все валуны',
+    boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет'
   };
 
-  /* Подсказка уровня: на уровнях с плитами — про плиты (обучение земли 3). */
+  /* Подсказка уровня: обучение новой механики земли (валуны — земля 4,
+     плиты — земля 3), иначе обычная. */
   function levelHint(level) {
-    const plates = level && level.plates && level.plates.length;
-    return level.name + ' — ' + (plates ? hintMessages.plates : hintMessages.default);
+    const has = key => level && level[key] && level[key].length;
+    const text = has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
+    return level.name + ' — ' + text;
   }
 
   function setHint(text, tone) {
@@ -224,9 +231,10 @@
     dom.goalList.innerHTML = state.goals.map((g, i) => {
       const vines = g.type === 'vines';
       const plates = g.type === 'plates';
-      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : '';
-      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : ART.gemSvg(g.color, 'mini-gem');
-      const name = vines ? 'Лианы' : plates ? 'Плиты' : ART.GEMS[g.color].name;
+      const boulders = g.type === 'boulders';
+      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : '';
+      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON : ART.gemSvg(g.color, 'mini-gem');
+      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : ART.GEMS[g.color].name;
       return `
       <div class="goal-chip${cls}" data-i="${i}">
         ${icon}
@@ -516,7 +524,7 @@
     setBodyState('levelId', level.id);
     setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates')
+    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders')
       ? { type: g.type, need: g.need, got: 0 }
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
@@ -593,6 +601,8 @@
     '<path d="M24 50 L50 24 M30 70 L70 30 M50 76 L76 50" stroke="#7a4808" stroke-width="5" stroke-linecap="round" opacity=".35"/>' +
     '</svg>';
 
+  const GOAL_BOULDER_ICON = '<img class="mini-gem goal-boulder-icon" src="assets/gems/boulder-3.webp" alt="" draggable="false">';
+
   /* Включает/выключает лианы на камне: класс и оверлей. */
   function setGemLocked(gem, locked) {
     gem.locked = !!locked;
@@ -655,6 +665,24 @@
     flashHint(hintMessages.vines, undefined, 2800);
   }
 
+  /* Отказ на валуне: валун качнулся, подсказка — как его разбить. */
+  function refuseBoulder(cell) {
+    const t = Date.now();
+    if (t - lastRefuseAt < 380) return;
+    lastRefuseAt = t;
+    flashHint(hintMessages.boulder, undefined, 2800);
+    if (reducedMotion() || !dom.boulders) return;
+    const node = dom.boulders.querySelector(`.boulder[data-r="${cell.r}"][data-c="${cell.c}"]:not(.break)`);
+    if (!node) return;
+    node.classList.remove('knock');
+    void node.offsetWidth;
+    node.classList.add('knock');
+  }
+
+  function isBoulder(cell) {
+    return !!(cell && state.boulders[cell.r] && state.boulders[cell.r][cell.c] > 0);
+  }
+
   function applyPos(gem) {
     if (!gem.el) return;
     gem.el.style.transform = `translate(${gem.c * 100}%, ${gem.r * 100}%)`;
@@ -664,8 +692,10 @@
 
   function generateGridData() {
     const vines = state.level ? state.level.vines : [];
-    state.grid = Board.generateGrid({ colors: TYPES, vines }, Math.random, () => ++state.gemSeq);
+    const boulders = (state.level && state.level.boulders) || [];
+    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders }, Math.random, () => ++state.gemSeq);
     state.plates = Board.makePlates(state.level ? state.level.plates : []);
+    state.boulders = Board.makeBoulders(boulders);
   }
 
   /* Слой золотых плит под камнями: узел на каждую клетку с плитой. */
@@ -701,9 +731,71 @@
     });
   }
 
+  /* Слой валунов поверх камней: узел на каждую клетку с валуном. В начале
+     уровня любой валун целый; data-hp (сколько ударов осталось) и data-max
+     (начальная прочность) выбирают трещины (css/boulders.css), у крепкого
+     валуна в углу цифра оставшихся ударов. Касания слой пропускает. */
+  function setBoulderHp(node, hp) {
+    node.dataset.hp = String(hp);
+    const badge = node.querySelector('.boulder-hp text');
+    if (badge) badge.textContent = String(hp);
+  }
+
+  function renderBoulders() {
+    if (!dom.boulders) return;
+    dom.boulders.innerHTML = '';
+    (state.boulders || []).forEach((row, r) => row.forEach((v, c) => {
+      if (v <= 0) return;
+      const node = document.createElement('div');
+      node.className = 'boulder';
+      node.dataset.r = String(r);
+      node.dataset.c = String(c);
+      node.dataset.hp = String(v);
+      node.dataset.max = String(v);
+      node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+      node.appendChild(document.createElement('span')).className = 'boulder-rock';
+      if (v > 1) {
+        // SVG сам масштабируется под клетку: цифра крупная и на телефоне
+        node.insertAdjacentHTML('beforeend',
+          '<svg class="boulder-hp" viewBox="0 0 40 40" aria-hidden="true">' +
+          '<circle cx="20" cy="20" r="17" />' +
+          '<text x="20" y="21">' + v + '</text></svg>');
+      }
+      dom.boulders.appendChild(node);
+    }));
+  }
+
+  /* Удары по валунам (hits ядра { r, c, left }): треснувший валун качается
+     и показывает трещины, разбитый разлетается и уходит за 800 мс; при
+     prefers-reduced-motion — сразу. */
+  function crackBoulders(hits) {
+    if (!dom.boulders || !hits.length) return;
+    const still = reducedMotion();
+    hits.forEach(h => {
+      const node = dom.boulders.querySelector(`.boulder[data-r="${h.r}"][data-c="${h.c}"]:not(.break)`);
+      if (!node) return;
+      if (h.left > 0) {
+        setBoulderHp(node, h.left);
+        if (still) return;
+        node.classList.remove('knock');
+        void node.offsetWidth;
+        node.classList.add('knock');
+        return;
+      }
+      if (still) {
+        node.remove();
+        return;
+      }
+      node.classList.add('break');
+      spawnBurst(h.r, h.c, '#e8913a', 9);
+      setTimeout(() => node.remove(), 800);
+    });
+  }
+
   function spawnBoard() {
     dom.tiles.innerHTML = '';
     renderPlates();
+    renderBoulders();
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
     fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
@@ -816,7 +908,10 @@
     }
     clearSelection();
     const gem = gemAt(cell.r, cell.c);
-    if (!gem) return;
+    if (!gem) {
+      if (isBoulder(cell)) refuseBoulder(cell);
+      return;
+    }
     if (gem.locked) {
       refuseLocked([gem]);
       return;
@@ -830,6 +925,14 @@
   async function attemptSwap(a, b) {
     if (!state.running || state.busy || state.ended || state.paused) return;
     if (!isAdjacent(a, b)) return;
+    // Валун не меняется местами: мягкий отказ, ход не тратится.
+    const rock = isBoulder(a) ? a : isBoulder(b) ? b : null;
+    if (rock) {
+      clearSelection();
+      state.lastAction = now();
+      refuseBoulder(rock);
+      return;
+    }
     const ga = gemAt(a.r, a.c);
     const gb = gemAt(b.r, b.c);
     if (!ga || !gb) return;
@@ -1182,6 +1285,23 @@
         console.error('[plates] ' + (err && err.message ? err.message : err), err);
       }
     }
+    // Цель «Валуны»: удар до обрушения, чтобы разбитый валун освободил клетку
+    // для досыпки этим же шагом (как в боте: Board.simulateMove)
+    const rockHits = Board.hitBoulders(state.boulders, plan);
+    if (rockHits.length) {
+      const broken = rockHits.filter(h => h.left === 0).length;
+      if (broken) {
+        state.goals.forEach(goal => {
+          if (goal.type === 'boulders') goal.got = Math.min(goal.need, goal.got + broken);
+        });
+      }
+      try {
+        crackBoulders(rockHits);
+      } catch (err) {
+        console.error('[boulders] ' + (err && err.message ? err.message : err), err);
+      }
+      if (!triggers.length) SFX.impact();
+    }
     const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
     if (changed >= 0) updateGoals(changed);
 
@@ -1229,7 +1349,11 @@
 
   async function dropGems() {
     // Падение и досыпку считает ядро; здесь — только движение и появление узлов.
-    const { moves, spawned } = Board.collapse(state.grid, (r, c) => makeGem(randomColor(), r, c));
+    const { moves, spawned } = Board.collapse(
+      state.grid,
+      (r, c) => makeGem(randomColor(), r, c),
+      (r, c) => state.boulders[r] && state.boulders[r][c] > 0
+    );
 
     let maxDist = 0;
     moves.forEach(m => {
@@ -1638,7 +1762,13 @@
     const target = document.elementFromPoint(x, y);
     if (!target) return null;
     const node = target.closest ? target.closest('.gem') : null;
-    if (!node || !dom.tiles.contains(node)) return null;
+    if (!node || !dom.tiles.contains(node)) {
+      // На клетке валуна камня нет: клетку берём по координатам, чтобы касание
+      // валуна дало отказ с подсказкой, а не пропало
+      const b = dom.tiles.getBoundingClientRect();
+      const cell = { r: Math.floor((y - b.top) / b.height * ROWS), c: Math.floor((x - b.left) / b.width * COLS) };
+      return isBoulder(cell) ? cell : null;
+    }
     const r = Number(node.dataset.r);
     const c = Number(node.dataset.c);
     if (!Number.isInteger(r) || !Number.isInteger(c)) return null;
@@ -1877,6 +2007,25 @@
       setPlates(cells) {
         state.plates = Board.makePlates(cells || []);
         renderPlates();
+      },
+      // Валуны: [[r, c, прочность], …]
+      boulders() {
+        const out = [];
+        (state.boulders || []).forEach((row, r) => row.forEach((v, c) => { if (v > 0) out.push([r, c, v]); }));
+        return out;
+      },
+      // Ставит валуны [[r, c, hp], …] (остальные убирает): камни на их клетках
+      // исчезают, освобождённые клетки досыпаются
+      async setBoulders(list) {
+        state.boulders = Board.makeBoulders(list || []);
+        state.grid.forEach((row, r) => row.forEach((gem, c) => {
+          if (gem && state.boulders[r][c] > 0) {
+            if (gem.el) gem.el.remove();
+            state.grid[r][c] = null;
+          }
+        }));
+        renderBoulders();
+        await dropGems();
       },
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)
       setVines(cells) {

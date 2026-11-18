@@ -242,10 +242,12 @@
      baseKeys — клетки совпадения ('r,c'). Спецкамни среди них (и среди
      вновь задетых) срабатывают цепочкой. protectedKeys — клетки, где
      только что созданы новые спецкамни: они не очищаются.
-     Возвращает { clear, triggers, unlocks }. unlocks — клетки камней в
+     Возвращает { clear, triggers, unlocks, voids }. unlocks — клетки камней в
      лианах, которые задело совпадением или взрывом: лиана срывается, а
      камень остаётся на месте (его нет в clear). Камень в лианах сам не
-     срабатывает, даже если он спецкамень. */
+     срабатывает, даже если он спецкамень. voids — клетки без камня (валуны),
+     которые накрыл удар: в clear их нет, чтобы clear.size считал только
+     убранные камни (на нём держатся очки игры и бота). */
   function expandSpecials(grid, baseKeys, protectedKeys) {
     const clear = new Set(baseKeys);
     const unlocks = new Set();
@@ -306,20 +308,24 @@
       if (clear.has(k)) clear.delete(k);
     });
     // Камень в лианах не удаляется: из clear он переходит в unlocks.
+    const voids = new Set();
     Array.from(clear).forEach(k => {
       const p = parseKey(k);
       const gem = gemAt(grid, p.r, p.c);
-      if (gem && gem.locked) {
+      if (!gem) {
+        clear.delete(k);
+        voids.add(k);
+      } else if (gem.locked) {
         clear.delete(k);
         unlocks.add(k);
       }
     });
-    return { clear, triggers, unlocks };
+    return { clear, triggers, unlocks, voids };
   }
 
   /* ---------- План одного каскада ----------
      Ничего не меняет в сетке. Возвращает null, если совпадений нет, иначе
-     { matched, creates, clear, triggers, unlocks }.
+     { matched, creates, clear, triggers, unlocks, voids }.
 
      Приоритет создания спецкамней (важно):
        1. уголок/T — «Тотем» (важнее линии и солнца);
@@ -410,10 +416,10 @@
       });
 
     const protectedKeys = new Set(creates.map(cr => keyOf(cr.r, cr.c)));
-    const { clear, triggers, unlocks } = expandSpecials(grid, matched, protectedKeys);
+    const { clear, triggers, unlocks, voids } = expandSpecials(grid, matched, protectedKeys);
     if (clear.size === 0 && unlocks.size === 0) return null;
 
-    return { matched, creates, clear, triggers, unlocks };
+    return { matched, creates, clear, triggers, unlocks, voids };
   }
 
   /* Применяет план к сетке: убирает clear, делает из creates спецкамни,
@@ -480,14 +486,58 @@
     return hits;
   }
 
+  /* ---------- Валуны ----------
+     Слой клеток, как плиты, но клетка валуна в сетке пустая (null): камня
+     там нет, двигать и менять нечего. boulders[r][c] — прочность (0 — пусто).
+     list — [[r, c, hp], …], без hp прочность 1. */
+  function makeBoulders(list) {
+    const boulders = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    (list || []).forEach(v => { boulders[v[0]][v[1]] = v[2] || 1; });
+    return boulders;
+  }
+
+  function bouldersLeft(boulders) {
+    let n = 0;
+    boulders.forEach(row => row.forEach(v => { if (v > 0) n++; }));
+    return n;
+  }
+
+  /* Шаг каскада plan трескает валун, если удар спецкамня накрыл его клетку
+     (plan.voids) или соседняя по стороне клетка — камень из clear, unlocks
+     или creates. За шаг не больше одного удара на валун. Меняет boulders,
+     возвращает задетые { r, c, left }. */
+  function hitBoulders(boulders, plan) {
+    if (!boulders) return [];
+    const hit = new Set();
+    const mark = (r, c) => {
+      if (r >= 0 && r < ROWS && c >= 0 && c < COLS && boulders[r][c] > 0) hit.add(keyOf(r, c));
+    };
+    (plan.voids || []).forEach(k => { const p = parseKey(k); mark(p.r, p.c); });
+    const sources = new Set(plan.clear);
+    (plan.unlocks || []).forEach(k => sources.add(k));
+    (plan.creates || []).forEach(cr => sources.add(keyOf(cr.r, cr.c)));
+    sources.forEach(k => {
+      const { r, c } = parseKey(k);
+      mark(r - 1, c); mark(r + 1, c); mark(r, c - 1); mark(r, c + 1);
+    });
+    const hits = [];
+    hit.forEach(k => {
+      const { r, c } = parseKey(k);
+      boulders[r][c]--;
+      hits.push({ r, c, left: boulders[r][c] });
+    });
+    return hits;
+  }
+
   /* ---------- Обрушение ----------
      Камни в каждом столбце падают вниз, сверху досыпаются новые через
      spawn(r, c) -> gem (ядро DOM не создаёт). Меняет grid и r/c камней.
      moves — упавшие камни, spawned — новые (по столбцам, снизу вверх).
      Камни в лианах неподвижны; остальные «проходят сквозь» них: свободные
      клетки столбца (без закреплённых) заполняются снизу вверх подряд,
-     минуя закреплённые камни. */
-  function collapse(grid, spawn) {
+     минуя закреплённые камни. blocked(r, c) (необязательно) — клетки
+     валунов: они не свободны, камни так же проходят сквозь них. */
+  function collapse(grid, spawn, blocked) {
     const moves = [];
     const spawned = [];
     for (let c = 0; c < COLS; c++) {
@@ -495,6 +545,7 @@
       const free = [];
       for (let r = ROWS - 1; r >= 0; r--) {
         const gem = grid[r][c];
+        if (blocked && blocked(r, c)) continue;
         if (!gem || !gem.locked) free.push(r);
       }
       let k = 0;
@@ -526,18 +577,21 @@
      Без начальных совпадений (серии и квадраты 2×2) и с ходом, до 50
      попыток. level.colors — число цветов (по умолчанию 6); rng() в [0,1);
      nextId() выдаёт свежие id камней. level.vines — [[r, c], …]: эти камни
-     в лианах (locked); в совпадениях и ходах они участвуют как обычные. */
+     в лианах (locked); в совпадениях и ходах они участвуют как обычные.
+     level.boulders — [[r, c, hp], …]: эти клетки остаются пустыми (null). */
   function generateGrid(level, rng, nextId) {
     const colors = (level && level.colors) || DEFAULT_COLORS;
     const random = rng || Math.random;
     const newId = nextId || (() => ++fallbackId);
     const vineKeys = new Set(((level && level.vines) || []).map(v => keyOf(v[0], v[1])));
+    const boulderKeys = new Set(((level && level.boulders) || []).map(v => keyOf(v[0], v[1])));
     let grid;
     let attempts = 0;
     do {
       grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
+          if (boulderKeys.has(keyOf(r, c))) continue;
           const banned = new Set();
           if (c >= 2) {
             const a = grid[r][c - 1];
@@ -649,7 +703,8 @@
      Обмен a<->b, затем все каскады и обрушение до успокоения. Меняет grid.
      null, если обмен недопустим (не соседи, пустая клетка или нет
      совпадения) — сетка при этом остаётся как была.
-     opts.colors — число цветов для досыпки (по умолчанию 6). */
+     opts.colors — число цветов для досыпки (по умолчанию 6); opts.boulders —
+     слой валунов (меняется), задетые валуны — в boulderHits. */
   function simulateMove(grid, a, b, rng, nextId, opts) {
     if (!a || !b) return null;
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
@@ -687,16 +742,20 @@
       c,
       el: null
     });
+    const boulders = opts && opts.boulders;
+    const blocked = boulders ? (r, c) => boulders[r][c] > 0 : null;
     const cascades = [];
     const removed = [];
+    const boulderHits = [];
     for (let guard = 0; guard < 200; guard++) {
       const plan = planCascade(grid, swapCell);
       if (!plan) break;
       cascades.push(plan);
       removed.push(...applyCascade(grid, plan).removed);
-      collapse(grid, spawn);
+      if (boulders) boulderHits.push(...hitBoulders(boulders, plan));
+      collapse(grid, spawn, blocked);
     }
-    return { cascades, removed };
+    return { cascades, removed, boulderHits };
   }
 
   return {
@@ -719,6 +778,9 @@
     makePlates,
     platesLeft,
     hitPlates,
+    makeBoulders,
+    bouldersLeft,
+    hitBoulders,
     collapse,
     generateGrid,
     shuffle,

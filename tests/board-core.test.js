@@ -264,7 +264,9 @@ test('planCascade: спецкамень в совпадении срабатыв
   const plan = Board.planCascade(grid, null);
   assert.equal(plan.triggers.length, 1);
   assert.equal(plan.triggers[0].type, 'line');
-  assert.ok(plan.clear.has('5,7'));
+  // Клетка (5,7) пустая: удар её накрыл, но камня нет — она в voids, не в clear
+  assert.ok(plan.voids.has('5,7'));
+  assert.ok(!plan.clear.has('5,7'));
 });
 
 test('expandSpecials: бомба чистит 3×3, на углу — 2×2', () => {
@@ -696,4 +698,155 @@ test('hitPlates: удар спецкамня снимает плиты по вс
 test('hitPlates без слоя плит безопасен', () => {
   const plan = Board.planCascade(gridFrom(TRIPLE), null);
   assert.deepEqual(Board.hitPlates(null, plan), []);
+});
+
+/* ---------- Валуны ---------- */
+
+const BLANK = Array(8).fill('........');
+
+test('expandSpecials: пустые клетки в зоне удара уходят из clear в voids', () => {
+  const grid = gridFrom([
+    '........', '........', '........', '...000..',
+    '...1.2..', '........', '........', '........'
+  ], { '3,4': { special: 'bomb' } });
+  const plan = Board.planCascade(grid, null);
+  plan.clear.forEach(k => {
+    const { r, c } = Board.parseKey(k);
+    assert.ok(grid[r][c], 'в clear только клетки с камнями: ' + k);
+  });
+  assert.ok(plan.voids.has('4,4'), 'пустая клетка под бомбой — в voids');
+  assert.ok(plan.clear.has('4,3') && plan.clear.has('4,5'));
+});
+
+test('planCascade без пустых клеток даёт пустой voids', () => {
+  const plan = Board.planCascade(gridFrom(CHECKER.map((row, r) => r === 0 ? '00010101' : row)), null);
+  assert.equal(plan.voids.size, 0);
+});
+
+test('makeBoulders: прочность из списка, по умолчанию 1; bouldersLeft считает валуны', () => {
+  const b = Board.makeBoulders([[0, 1, 3], [7, 7]]);
+  assert.equal(b[0][1], 3);
+  assert.equal(b[7][7], 1);
+  assert.equal(b[0][0], 0);
+  assert.equal(Board.bouldersLeft(b), 2);
+  assert.equal(Board.bouldersLeft(Board.makeBoulders()), 0);
+});
+
+test('hitBoulders: ряд рядом снимает 1 прочность, два ряда с двух сторон — тоже 1', () => {
+  const grid = gridFrom(['000.....', '........', '111.....', ...BLANK.slice(3)]);
+  const plan = Board.planCascade(grid, null);
+  const b = Board.makeBoulders([[1, 1, 3], [1, 4, 1], [5, 5, 1]]);
+  const hits = Board.hitBoulders(b, plan);
+  assert.deepEqual(hits.map(h => [h.r, h.c, h.left]), [[1, 1, 2]], 'соседи (0,1) и (2,1) оба в ряду, удар один');
+  assert.equal(b[1][4], 1, 'валун без соседей в ряду не тронут');
+  assert.equal(b[5][5], 1);
+});
+
+test('hitBoulders: прочность 3 -> 2 -> 1 -> 0, по пустой клетке удара нет', () => {
+  const plan = Board.planCascade(gridFrom(['........', '000.....', '........', '........', '........', '........', '........', '........']), null);
+  const b = Board.makeBoulders([[0, 1, 3]]);
+  assert.equal(Board.hitBoulders(b, plan)[0].left, 2);
+  assert.equal(Board.hitBoulders(b, plan)[0].left, 1);
+  assert.equal(Board.hitBoulders(b, plan)[0].left, 0);
+  assert.deepEqual(Board.hitBoulders(b, plan), []);
+});
+
+test('hitBoulders: прямой удар спецкамня по клетке валуна (voids)', () => {
+  const grid = gridFrom([
+    '0001234.', '........', '........', '........',
+    '........', '........', '........', '........'
+  ], { '0,0': { special: 'line', lineDir: 'row' } });
+  const plan = Board.planCascade(grid, null);
+  assert.ok(plan.voids.has('0,7'));
+  const b = Board.makeBoulders([[0, 7, 1]]);
+  assert.deepEqual(Board.hitBoulders(b, plan).map(h => [h.r, h.c, h.left]), [[0, 7, 0]]);
+});
+
+test('hitBoulders: соседний валун в зоне удара не бьёт валун рядом с собой', () => {
+  // Молния по строке 0 бьёт валун (0,7) напрямую; валун (1,7) рядом с (0,7) — но (0,7) не камень.
+  const grid = gridFrom([
+    '0001234.', '1234501.', '........', '........',
+    '........', '........', '........', '........'
+  ], { '0,0': { special: 'line', lineDir: 'row' } });
+  const plan = Board.planCascade(grid, null);
+  const b = Board.makeBoulders([[0, 7, 1], [1, 7, 1]]);
+  const hits = Board.hitBoulders(b, plan);
+  assert.ok(hits.some(h => h.r === 0 && h.c === 7));
+  assert.ok(!hits.some(h => h.r === 1 && h.c === 7), 'валун (1,7) не задет: его сосед (0,7) — валун, а (1,6) не в clear');
+});
+
+test('hitBoulders: срыв лианы и рождение спецкамня рядом тоже трескают валун', () => {
+  const vine = Board.planCascade(gridFrom(TRIPLE, { '0,1': { locked: true } }), null);
+  const b1 = Board.makeBoulders([[1, 1, 2]]);
+  assert.equal(Board.hitBoulders(b1, vine).length, 1);
+  const plan = Board.planCascade(gridFrom(['0000....', ...BLANK.slice(1)]), { r: 0, c: 1 });
+  const b2 = Board.makeBoulders([[1, 1, 2]]);
+  assert.equal(Board.hitBoulders(b2, plan).length, 1);
+  assert.deepEqual(Board.hitBoulders(null, plan), []);
+});
+
+test('collapse с blocked: камни проходят сквозь валун, его клетка не досыпается', () => {
+  const grid = gridFrom(CHECKER);
+  grid[5][0] = null; // валун
+  grid[6][0] = null;
+  grid[7][0] = null;
+  const top = grid[0][0];
+  const above = grid[4][0];
+  let id = 900;
+  const spawn = (r, c) => ({ id: ++id, color: 2, special: null, lineDir: null, locked: false, r, c, el: null });
+  const blocked = (r, c) => r === 5 && c === 0;
+  const { spawned } = Board.collapse(grid, spawn, blocked);
+  assert.equal(grid[5][0], null, 'клетка валуна пустая');
+  assert.equal(grid[7][0], above);
+  assert.equal(top.r, 2);
+  assert.ok(!spawned.some(g => g.r === 5 && g.c === 0));
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) if (!(r === 5 && c === 0)) assert.ok(grid[r][c], 'нет дыр: ' + r + ',' + c);
+  }
+});
+
+test('generateGrid: клетки валунов пустые, совпадений нет, ход есть', () => {
+  const boulders = [[0, 0, 1], [3, 3, 2], [3, 4, 3], [7, 7, 1]];
+  for (let seed = 1; seed <= 20; seed++) {
+    const grid = Board.generateGrid({ colors: 5, boulders }, seeded(seed), counter());
+    assert.equal(Board.hasAnyMatch(grid), false);
+    assert.equal(Board.hasMove(grid), true);
+    grid.forEach((row, r) => row.forEach((g, c) => {
+      assert.equal(g === null, boulders.some(v => v[0] === r && v[1] === c));
+    }));
+  }
+});
+
+test('shuffle оставляет клетки валунов пустыми', () => {
+  const grid = Board.generateGrid({ colors: 5, boulders: [[2, 2], [6, 1]] }, seeded(7), counter());
+  Board.shuffle(grid, seeded(8));
+  assert.equal(grid[2][2], null);
+  assert.equal(grid[6][1], null);
+  assert.equal(grid.flat().filter(g => g === null).length, 2);
+});
+
+test('simulateMove с opts.boulders: живые валуны пусты, остальное поле без дыр, валуны трескаются', () => {
+  // Полоса валунов поперёк поля: камни сверху падают сквозь неё.
+  const list = [0, 1, 2, 3, 4, 5, 6, 7].map(c => [4, c, 2]);
+  let hitsTotal = 0;
+  for (let seed = 1; seed <= 15; seed++) {
+    const grid = Board.generateGrid({ colors: 5, boulders: list }, seeded(seed), counter());
+    const boulders = Board.makeBoulders(list);
+    for (let turn = 0; turn < 6; turn++) {
+      const move = Board.findMove(grid);
+      if (!move) break;
+      const res = Board.simulateMove(grid, move.a, move.b, seeded(seed * 31 + turn), counter(), { colors: 5, boulders });
+      assert.ok(res, 'ход из findMove допустим');
+      hitsTotal += res.boulderHits.length;
+      grid.forEach((row, r) => row.forEach((g, c) => {
+        if (boulders[r][c] > 0) assert.equal(g, null, 'живой валун пуст: ' + r + ',' + c);
+        else assert.ok(g && g.r === r && g.c === c, 'нет дыр: ' + r + ',' + c);
+      }));
+      res.cascades.forEach(plan => plan.clear.forEach(k => {
+        const { r, c } = Board.parseKey(k);
+        assert.ok(!(list.some(v => v[0] === r && v[1] === c) && plan.voids.has(k)), 'ключ не в clear и voids сразу');
+      }));
+    }
+  }
+  assert.ok(hitsTotal > 0, 'хоть один валун треснул');
 });

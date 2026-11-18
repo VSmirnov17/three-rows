@@ -1,0 +1,6 @@
+$imagegen
+Asset: game sprite sheet for a match-three board, square image, transparent background, three sprites in one horizontal row with generous transparent gaps
+Request: one dark granite boulder shown in three damage states, left to right: intact; split by two deep cracks; heavily shattered with many cracks and a chipped edge, still holding together
+Look: same painterly-3D manner and material quality as the gems in Image 1 (style and lighting reference only); weathered dark grey-brown granite with flecks, rough chiselled facets, warm amber rim light from below, cooler highlight from top-left; cracks show a faint deep orange glow inside
+Composition: each boulder front view, fills a square cell, rounded blocky silhouette that reads clearly at 40 px and is unmistakably a rock, not a gem; identical size, shape and position in all three states, only the cracks differ
+Constraints: no text, no gems, no moss, no ground, no shadow outside the rock, no border

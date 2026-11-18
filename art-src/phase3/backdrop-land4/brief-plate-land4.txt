@@ -1,0 +1,8 @@
+$imagegen
+Asset: game background plate, landscape 16:9, one image, no game interface
+Request: the same night world as Image 1 and Image 2, now high on the Mountain Trail: a narrow ancient stone path with worn carved Mesoamerican steps winds along a steep mountain slope above a deep misty gorge. Big rounded dark granite boulders lie along the trail, some blocking it. On the LEFT edge, a tall dark rock cliff with a few twisted pine-like trees and hanging roots frames the picture. On the RIGHT side, the trail climbs toward a distant mountain pass with jagged peaks and an old stone marker. The center of the frame is calm, dark, low-detail mountain haze over the gorge (it will be hidden behind the game board).
+Sky: still night, but the first hint of the coming dawn: near the horizon behind the peaks the sky is a slightly lighter cold blue with a very faint pale band, clearly lighter than Image 1 and Image 2, yet the whole picture stays dark; a few faint stars high up.
+Look: exactly the painting style, palette and light of Image 1 and Image 2: premium painterly game art, realistic; cool deep blue-teal moonlight, soft bluish mist; muted, low contrast, slightly soft focus, dark overall so bright game pieces stand out in front
+Composition: the TOP-RIGHT corner is open sky with NO moon (a moon will be added as a separate layer); mountain peaks stay below the top 25% of the frame
+Constraints: no water, no waterfall, no moon, no sun, no fire, no torches, no people, no animals, no text, no border, no game UI
+References: Image 1: style, palette and light reference only (land 1 plate); Image 2: style reference only (land 2 plate). Do not copy their scenery.
