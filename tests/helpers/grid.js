@@ -1,7 +1,7 @@
 /* Помощник для тестов: собирает сетку поля из строк.
  *
  * gridFrom(rows, extras) -> grid[r][c]
- *   rows   — 8 строк по 8 символов: '0'..'5' — цвет камня, '.' — пусто;
+ *   rows   — 8 строк по 8 символов: '0'..'5' — цвет камня, 'i' — идол, '.' — пусто;
  *   extras — карта { 'r,c': { special, lineDir, locked } } с доп. полями камня.
  */
 'use strict';
@@ -17,6 +17,7 @@ function gridFrom(rows, extras) {
     if (line.length !== COLS) throw new Error('Строка ' + r + ': нужно ' + COLS + ' символов');
     return Array.from(line, (ch, c) => {
       if (ch === '.') return null;
+      if (ch === 'i') return { id: id++, relic: true, color: -1, special: null, lineDir: null, locked: false, r, c, el: null };
       const color = Number(ch);
       if (!Number.isInteger(color) || color < 0 || color > 5) {
         throw new Error('Строка ' + r + ', колонка ' + c + ': неизвестный символ «' + ch + '»');

@@ -850,3 +850,89 @@ test('simulateMove с opts.boulders: живые валуны пусты, ост�
   }
   assert.ok(hitsTotal > 0, 'хоть один валун треснул');
 });
+
+/* ---------- Идолы (земля 5) ---------- */
+
+test('идолы не совпадают: три в ряд и квадрат из идолов — не ряд', () => {
+  const grid = gridFrom(['iii.....', 'ii......', 'ii......', '........', '........', '........', '........', '........']);
+  assert.deepEqual(Board.findLineGroups(grid), []);
+  assert.deepEqual(Board.findSquares(grid), []);
+  assert.equal(Board.hasAnyMatch(grid), false);
+});
+
+test('идол разрывает серию', () => {
+  const grid = gridFrom(['00i00...', '........', '........', '........', '........', '........', '........', '........']);
+  assert.equal(Board.hasAnyMatch(grid), false);
+});
+
+test('удары спецкамней не убирают идола и не пишут его в voids/unlocks', () => {
+  const grid = gridFrom(CHECKER);
+  grid[3][3] = { id: 500, relic: true, color: -1, special: null, lineDir: null, locked: false, r: 3, c: 3, el: null };
+  ['bomb', 'line', 'totem', 'sun'].forEach(type => {
+    grid[3][4].special = type;
+    grid[3][4].lineDir = 'row';
+    const res = Board.expandSpecials(grid, new Set(['3,4']), new Set());
+    assert.ok(!res.clear.has('3,3') && !res.voids.has('3,3') && !res.unlocks.has('3,3'), type);
+  });
+});
+
+test('generateGrid ставит идолов, совпадений нет, ход есть; shuffle их не двигает', () => {
+  const relics = [[0, 1], [0, 2], [0, 3], [1, 5]];
+  for (let seed = 1; seed <= 15; seed++) {
+    const grid = Board.generateGrid({ colors: 5, relics }, seeded(seed), counter());
+    assert.equal(Board.hasAnyMatch(grid), false);
+    assert.equal(Board.hasMove(grid), true);
+    assert.equal(Board.relicsLeft(grid), 4);
+    const before = relics.map(([r, c]) => grid[r][c]);
+    assert.ok(before.every(g => g && g.relic));
+    Board.shuffle(grid, seeded(seed + 100), { colors: 5 });
+    relics.forEach(([r, c], i) => {
+      assert.equal(grid[r][c], before[i]);
+      assert.equal(grid[r][c].color, -1);
+    });
+  }
+});
+
+test('collectRelics снимает идолов только с нижней строки', () => {
+  const rows = CHECKER.slice();
+  rows[3] = 'i' + rows[3].slice(1);
+  rows[7] = 'i' + rows[7].slice(1);
+  const grid = gridFrom(rows);
+  const got = Board.collectRelics(grid);
+  assert.equal(got.length, 1);
+  assert.equal(grid[7][0], null);
+  assert.ok(grid[3][0].relic);
+});
+
+test('simulateMove: два идола друг над другом снимаются оба, дыр нет', () => {
+  const grid = gridFrom([
+    '01010101',
+    '10101010',
+    '01010101',
+    '10101010',
+    '01010101',
+    'i0101010',
+    'i1410101',
+    '44501010'
+  ]);
+  const res = Board.simulateMove(grid, { r: 6, c: 2 }, { r: 7, c: 2 }, seeded(3), counter(), { colors: 6 });
+  assert.ok(res, 'ход допустим');
+  assert.equal(res.relics.length, 2);
+  assert.ok(res.removed.every(g => !g.relic), 'идолы не в removed');
+  grid.forEach((row, r) => row.forEach((g, c) => {
+    assert.ok(g && !g.relic && g.r === r && g.c === c, 'нет дыр и идолов: ' + r + ',' + c);
+  }));
+});
+
+test('settle: идол над валуном в нижней строке ждёт', () => {
+  const grid = gridFrom(CHECKER);
+  grid[7][0] = null; // валун
+  grid[6][0] = null;
+  grid[5][0] = { id: 501, relic: true, color: -1, special: null, lineDir: null, locked: false, r: 5, c: 0, el: null };
+  let id = 900;
+  const spawn = (r, c) => ({ id: ++id, color: 2, special: null, lineDir: null, locked: false, r, c, el: null });
+  const res = Board.settle(grid, spawn, (r, c) => r === 7 && c === 0);
+  assert.deepEqual(res.relics, []);
+  assert.ok(grid[6][0].relic);
+  assert.equal(grid[7][0], null);
+});
