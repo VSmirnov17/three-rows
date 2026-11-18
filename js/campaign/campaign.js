@@ -84,13 +84,14 @@
     /* Валуны — [r, c, прочность] */
     const boulders = (lv.boulders || []).concat((hard && lv.challenge && lv.challenge.boulders) || [])
       .map(v => [v[0], v[1], v[2] || 1]);
-    const relics = cellsOf('relics');
+    /* Идолы — [r, c, цвет, даров]; на «Испытании» каждому нужен ещё один дар */
+    const idols = (lv.idols || []).map(v => [v[0], v[1], v[2], (v[3] || 1) + (hard ? 1 : 0)]);
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };
       if (g.type === 'plates') return { type: 'plates', need: plates.length };
       if (g.type === 'boulders') return { type: 'boulders', need: boulders.length };
-      if (g.type === 'relics') return { type: 'relics', need: relics.length };
+      if (g.type === 'idols') return { type: 'idols', need: idols.length };
       const need = hard ? Math.ceil(g.need * CHALLENGE_NEED) : g.need;
       return { type: g.type, color: g.color, need };
     });
@@ -108,7 +109,7 @@
       vines,
       plates,
       boulders,
-      relics,
+      idols,
       stars: stars.slice()
     };
   }
@@ -147,7 +148,7 @@
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }
               if (!(g.need > 0)) errors.push(tag + ': need цели должен быть > 0');
-            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders' && g.type !== 'relics') {
+            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders' && g.type !== 'idols') {
               errors.push(tag + ': неизвестный тип цели ' + g.type);
             }
           });
@@ -195,23 +196,25 @@
           errors.push(tag + ': цель boulders без валунов');
         }
 
-        /* Идолы: не на валуне, не на лиане и не в нижней строке (там их
-           сразу бы засчитало) — с учётом клеток «Испытания» */
-        const relicCells = new Set();
-        allOf('relics').forEach(v => {
-          if (!inBoard(v)) {
+        /* Идолы: [r, c, цвет 0..5, даров 1..4], не на валуне, плите или лиане
+           (с клетками «Испытания») */
+        const idolCells = new Set();
+        (lv.idols || []).forEach(v => {
+          if (!Array.isArray(v) || !inBoard(v.slice(0, 2))) {
             errors.push(tag + ': идол вне поля ' + JSON.stringify(v));
             return;
           }
+          if (!Number.isInteger(v[2]) || v[2] < 0 || v[2] >= COLORS) errors.push(tag + ': цвет идола вне 0..' + (COLORS - 1) + ' ' + JSON.stringify(v));
+          if (!Number.isInteger(v[3]) || v[3] < 1 || v[3] > 4) errors.push(tag + ': даров идолу вне 1..4 ' + JSON.stringify(v));
           const cell = v[0] * COLS + v[1];
-          if (relicCells.has(cell)) errors.push(tag + ': идол повторяется ' + JSON.stringify(v));
+          if (idolCells.has(cell)) errors.push(tag + ': идол повторяется ' + JSON.stringify(v));
           if (boulderCells.has(cell)) errors.push(tag + ': идол на валуне ' + JSON.stringify(v));
+          if (plateCells.has(cell)) errors.push(tag + ': идол на плите ' + JSON.stringify(v));
           if (vineCells.has(cell)) errors.push(tag + ': идол на лиане ' + JSON.stringify(v));
-          if (v[0] === ROWS - 1) errors.push(tag + ': идол в нижней строке ' + JSON.stringify(v));
-          relicCells.add(cell);
+          idolCells.add(cell);
         });
-        if (lv.goals.some(g => g.type === 'relics') && (lv.relics || []).length === 0) {
-          errors.push(tag + ': цель relics без идолов');
+        if (lv.goals.some(g => g.type === 'idols') && (lv.idols || []).length === 0) {
+          errors.push(tag + ': цель idols без идолов');
         }
 
         DIFFICULTIES.forEach(d => {

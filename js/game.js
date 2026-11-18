@@ -150,15 +150,14 @@
     vines: 'Камень в лианах не сдвинуть — собери ряд вместе с ним',
     plates: 'Собирай ряды на золотых плитах. Очисти все плиты',
     boulders: 'Собирай ряды рядом с валунами. Разбей все валуны',
-    boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет',
-    relics: 'Тяни идола вниз или собирай ряды под ним. Опусти всех на дно'
+    boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет'
   };
 
-  /* Подсказка уровня: обучение новой механики земли (идолы — земля 5,
-     валуны — земля 4, плиты — земля 3), иначе обычная. */
+  /* Подсказка уровня: обучение новой механики земли (валуны — земля 4,
+     плиты — земля 3), иначе обычная. */
   function levelHint(level) {
     const has = key => level && level[key] && level[key].length;
-    const text = has('relics') ? hintMessages.relics : has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
+    const text = has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
     return level.name + ' — ' + text;
   }
 
@@ -233,11 +232,9 @@
       const vines = g.type === 'vines';
       const plates = g.type === 'plates';
       const boulders = g.type === 'boulders';
-      const relics = g.type === 'relics';
-      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : relics ? ' goal-relics' : '';
-      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON
-        : relics ? GOAL_RELIC_ICON : ART.gemSvg(g.color, 'mini-gem');
-      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : relics ? 'Идолы' : ART.GEMS[g.color].name;
+      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : '';
+      const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON : ART.gemSvg(g.color, 'mini-gem');
+      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : ART.GEMS[g.color].name;
       return `
       <div class="goal-chip${cls}" data-i="${i}">
         ${icon}
@@ -527,7 +524,7 @@
     setBodyState('levelId', level.id);
     setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders' || g.type === 'relics')
+    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders')
       ? { type: g.type, need: g.need, got: 0 }
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
@@ -605,8 +602,6 @@
     '</svg>';
 
   const GOAL_BOULDER_ICON = '<img class="mini-gem goal-boulder-icon" src="assets/gems/boulder-3.webp" alt="" draggable="false">';
-  const RELIC_IMG = '<img class="gem-svg relic-img" src="assets/gems/relic.webp" alt="" draggable="false">';
-  const GOAL_RELIC_ICON = '<img class="mini-gem goal-relic-icon" src="assets/gems/relic.webp" alt="" draggable="false">';
 
   /* Включает/выключает лианы на камне: класс и оверлей. */
   function setGemLocked(gem, locked) {
@@ -626,12 +621,11 @@
 
   function createGemEl(gem) {
     const node = document.createElement('div');
-    node.className = 'gem' + (gem.special ? ' special-' + gem.special : '') + (gem.relic ? ' relic' : '');
+    node.className = 'gem' + (gem.special ? ' special-' + gem.special : '');
     node.dataset.id = String(gem.id);
     node.dataset.r = String(gem.r);
     node.dataset.c = String(gem.c);
-    // У идола нет цвета: свой спрайт вместо ART.gemInner
-    node.innerHTML = gem.relic ? '<div class="gem-inner">' + RELIC_IMG + '</div>' : ART.gemInner(gem.color, gem.special);
+    node.innerHTML = ART.gemInner(gem.color, gem.special);
     gem.el = node;
     setGemLocked(gem, gem.locked);
     return node;
@@ -699,8 +693,7 @@
   function generateGridData() {
     const vines = state.level ? state.level.vines : [];
     const boulders = (state.level && state.level.boulders) || [];
-    const relics = (state.level && state.level.relics) || [];
-    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders, relics }, Math.random, () => ++state.gemSeq);
+    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders }, Math.random, () => ++state.gemSeq);
     state.plates = Board.makePlates(state.level ? state.level.plates : []);
     state.boulders = Board.makeBoulders(boulders);
   }
@@ -958,8 +951,6 @@
     clearHints();
     state.swapCell = null;
 
-    // Идола можно опустить вниз и без ряда (Board.relicDrop)
-    const drop = Board.relicDrop(state.grid, a, b);
     SFX.swap();
     state.grid[a.r][a.c] = gb;
     state.grid[b.r][b.c] = ga;
@@ -969,8 +960,7 @@
     applyPos(gb);
     await sleep(240);
 
-    const matched = hasAnyMatch();
-    if (!matched && !drop) {
+    if (!hasAnyMatch()) {
       SFX.invalid();
       flashHint(hintMessages.bad, 'bad', 1600);
       dom.boardFrame.classList.add('shake');
@@ -989,8 +979,6 @@
     }
 
     state.swapCell = { r: b.r, c: b.c };
-    // Спуск без ряда: идол на дне снимается здесь (при ряде — после каскада)
-    if (!matched) await dropGems();
     const maxChain = await resolveBoard();
     state.busy = false;
     state.lastAction = now();
@@ -1082,7 +1070,7 @@
     // Перемешиваются только камни не в лианах; закреплённые стоят на месте.
     const movable = [];
     state.grid.forEach(row => row.forEach(gem => {
-      if (gem && !gem.locked && !gem.relic && gem.el) movable.push(gem);
+      if (gem && !gem.locked && gem.el) movable.push(gem);
     }));
     movable.forEach(gem => {
       const node = gem.el;
@@ -1359,41 +1347,7 @@
     await dropGems();
   }
 
-  /* Падение до покоя: тот же цикл, что Board.settle, но с показом каждого
-     сбора — идол на дне вспыхивает и уходит, его столбец досыпается. */
   async function dropGems() {
-    await dropOnce();
-    for (let guard = 0; guard <= ROWS; guard++) {
-      const got = Board.collectRelics(state.grid);
-      if (!got.length) break;
-      takeRelics(got);
-      await sleep(reducedMotion() ? 0 : 420);
-      await dropOnce();
-    }
-  }
-
-  /* Идолы сняты со дна (в сетке их уже нет): цель, звук, уход узла. */
-  function takeRelics(got) {
-    state.goals.forEach((goal, i) => {
-      if (goal.type !== 'relics') return;
-      goal.got = Math.min(goal.need, goal.got + got.length);
-      updateGoals(i);
-    });
-    SFX.special();
-    got.forEach(gem => {
-      const node = gem.el;
-      if (!node) return;
-      if (reducedMotion()) {
-        node.remove();
-        return;
-      }
-      spawnBurst(gem.r, gem.c, '#ffd75a', 10);
-      node.classList.add('relic-take');
-      setTimeout(() => node.remove(), 620);
-    });
-  }
-
-  async function dropOnce() {
     // Падение и досыпку считает ядро; здесь — только движение и появление узлов.
     const { moves, spawned } = Board.collapse(
       state.grid,
@@ -2072,22 +2026,6 @@
         }));
         renderBoulders();
         await dropGems();
-      },
-      // Идолы на поле: [[r, c], …]
-      relics() {
-        const out = [];
-        state.grid.forEach((row, r) => row.forEach((g, c) => { if (g && g.relic) out.push([r, c]); }));
-        return out;
-      },
-      // Ставит идола в клетку (камень там исчезает)
-      setRelic(r, c) {
-        const old = state.grid[r][c];
-        if (old && old.el) old.el.remove();
-        state.gemSeq += 1;
-        const gem = Board.makeRelic(state.gemSeq, r, c);
-        state.grid[r][c] = gem;
-        dom.tiles.appendChild(createGemEl(gem));
-        applyPos(gem);
       },
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)
       setVines(cells) {

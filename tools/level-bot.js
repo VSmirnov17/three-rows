@@ -80,28 +80,28 @@ function makeProgress(resolved) {
   let vinesLeft = 0;
   let platesLeft = 0;
   let bouldersLeft = 0;
-  let relicsLeft = 0;
+  let idolsLeft = 0;
   resolved.goals.forEach(g => {
     if (g.type === 'color') colorLeft.set(g.color, (colorLeft.get(g.color) || 0) + g.need);
     else if (g.type === 'vines') vinesLeft += g.need;
     else if (g.type === 'plates') platesLeft += g.need;
     else if (g.type === 'boulders') bouldersLeft += g.need;
-    else if (g.type === 'relics') relicsLeft += g.need;
+    else if (g.type === 'idols') idolsLeft += g.need;
   });
-  return { colorLeft, vinesLeft, platesLeft, bouldersLeft, relicsLeft };
+  return { colorLeft, vinesLeft, platesLeft, bouldersLeft, idolsLeft };
 }
 
 function isDone(p) {
   if (p.vinesLeft > 0) return false;
   if (p.platesLeft > 0) return false;
   if (p.bouldersLeft > 0) return false;
-  if (p.relicsLeft > 0) return false;
+  if (p.idolsLeft > 0) return false;
   for (const left of p.colorLeft.values()) if (left > 0) return false;
   return true;
 }
 
 function cloneProgress(p) {
-  return { colorLeft: new Map(p.colorLeft), vinesLeft: p.vinesLeft, platesLeft: p.platesLeft, bouldersLeft: p.bouldersLeft, relicsLeft: p.relicsLeft };
+  return { colorLeft: new Map(p.colorLeft), vinesLeft: p.vinesLeft, platesLeft: p.platesLeft, bouldersLeft: p.bouldersLeft, idolsLeft: p.idolsLeft };
 }
 
 /* ---------- Один ход ---------- */
@@ -116,19 +116,12 @@ function cloneProgress(p) {
    Плиты, как и лианы, очков не дают (js/game.js playStep).
    boulders — слой валунов (необязателен), тоже МЕНЯЕТСЯ. Очков не дают; для
    выбора хода каждая трещина — единица прогресса (иначе бот не бил бы крепкие
-   валуны), в цель (gained.boulders) идут только разбитые. Идолы: прогресс —
-   на сколько строк они опустились (снятый идол — до строки ROWS), в цель
-   (gained.relics) — снятые со дна. */
-function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, boulders) {
+   валуны), в цель (gained.boulders) идут только разбитые. idols — слой идолов,
+   так же: каждый дар — единица прогресса, в цель (gained.idols) — довольные. */
+function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, boulders, idols) {
   const rng = mulberry32(turnSeed);
   let idCounter = 1000000;
-  const relicDepth = () => {
-    let d = 0;
-    grid.forEach(row => row.forEach(g => { if (g && g.relic) d += g.r; }));
-    return d;
-  };
-  const depthBefore = relicDepth();
-  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS, boulders });
+  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS, boulders, idols });
   if (!res) return null;
 
   const left = new Map(progress.colorLeft);
@@ -181,16 +174,16 @@ function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, b
 
   const bouldersGain = Math.min(res.boulderHits.filter(h => h.left === 0).length, progress.bouldersLeft || 0);
   progressUnits += res.boulderHits.length;
-  const relicsGain = Math.min(res.relics.length, progress.relicsLeft || 0);
-  progressUnits += relicDepth() + res.relics.length * Board.ROWS - depthBefore;
+  const idolsGain = Math.min(res.idolHits.filter(h => h.left === 0).length, progress.idolsLeft || 0);
+  progressUnits += res.idolHits.length;
 
   if (offset !== res.removed.length) {
     throw new Error('runMove: removed (' + res.removed.length + ') не совпадает с суммой clear (' + offset + ') — ядро поля изменилось');
   }
-  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain, relics: relicsGain } };
+  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain, idols: idolsGain } };
 }
 
-/* Все обмены, дающие совпадение (проверка как в Board.findMove), и спуски идола (Board.relicDrop). */
+/* Все обмены, дающие совпадение (проверка как в Board.findMove). */
 function legalMoves(grid) {
   const out = [];
   for (let r = 0; r < Board.ROWS; r++) {
@@ -202,10 +195,9 @@ function legalMoves(grid) {
         const a = grid[r][c];
         const b = grid[r2][c2];
         if (!a || !b || a.locked || b.locked) continue;
-        const drop = Board.relicDrop(grid, { r, c }, { r: r2, c: c2 });
         grid[r][c] = b;
         grid[r2][c2] = a;
-        const ok = drop || Board.hasAnyMatch(grid);
+        const ok = Board.hasAnyMatch(grid);
         grid[r][c] = a;
         grid[r2][c2] = b;
         if (ok) out.push({ a: { r, c }, b: { r: r2, c: c2 } });
@@ -238,9 +230,11 @@ function playLevel(resolved, seed, opts) {
   let idCounter = 0;
   const nextId = () => ++idCounter;
 
-  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines, boulders: resolved.boulders, relics: resolved.relics }, rng, nextId);
+  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines, boulders: resolved.boulders, idols: resolved.idols }, rng, nextId);
   const plates = Board.makePlates(resolved.plates);
   const boulders = Board.makeBoulders(resolved.boulders);
+  const idols = Board.makeIdols(resolved.idols);
+  const cloneIdols = () => idols.map(row => row.map(v => (v ? Object.assign({}, v) : null)));
   const progress = makeProgress(resolved);
 
   let moves = 0;
@@ -260,7 +254,7 @@ function playLevel(resolved, seed, opts) {
 
     const cands = [];
     legalMoves(grid).forEach((mv, order) => {
-      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()), boulders.map(row => row.slice()));
+      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()), boulders.map(row => row.slice()), cloneIdols());
       if (r) cands.push({ mv, order, progress: r.progress, score: r.score });
     });
     if (!cands.length) break;
@@ -272,7 +266,7 @@ function playLevel(resolved, seed, opts) {
       pick = cands[Math.floor(pickRng() * top)];
     }
 
-    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates, boulders);
+    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates, boulders, idols);
     moves++;
     r.scores.forEach((v, k) => { scores[k] += v; });
     r.gained.colors.forEach((n, color) => {
@@ -281,7 +275,7 @@ function playLevel(resolved, seed, opts) {
     progress.vinesLeft -= r.gained.vines;
     progress.platesLeft -= r.gained.plates;
     progress.bouldersLeft -= r.gained.boulders;
-    progress.relicsLeft -= r.gained.relics;
+    progress.idolsLeft -= r.gained.idols;
   }
 
   return { won: isDone(progress), moves, score: scores[0], scores, shuffles };

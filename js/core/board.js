@@ -8,10 +8,6 @@
  * Камень: { id, color, special, lineDir, locked, r, c, el }. Поле el ядро не
  * трогает. locked — камень «в лианах»: не двигается (ни обменом, ни падением),
  * а совпадение или взрыв рядом лишь срывает лиану, камень остаётся на месте.
- * relic — идол (земля 5): падает и меняется местами, как камень, но не
- * совпадает, не убирается ударами и снимается с поля на нижней строке.
- * Узнаётся только по флагу: запасной путь shuffle временно даёт камням
- * отрицательные цвета.
  */
 (function (factory) {
   'use strict';
@@ -47,11 +43,11 @@
       let c = 0;
       while (c < COLS) {
         const gem = grid[r][c];
-        if (!gem || gem.relic) { c++; continue; }
+        if (!gem) { c++; continue; }
         let end = c;
         while (end + 1 < COLS) {
           const next = grid[r][end + 1];
-          if (!next || next.relic || next.color !== gem.color) break;
+          if (!next || next.color !== gem.color) break;
           end++;
         }
         const len = end - c + 1;
@@ -67,11 +63,11 @@
       let r = 0;
       while (r < ROWS) {
         const gem = grid[r][c];
-        if (!gem || gem.relic) { r++; continue; }
+        if (!gem) { r++; continue; }
         let end = r;
         while (end + 1 < ROWS) {
           const next = grid[end + 1][c];
-          if (!next || next.relic || next.color !== gem.color) break;
+          if (!next || next.color !== gem.color) break;
           end++;
         }
         const len = end - r + 1;
@@ -101,7 +97,7 @@
     const seen = new Set();
     const raw = [];
     const bad = (a, b, c, d) =>
-      !a || !b || !c || !d || a.special || b.special || c.special || d.special || a.relic ||
+      !a || !b || !c || !d || a.special || b.special || c.special || d.special ||
       a.color !== b.color || a.color !== c.color || a.color !== d.color;
     for (let r = 0; r < ROWS - 1; r++) {
       for (let c = 0; c < COLS - 1; c++) {
@@ -312,7 +308,6 @@
       if (clear.has(k)) clear.delete(k);
     });
     // Камень в лианах не удаляется: из clear он переходит в unlocks.
-    // Идола удар не берёт: его клетка просто уходит из clear.
     const voids = new Set();
     Array.from(clear).forEach(k => {
       const p = parseKey(k);
@@ -320,8 +315,6 @@
       if (!gem) {
         clear.delete(k);
         voids.add(k);
-      } else if (gem.relic) {
-        clear.delete(k);
       } else if (gem.locked) {
         clear.delete(k);
         unlocks.add(k);
@@ -536,59 +529,46 @@
     return hits;
   }
 
-  /* ---------- Идолы ----------
-     Идол — особый камень сетки без цвета (см. шапку). Засчитывается, когда
-     опустится на нижнюю строку. */
-  function makeRelic(id, r, c) {
-    return { id, relic: true, color: -1, special: null, lineDir: null, locked: false, r, c, el: null };
+  /* ---------- Идолы (земля 5) ----------
+     Слой клеток, как валуны: в сетке клетка идола пустая, камни падают
+     сквозь неё. idols[r][c] — null или { color, left }: сколько даров
+     (рядов цвета color рядом) идолу ещё нужно. list — [[r, c, color, need], …]. */
+  function makeIdols(list) {
+    const idols = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    (list || []).forEach(v => { idols[v[0]][v[1]] = { color: v[2], left: v[3] || 1 }; });
+    return idols;
   }
 
-  function relicsLeft(grid) {
+  function idolsLeft(idols) {
     let n = 0;
-    grid.forEach(row => row.forEach(g => { if (g && g.relic) n++; }));
+    idols.forEach(row => row.forEach(v => { if (v) n++; }));
     return n;
   }
 
-  /* Снимает идолов с нижней строки (клетка -> null), возвращает их. */
-  function collectRelics(grid) {
-    const got = [];
-    for (let c = 0; c < COLS; c++) {
-      const gem = grid[ROWS - 1][c];
-      if (gem && gem.relic) {
-        got.push(gem);
-        grid[ROWS - 1][c] = null;
+  /* Дар: шаг каскада plan убрал (clear) или превратил в спецкамень (creates)
+     камень цвета идола в соседней по стороне клетке. За шаг не больше одного
+     дара на идола. grid — ДО applyCascade (по нему видны цвета). Идол без
+     оставшихся даров уходит со слоя. Возвращает { r, c, left }. */
+  function feedIdols(idols, grid, plan) {
+    if (!idols) return [];
+    const cells = new Set(plan.clear);
+    (plan.creates || []).forEach(cr => cells.add(keyOf(cr.r, cr.c)));
+    const hits = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idol = idols[r][c];
+        if (!idol) continue;
+        const fed = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].some(([rr, cc]) => {
+          const gem = cells.has(keyOf(rr, cc)) && gemAt(grid, rr, cc);
+          return gem && gem.color === idol.color;
+        });
+        if (!fed) continue;
+        idol.left--;
+        hits.push({ r, c, left: idol.left });
+        if (idol.left <= 0) idols[r][c] = null;
       }
     }
-    return got;
-  }
-
-  /* Идола можно опустить на клетку вниз обменом и без ряда: иначе идол на
-     строках 5–6 ждал бы горизонтального ряда внизу (под ним нет трёх клеток
-     для вертикального). a, b — соседние клетки в любом порядке. */
-  function relicDrop(grid, a, b) {
-    const ga = gemAt(grid, a.r, a.c);
-    const gb = gemAt(grid, b.r, b.c);
-    if (!ga || !gb || a.c !== b.c || Math.abs(a.r - b.r) !== 1) return false;
-    const [up, down] = a.r < b.r ? [ga, gb] : [gb, ga];
-    return !!up.relic && !down.relic && !down.locked;
-  }
-
-  /* Обрушение до покоя: пока внизу оказываются идолы, снять их и обрушить
-     снова (два идола друг над другом снимаются оба). Игра делает тот же
-     цикл сама (js/game.js dropGems), чтобы показать каждый сбор. */
-  function settle(grid, spawn, blocked) {
-    const moves = [];
-    const spawned = [];
-    const relics = [];
-    for (let guard = 0; guard <= ROWS; guard++) {
-      const step = collapse(grid, spawn, blocked);
-      moves.push(...step.moves);
-      spawned.push(...step.spawned);
-      const got = collectRelics(grid);
-      if (!got.length) break;
-      relics.push(...got);
-    }
-    return { moves, spawned, relics };
+    return hits;
   }
 
   /* ---------- Обрушение ----------
@@ -640,15 +620,15 @@
      попыток. level.colors — число цветов (по умолчанию 6); rng() в [0,1);
      nextId() выдаёт свежие id камней. level.vines — [[r, c], …]: эти камни
      в лианах (locked); в совпадениях и ходах они участвуют как обычные.
-     level.boulders — [[r, c, hp], …]: эти клетки остаются пустыми (null).
-     level.relics — [[r, c], …]: здесь стоят идолы. */
+     level.boulders — [[r, c, hp], …] и level.idols — [[r, c, …], …]: эти
+     клетки остаются пустыми (null). */
   function generateGrid(level, rng, nextId) {
     const colors = (level && level.colors) || DEFAULT_COLORS;
     const random = rng || Math.random;
     const newId = nextId || (() => ++fallbackId);
     const vineKeys = new Set(((level && level.vines) || []).map(v => keyOf(v[0], v[1])));
-    const boulderKeys = new Set(((level && level.boulders) || []).map(v => keyOf(v[0], v[1])));
-    const relicKeys = new Set(((level && level.relics) || []).map(v => keyOf(v[0], v[1])));
+    const boulderKeys = new Set(((level && level.boulders) || []).concat((level && level.idols) || [])
+      .map(v => keyOf(v[0], v[1])));
     let grid;
     let attempts = 0;
     do {
@@ -656,10 +636,6 @@
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           if (boulderKeys.has(keyOf(r, c))) continue;
-          if (relicKeys.has(keyOf(r, c))) {
-            grid[r][c] = makeRelic(newId(), r, c);
-            continue;
-          }
           const banned = new Set();
           if (c >= 2) {
             const a = grid[r][c - 1];
@@ -711,7 +687,7 @@
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const gem = grid[r][c];
-        if (gem && !gem.locked && !gem.relic) {
+        if (gem && !gem.locked) {
           cells.push({ r, c });
           gems.push(gem);
         }
@@ -770,10 +746,10 @@
   /* ---------- Полный ход (для бота) ----------
      Обмен a<->b, затем все каскады и обрушение до успокоения. Меняет grid.
      null, если обмен недопустим (не соседи, пустая клетка или нет
-     совпадения и это не спуск идола, relicDrop) — сетка при этом остаётся как была.
+     совпадения) — сетка при этом остаётся как была.
      opts.colors — число цветов для досыпки (по умолчанию 6); opts.boulders —
-     слой валунов (меняется), задетые валуны — в boulderHits. Снятые со дна
-     идолы — в relics (в removed их нет). */
+     слой валунов (меняется), задетые валуны — в boulderHits; opts.idols —
+     слой идолов (меняется), дары — в idolHits. */
   function simulateMove(grid, a, b, rng, nextId, opts) {
     if (!a || !b) return null;
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
@@ -791,10 +767,8 @@
       ga.r = b.r; ga.c = b.c;
       gb.r = a.r; gb.c = a.c;
     };
-    const drop = relicDrop(grid, a, b);
     swap();
-    const matched = hasAnyMatch(grid);
-    if (!matched && !drop) {
+    if (!hasAnyMatch(grid)) {
       grid[a.r][a.c] = ga;
       grid[b.r][b.c] = gb;
       ga.r = a.r; ga.c = a.c;
@@ -814,23 +788,24 @@
       el: null
     });
     const boulders = opts && opts.boulders;
-    const blocked = boulders ? (r, c) => boulders[r][c] > 0 : null;
+    const idols = opts && opts.idols;
+    const blocked = (boulders || idols)
+      ? (r, c) => (boulders && boulders[r][c] > 0) || !!(idols && idols[r][c])
+      : null;
     const cascades = [];
     const removed = [];
     const boulderHits = [];
-    const relics = [];
-    // Спуск идола без ряда: снять его, если он уже на дне. При ряде так
-    // нельзя — обрушение столбца разорвало бы ряд поднявшегося камня.
-    if (!matched) relics.push(...settle(grid, spawn, blocked).relics);
+    const idolHits = [];
     for (let guard = 0; guard < 200; guard++) {
       const plan = planCascade(grid, swapCell);
       if (!plan) break;
       cascades.push(plan);
+      if (idols) idolHits.push(...feedIdols(idols, grid, plan));
       removed.push(...applyCascade(grid, plan).removed);
       if (boulders) boulderHits.push(...hitBoulders(boulders, plan));
-      relics.push(...settle(grid, spawn, blocked).relics);
+      collapse(grid, spawn, blocked);
     }
-    return { cascades, removed, boulderHits, relics };
+    return { cascades, removed, boulderHits, idolHits };
   }
 
   return {
@@ -856,11 +831,9 @@
     makeBoulders,
     bouldersLeft,
     hitBoulders,
-    makeRelic,
-    relicDrop,
-    relicsLeft,
-    collectRelics,
-    settle,
+    makeIdols,
+    idolsLeft,
+    feedIdols,
     collapse,
     generateGrid,
     shuffle,
