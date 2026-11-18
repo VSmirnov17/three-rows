@@ -533,6 +533,8 @@
      Слой клеток, как валуны: в сетке клетка идола пустая, камни падают
      сквозь неё. idols[r][c] — null или { color, left }: сколько даров
      (рядов цвета color рядом) идолу ещё нужно. list — [[r, c, color, need], …]. */
+  const AROUND = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+
   function makeIdols(list) {
     const idols = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
     (list || []).forEach(v => { idols[v[0]][v[1]] = { color: v[2], left: v[3] || 1 }; });
@@ -546,7 +548,7 @@
   }
 
   /* Дар: шаг каскада plan убрал (clear) или превратил в спецкамень (creates)
-     камень цвета идола в соседней по стороне клетке. За шаг не больше одного
+     камень цвета идола в одной из восьми клеток вокруг (и по диагонали). За шаг не больше одного
      дара на идола. grid — ДО applyCascade (по нему видны цвета). Идол без
      оставшихся даров уходит со слоя. Возвращает { r, c, left }. */
   function feedIdols(idols, grid, plan) {
@@ -558,7 +560,9 @@
       for (let c = 0; c < COLS; c++) {
         const idol = idols[r][c];
         if (!idol) continue;
-        const fed = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].some(([rr, cc]) => {
+        const fed = AROUND.some(([dr, dc]) => {
+          const rr = r + dr;
+          const cc = c + dc;
           const gem = cells.has(keyOf(rr, cc)) && gemAt(grid, rr, cc);
           return gem && gem.color === idol.color;
         });

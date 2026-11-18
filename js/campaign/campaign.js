@@ -84,8 +84,8 @@
     /* Валуны — [r, c, прочность] */
     const boulders = (lv.boulders || []).concat((hard && lv.challenge && lv.challenge.boulders) || [])
       .map(v => [v[0], v[1], v[2] || 1]);
-    /* Идолы — [r, c, цвет, даров]; на «Испытании» каждому нужен ещё один дар */
-    const idols = (lv.idols || []).map(v => [v[0], v[1], v[2], (v[3] || 1) + (hard ? 1 : 0)]);
+    /* Идолы — [r, c, цвет, даров] (на всех сложностях одинаковые) */
+    const idols = (lv.idols || []).map(v => [v[0], v[1], v[2], v[3] || 1]);
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };

@@ -255,13 +255,13 @@ test('в земле 5 в каждом уровне есть идолы и цел
   });
 });
 
-test('resolve: идолы с цветом и дарами, need = число идолов, на challenge даров на один больше', () => {
+test('resolve: идолы с цветом и дарами, need = число идолов, на всех сложностях одинаково', () => {
   const base = Campaign.level('5-04').idols;
   const normal = Campaign.resolve('5-04', 'normal');
   const hard = Campaign.resolve('5-04', 'challenge');
   assert.deepEqual(normal.idols, base);
   assert.equal(normal.goals.find(g => g.type === 'idols').need, base.length);
-  assert.deepEqual(hard.idols.map(v => v[3]), base.map(v => v[3] + 1));
+  assert.deepEqual(hard.idols, base);
   assert.deepEqual(Campaign.resolve('1-01', 'normal').idols, []);
 });
 
