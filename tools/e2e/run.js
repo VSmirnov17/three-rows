@@ -1814,7 +1814,13 @@ async function smokeFile(bt, bname) {
         await ev(page, () => { window.Story.play(window.Story.PROLOGUE_ID, window.Story.sceneLines(window.Story.PROLOGUE_ID)); });
         await page.waitForSelector('#storyScreen.show');
         await page.waitForFunction(() => document.getElementById('storyText').classList.contains('shown'));
-        await page.waitForTimeout(700); // плита доехала
+        // Плита доехала: ждём конца её анимаций, а не жёсткие 700 мс
+        // (в нагруженном Firefox выезд не успевал, карточка мерилась на полпути)
+        await page.waitForFunction(() => {
+          const card = document.querySelector('#storyScreen .story-card');
+          return card && card.getAnimations({ subtree: true }).every(a => a.playState !== 'running');
+        }, null, { timeout: 3000 });
+        await page.waitForTimeout(100);
         const m = await ev(page, () => {
           const rect = el => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
           const img = document.querySelector('#storyScreen .story-portrait');
