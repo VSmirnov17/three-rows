@@ -2290,6 +2290,163 @@ async function smokeFile(bt, bname) {
       return notes.join('; ');
     });
 
+    await scenario(bname, '18 land 5 relics: board, goals, collect, stacked, blast, reshuffle, win gate, phone, reduced', async () => {
+      const notes = [];
+      const idols = (page) => ev(page, () => {
+        const S = window.__SUN;
+        const holes = [];
+        S.state.grid.forEach((row, r) => row.forEach((g, c) => {
+          const rock = S.state.boulders[r][c] > 0;
+          if (!!g === rock) holes.push([r, c]);
+        }));
+        return {
+          state: S.relics(),
+          ids: S.state.grid.flat().filter(g => g && g.relic).map(g => g.id).sort(),
+          nodes: document.querySelectorAll('#tiles .gem.relic:not(.relic-take)').length,
+          taking: document.querySelectorAll('#tiles .gem.relic-take').length,
+          holes
+        };
+      });
+      const chipOf = (page) => ev(page, () => {
+        const chips = document.querySelectorAll('.goal-chip.goal-relics');
+        return { n: chips.length, text: chips[0] ? chips[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+      });
+      let stage = 'start';
+      const idle = async (page) => {
+        try {
+          await page.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        } catch (e) {
+          throw new Error('busy at ' + stage);
+        }
+      };
+
+      // ---- 5-04: идолы на поле и в целях ----
+      const key = 's18';
+      const { ctx, page } = await newPage(browser, bname, key);
+      await startFresh(page, HTTP);
+      await ev(page, () => { window.__SUN.start('5-04'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const want = await ev(page, () => window.Campaign.level('5-04').relics.length);
+      const d0 = await idols(page);
+      assert(d0.state.length === want && d0.nodes === want && d0.holes.length === 0, '5-04 relics: ' + JSON.stringify(d0));
+      const c0 = await chipOf(page);
+      assert(c0.n === 1 && c0.text.includes('Идолы') && c0.text.includes('0 / ' + want), '5-04 chip: ' + JSON.stringify(c0));
+      const hint = await page.textContent('#hintBar');
+      assert(hint.includes('идолами'), 'hint: ' + hint);
+      const look = await ev(page, () => {
+        const n = document.querySelector('#tiles .gem.relic');
+        const img = n.querySelector('img');
+        return { loaded: img.complete && img.naturalWidth > 0, src: img.getAttribute('src'), halo: getComputedStyle(n, '::before').backgroundImage };
+      });
+      assert(look.loaded && /relic\.webp/.test(look.src) && /gradient/.test(look.halo), 'relic look: ' + JSON.stringify(look));
+      await shot(page, bname, 'desktop-relics-level');
+
+      stage = 'collect';
+      // ---- идол над нижней строкой: молния по строке 7 опускает его на дно, он снят ----
+      await ev(page, () => window.__SUN.setRelic(6, 3));
+      await ev(page, async () => { await window.__SUN.strike(7, 0, 'line', 'row'); });
+      await idle(page);
+      await page.waitForTimeout(700);
+      const d1 = await idols(page);
+      assert(d1.state.length === want && d1.nodes === want && d1.taking === 0 && d1.holes.length === 0, 'after collect: ' + JSON.stringify(d1));
+      assert(d1.state.every(([r]) => r < 7), 'relic left on bottom row: ' + JSON.stringify(d1.state));
+      const c1 = await chipOf(page);
+      assert(c1.text.includes('1 / ' + want), 'chip after collect: ' + JSON.stringify(c1));
+
+      stage = 'stacked';
+      // ---- два идола друг над другом снимаются оба ----
+      await ev(page, () => { window.__SUN.state.goals.forEach(g => { if (g.type === 'relics') g.got = 0; }); });
+      await ev(page, () => { window.__SUN.setRelic(5, 5); window.__SUN.setRelic(6, 5); });
+      await ev(page, async () => { await window.__SUN.strike(7, 0, 'line', 'row'); });
+      await idle(page);
+      await page.waitForTimeout(700);
+      const d2 = await idols(page);
+      assert(d2.state.length === want && d2.taking === 0 && d2.holes.length === 0, 'after stacked: ' + JSON.stringify(d2));
+      const got2 = await ev(page, () => window.__SUN.state.goals.find(g => g.type === 'relics').got);
+      assert(got2 === Math.min(2, want), 'stacked got ' + got2);
+      notes.push('stacked x2');
+
+      stage = 'blast';
+      // ---- бомба рядом с идолом его не берёт ----
+      await ev(page, () => window.__SUN.setRelic(3, 3));
+      const idsBefore = (await idols(page)).ids;
+      await ev(page, async () => { await window.__SUN.strike(3, 4, 'bomb'); });
+      await idle(page);
+      await page.waitForTimeout(400);
+      const d3 = await idols(page);
+      assert(JSON.stringify(d3.ids) === JSON.stringify(idsBefore) && d3.holes.length === 0, 'blast took relic: ' + JSON.stringify(d3));
+
+      stage = 'reshuffle';
+      // ---- перемешивание не двигает идолов ----
+      const posBefore = JSON.stringify((await idols(page)).state);
+      await ev(page, async () => { await window.__SUN.reshuffleBoard(false, true); window.__SUN.state.busy = false; });
+      await idle(page);
+      const d4 = await idols(page);
+      assert(JSON.stringify(d4.state) === posBefore && d4.holes.length === 0, 'reshuffle moved relics: ' + JSON.stringify(d4));
+
+      stage = 'wingate';
+      // ---- нельзя выиграть, пока идолы на поле; повтор без остатков ----
+      await ev(page, () => { window.__SUN.start('5-01'); });
+      await waitStarted(page);
+      await idle(page);
+      const want1 = await ev(page, () => window.Campaign.level('5-01').relics.length);
+      const d5 = await idols(page);
+      assert(d5.state.length === want1 && d5.nodes === want1, 'retry 5-01 leftovers: ' + JSON.stringify(d5));
+      const ended = await ev(page, () => {
+        const S = window.__SUN;
+        S.state.goals.forEach(g => { if (g.type === 'color') g.got = g.need; });
+        S.checkEnd();
+        const a = S.state.ended;
+        S.state.goals.forEach(g => { g.got = g.need; });
+        S.checkEnd();
+        return [a, S.state.ended];
+      });
+      assert(ended[0] === false && ended[1] === true, 'win gate: ' + JSON.stringify(ended));
+
+      // ---- земли 1–4 без идолов ----
+      await ev(page, () => { window.__SUN.start('4-01'); });
+      await waitStarted(page);
+      const d6 = await ev(page, () => ({ nodes: document.querySelectorAll('.gem.relic').length, chip: document.querySelectorAll('.goal-relics').length }));
+      assert(d6.nodes === 0 && d6.chip === 0, '4-01 has relics: ' + JSON.stringify(d6));
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(errs.length === 0, 'console: ' + errs.join(' | '));
+
+      // ---- телефон 390×844 ----
+      {
+        const { ctx: pc, page: pp } = await newPage(browser, bname, 's18-phone', { width: 390, height: 844 });
+        await startFresh(pp, HTTP);
+        await ev(pp, () => { window.__SUN.start('5-01'); });
+        await waitStarted(pp);
+        await pp.waitForTimeout(300);
+        const box = await ev(pp, () => {
+          const n = document.querySelector('#tiles .gem.relic');
+          const t = document.getElementById('tiles').getBoundingClientRect();
+          return { w: n.getBoundingClientRect().width, cell: t.width / 8, wide: document.documentElement.scrollWidth > innerWidth };
+        });
+        assert(Math.abs(box.w - box.cell) < 2 && !box.wide, 'phone: ' + JSON.stringify(box));
+        await shot(pp, bname, 'phone-relics-level');
+        await pc.close();
+        notes.push('phone cell ' + box.cell.toFixed(1) + 'px');
+      }
+
+      // ---- «уменьшить движение»: снятый идол исчезает сразу ----
+      {
+        const { ctx: rc, page: rp } = await newPage(browser, bname, 's18-reduced', undefined, { reducedMotion: true });
+        await startFresh(rp, HTTP);
+        await ev(rp, () => { window.__SUN.start('5-04'); });
+        await waitStarted(rp);
+        await ev(rp, () => window.__SUN.setRelic(6, 3));
+        await ev(rp, async () => { await window.__SUN.strike(7, 0, 'line', 'row'); });
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        const n = await ev(rp, () => document.querySelectorAll('#tiles .gem.relic-take').length);
+        assert(n === 0, 'reduced: relic nodes left ' + n);
+        await rc.close();
+      }
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
