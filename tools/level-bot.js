@@ -190,7 +190,7 @@ function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, b
   return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain, relics: relicsGain } };
 }
 
-/* Все обмены, дающие совпадение (проверка как в Board.findMove). */
+/* Все обмены, дающие совпадение (проверка как в Board.findMove), и спуски идола (Board.relicDrop). */
 function legalMoves(grid) {
   const out = [];
   for (let r = 0; r < Board.ROWS; r++) {
@@ -202,9 +202,10 @@ function legalMoves(grid) {
         const a = grid[r][c];
         const b = grid[r2][c2];
         if (!a || !b || a.locked || b.locked) continue;
+        const drop = Board.relicDrop(grid, { r, c }, { r: r2, c: c2 });
         grid[r][c] = b;
         grid[r2][c2] = a;
-        const ok = Board.hasAnyMatch(grid);
+        const ok = drop || Board.hasAnyMatch(grid);
         grid[r][c] = a;
         grid[r2][c2] = b;
         if (ok) out.push({ a: { r, c }, b: { r: r2, c: c2 } });

@@ -2333,7 +2333,7 @@ async function smokeFile(bt, bname) {
       const c0 = await chipOf(page);
       assert(c0.n === 1 && c0.text.includes('Идолы') && c0.text.includes('0 / ' + want), '5-04 chip: ' + JSON.stringify(c0));
       const hint = await page.textContent('#hintBar');
-      assert(hint.includes('идолами'), 'hint: ' + hint);
+      assert(hint.includes('Тяни идола вниз'), 'hint: ' + hint);
       const look = await ev(page, () => {
         const n = document.querySelector('#tiles .gem.relic');
         const img = n.querySelector('img');
@@ -2353,6 +2353,27 @@ async function smokeFile(bt, bname) {
       assert(d1.state.every(([r]) => r < 7), 'relic left on bottom row: ' + JSON.stringify(d1.state));
       const c1 = await chipOf(page);
       assert(c1.text.includes('1 / ' + want), 'chip after collect: ' + JSON.stringify(c1));
+
+      stage = 'drag';
+      // ---- идол тянут вниз мышью: снят и без ряда ----
+      await ev(page, () => window.__SUN.setRelic(6, 4));
+      const p6 = await ev(page, () => {
+        const b = document.getElementById('tiles').getBoundingClientRect();
+        return { x: b.left + 4.5 * b.width / 8, y: b.top + 6.5 * b.height / 8, step: b.height / 8 };
+      });
+      await page.mouse.move(p6.x, p6.y);
+      await page.mouse.down();
+      await page.mouse.move(p6.x, p6.y + p6.step * 0.4, { steps: 3 });
+      await page.mouse.move(p6.x, p6.y + p6.step * 0.9, { steps: 3 });
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+      await idle(page);
+      await page.waitForTimeout(700);
+      const dd = await idols(page);
+      assert(dd.state.length === want && dd.taking === 0 && dd.holes.length === 0, 'after drag: ' + JSON.stringify(dd));
+      const cd = await chipOf(page);
+      assert(cd.text.includes('2 / ' + want), 'chip after drag: ' + JSON.stringify(cd));
+      notes.push('drag down');
 
       stage = 'stacked';
       // ---- два идола друг над другом снимаются оба ----

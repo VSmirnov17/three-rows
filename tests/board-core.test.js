@@ -936,3 +936,26 @@ test('settle: идол над валуном в нижней строке ждё
   assert.ok(grid[6][0].relic);
   assert.equal(grid[7][0], null);
 });
+
+test('relicDrop: идола можно опустить вниз без ряда; вверх и вбок — нельзя', () => {
+  const rows = CHECKER.slice();
+  rows[6] = '2i323232';
+  const grid = gridFrom(rows);
+  assert.equal(Board.relicDrop(grid, { r: 6, c: 1 }, { r: 7, c: 1 }), true);
+  assert.equal(Board.relicDrop(grid, { r: 7, c: 1 }, { r: 6, c: 1 }), true);
+  assert.equal(Board.relicDrop(grid, { r: 6, c: 1 }, { r: 5, c: 1 }), false);
+  assert.equal(Board.relicDrop(grid, { r: 6, c: 1 }, { r: 6, c: 2 }), false);
+  grid[7][1].locked = true;
+  assert.equal(Board.relicDrop(grid, { r: 6, c: 1 }, { r: 7, c: 1 }), false, 'камень в лианах не поднять');
+});
+
+test('simulateMove: идол опущен на дно без ряда — снят, дыр нет; вверх без ряда — null', () => {
+  const rows = CHECKER.slice();
+  rows[6] = '2i323232';
+  const grid = gridFrom(rows);
+  assert.equal(Board.simulateMove(grid, { r: 6, c: 1 }, { r: 5, c: 1 }, seeded(1), counter(), { colors: 6 }), null);
+  const res = Board.simulateMove(grid, { r: 6, c: 1 }, { r: 7, c: 1 }, seeded(1), counter(), { colors: 6 });
+  assert.ok(res);
+  assert.equal(res.relics.length, 1);
+  grid.forEach((row, r) => row.forEach((g, c) => assert.ok(g && !g.relic && g.r === r && g.c === c, r + ',' + c)));
+});

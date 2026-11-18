@@ -151,7 +151,7 @@
     plates: 'Собирай ряды на золотых плитах. Очисти все плиты',
     boulders: 'Собирай ряды рядом с валунами. Разбей все валуны',
     boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет',
-    relics: 'Собирай ряды под идолами. Опусти всех идолов на дно'
+    relics: 'Тяни идола вниз или собирай ряды под ним. Опусти всех на дно'
   };
 
   /* Подсказка уровня: обучение новой механики земли (идолы — земля 5,
@@ -958,6 +958,8 @@
     clearHints();
     state.swapCell = null;
 
+    // Идола можно опустить вниз и без ряда (Board.relicDrop)
+    const drop = Board.relicDrop(state.grid, a, b);
     SFX.swap();
     state.grid[a.r][a.c] = gb;
     state.grid[b.r][b.c] = ga;
@@ -967,7 +969,8 @@
     applyPos(gb);
     await sleep(240);
 
-    if (!hasAnyMatch()) {
+    const matched = hasAnyMatch();
+    if (!matched && !drop) {
       SFX.invalid();
       flashHint(hintMessages.bad, 'bad', 1600);
       dom.boardFrame.classList.add('shake');
@@ -986,6 +989,8 @@
     }
 
     state.swapCell = { r: b.r, c: b.c };
+    // Спуск без ряда: идол на дне снимается здесь (при ряде — после каскада)
+    if (!matched) await dropGems();
     const maxChain = await resolveBoard();
     state.busy = false;
     state.lastAction = now();

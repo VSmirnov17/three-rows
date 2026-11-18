@@ -562,6 +562,17 @@
     return got;
   }
 
+  /* Идола можно опустить на клетку вниз обменом и без ряда: иначе идол на
+     строках 5–6 ждал бы горизонтального ряда внизу (под ним нет трёх клеток
+     для вертикального). a, b — соседние клетки в любом порядке. */
+  function relicDrop(grid, a, b) {
+    const ga = gemAt(grid, a.r, a.c);
+    const gb = gemAt(grid, b.r, b.c);
+    if (!ga || !gb || a.c !== b.c || Math.abs(a.r - b.r) !== 1) return false;
+    const [up, down] = a.r < b.r ? [ga, gb] : [gb, ga];
+    return !!up.relic && !down.relic && !down.locked;
+  }
+
   /* Обрушение до покоя: пока внизу оказываются идолы, снять их и обрушить
      снова (два идола друг над другом снимаются оба). Игра делает тот же
      цикл сама (js/game.js dropGems), чтобы показать каждый сбор. */
@@ -759,7 +770,7 @@
   /* ---------- Полный ход (для бота) ----------
      Обмен a<->b, затем все каскады и обрушение до успокоения. Меняет grid.
      null, если обмен недопустим (не соседи, пустая клетка или нет
-     совпадения) — сетка при этом остаётся как была.
+     совпадения и это не спуск идола, relicDrop) — сетка при этом остаётся как была.
      opts.colors — число цветов для досыпки (по умолчанию 6); opts.boulders —
      слой валунов (меняется), задетые валуны — в boulderHits. Снятые со дна
      идолы — в relics (в removed их нет). */
@@ -780,8 +791,10 @@
       ga.r = b.r; ga.c = b.c;
       gb.r = a.r; gb.c = a.c;
     };
+    const drop = relicDrop(grid, a, b);
     swap();
-    if (!hasAnyMatch(grid)) {
+    const matched = hasAnyMatch(grid);
+    if (!matched && !drop) {
       grid[a.r][a.c] = ga;
       grid[b.r][b.c] = gb;
       ga.r = a.r; ga.c = a.c;
@@ -806,6 +819,9 @@
     const removed = [];
     const boulderHits = [];
     const relics = [];
+    // Спуск идола без ряда: снять его, если он уже на дне. При ряде так
+    // нельзя — обрушение столбца разорвало бы ряд поднявшегося камня.
+    if (!matched) relics.push(...settle(grid, spawn, blocked).relics);
     for (let guard = 0; guard < 200; guard++) {
       const plan = planCascade(grid, swapCell);
       if (!plan) break;
@@ -841,6 +857,7 @@
     bouldersLeft,
     hitBoulders,
     makeRelic,
+    relicDrop,
     relicsLeft,
     collectRelics,
     settle,
