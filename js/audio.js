@@ -4,7 +4,7 @@
 
   const MUSIC_BPM = 84;
   const STEP = 60 / MUSIC_BPM / 4;
-  const LOOP_STEPS = 64;
+  const LOOP_STEPS = 256; // 16 тактов с четырьмя вариациями
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const midi = n => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -81,7 +81,7 @@
 
       /* Мастер-цепочка с мягкой компрессией, чтобы взрывы не клиппили */
       this.master = ctx.createGain();
-      this.master.gain.value = 0.9;
+      this.master.gain.value = this.muted ? 0 : 0.9;
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14;
       comp.knee.value = 24;
@@ -101,7 +101,7 @@
       const sfxReverb = ctx.createConvolver();
       sfxReverb.buffer = this.makeImpulse(2.2, 2.6);
       const sfxWet = ctx.createGain();
-      sfxWet.gain.value = 0.55;
+      sfxWet.gain.value = 0.25;
       this.sfxSend.connect(sfxReverb);
       sfxReverb.connect(sfxWet);
       sfxWet.connect(this.master);
@@ -225,6 +225,17 @@
         this.ensure();
         if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
         if (this.musicDesired) this.musicStart();
+      }
+      // Мастер глушит обе реверберации, включая уже запущенные хвосты.
+      if (this.master) {
+        const t = this.ctx.currentTime;
+        const g = this.master.gain;
+        if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t);
+        else {
+          g.cancelScheduledValues(t);
+          g.setValueAtTime(g.value, t);
+        }
+        g.linearRampToValueAtTime(muted ? 0 : 0.9, t + 0.04);
       }
       this.urgencyLevel = muted ? 0 : this.urgencyRequested;
       if (!this.muted && this.urgencyLevel > 0 && !this.urgencyNodes) this.startUrgency();
@@ -465,49 +476,60 @@
     },
 
     scheduleStep(step, time) {
-      const bar = Math.floor(step / 16) % 4;
+      const absoluteBar = Math.floor(step / 16);
+      const phrase = Math.floor(absoluteBar / 4);
+      const bar = absoluteBar % 4;
       const pos = step % 16;
       const chord = CHORDS[bar];
       const energy = this.energy;
+      const inGame = this.scene === 'game';
+      const intensity = inGame ? 1 : 0.55;
+      const arpOffset = [0, 2, 5, 1][phrase % 4];
 
       if (pos === 0) {
         chord.notes.forEach((n, i) => {
           this.pad(midi(n - 12), time, STEP * 16, 0.026, i);
         });
-        this.bass(midi(chord.root - 12), time, 0.55, 0.16);
+        this.bass(midi(chord.root), time, 0.55, 0.12 * intensity);
         this.noiseHit({
           time, dur: STEP * 16, gain: 0.018, type: 'bandpass',
           f0: 320, f1: 1100, q: 0.5, send: 0.9, bus: 'music'
         });
       }
-      if (pos === 8) this.bass(midi(chord.root - 12), time, 0.45, 0.11);
-      if (pos === 6 || pos === 14) this.bass(midi(chord.root - 5), time, 0.3, 0.06);
+      if (pos === 8) this.bass(midi(chord.root), time, 0.45, 0.085 * intensity);
+      if (inGame && (pos === 6 || pos === 14)) this.bass(midi(chord.root + 7), time, 0.3, 0.045);
 
-      if (pos % 2 === 0) {
-        const idx = ARP[((pos / 2) + bar * 2) % ARP.length] % chord.scale.length;
+      if (pos % 2 === 0 && (inGame || pos % 4 === 0) && !(phrase === 2 && pos === 14)) {
+        const idx = ARP[((pos / 2) + bar * 2 + arpOffset) % ARP.length] % chord.scale.length;
         const note = chord.scale[idx];
-        this.marimba(midi(note), time, 0.06 + energy * 0.03, pos === 0 ? 0.7 : 0.45);
+        this.marimba(midi(note), time, (0.06 + energy * 0.03) * intensity, pos === 0 ? 0.7 : 0.45);
         if (energy > 0.45 && pos % 4 === 2) {
           this.marimba(midi(note + 12), time + STEP * 0.5, 0.03, 0.5);
         }
       }
 
-      if (pos === 0 && (bar === 1 || bar === 3)) {
-        const phrase = MELODIES[bar === 1 ? 0 : 1];
-        phrase.forEach(n => {
+      if (pos === 0 && (bar === 1 || bar === 3) && (inGame || phrase % 2 === 1)) {
+        const melody = MELODIES[(bar === 1 ? 0 : 1) ^ (phrase % 2)];
+        melody.forEach(n => {
           this.flute(midi(n.n), time + n.at * STEP, n.d * STEP, 0.05, 0.7);
         });
       }
 
+      // Меню — редкие удары; игровая перкуссия раскрывается после старта.
+      if (!inGame) {
+        if (pos === 0 && bar % 2 === 0) this.drum(time, 0.08, 0.9);
+        return;
+      }
       if (pos === 0) this.drum(time, 0.22 + energy * 0.08, 1);
       if (pos === 4) this.drum(time, 0.1, 0.82);
       if (pos === 8) this.drum(time, 0.18 + energy * 0.06, 0.95);
-      if (pos === 11) this.drum(time, 0.07, 1.18);
+      if (pos === (phrase % 2 ? 10 : 11)) this.drum(time, 0.07, 1.18);
       if (pos === 14) this.drum(time, 0.09, 0.9);
 
       if (pos % 2 === 0) this.shaker(time, pos % 4 === 0 ? 0.05 : 0.028);
       if (energy > 0.35 && pos % 2 === 1) this.shaker(time, 0.018);
       if (pos === 6 || pos === 14) this.wood(time, 0.035);
+      if (phrase === 3 && bar === 3 && pos === 15) this.wood(time, 0.055);
     },
 
     connectMusic(node, wet) {
@@ -558,7 +580,7 @@
       sub.type = 'sine';
       sub.frequency.value = freq / 2;
       const subGain = ctx.createGain();
-      subGain.gain.value = 0.35;
+      subGain.gain.value = 0.18;
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = 320;
@@ -570,7 +592,7 @@
       sub.connect(subGain);
       subGain.connect(filter);
       filter.connect(g);
-      this.connectMusic(g, 0.2);
+      this.connectMusic(g, 0.08);
       o.start(time);
       sub.start(time);
       o.stop(time + dur + 0.05);

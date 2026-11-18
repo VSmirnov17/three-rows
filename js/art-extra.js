@@ -20,7 +20,7 @@
       { x: 94, y: 8, s: 0.9, r: -40, o: 0.38 },
     ];
 
-    const scenery = `<img class="scenery-img" src="assets/art/jungle.png" alt="" draggable="false">`;
+    const scenery = `<img class="scenery-img" src="assets/art/jungle-temple.webp" alt="" draggable="false">`;
 
     return scenery + spots.map(p => `<span class="leaf" style="left:${p.x}%;top:${p.y}%;width:${p.s * 160}px;opacity:${p.o};transform:rotate(${p.r}deg)">
       <img src="assets/art/leaf.png" alt="" draggable="false">
