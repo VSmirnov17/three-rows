@@ -1646,8 +1646,8 @@ async function suite(bt, bname, url) {
         await page.waitForTimeout(150);
         const mid = await ev(page, (sel) => ({ nodes: document.querySelectorAll(sel).length, parts: window.Fx.particles() }), FXLEFT);
         assert(mid.nodes + mid.parts > 0, `пауза ${type}: на 150 мс удара ещё ничего нет, проверка пустая`);
-        // Кнопка паузы во время хода не работает (pauseGame отказывает при busy), поэтому
-        // оверлей открываем так же, как это делают экраны игры: через Game.openOverlay
+        // Кнопка паузы во время хода только ставит паузу в очередь (сценарий «queued pause»),
+        // поэтому оверлей посреди удара открываем так же, как экраны игры: через Game.openOverlay
         await ev(page, () => window.Game.openOverlay('pauseScreen'));
         await page.waitForSelector('#pauseScreen.show');
         await page.waitForTimeout(60);
@@ -1667,6 +1667,40 @@ async function suite(bt, bname, url) {
       await ctx.close();
       assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
       return 'pause mid-strike: ' + out.join(', ');
+    });
+
+    // Кнопка «Меню» посреди хода: пауза ждёт конца хода, время пока стоит
+    await scenario(bname, '13 strikes queued pause: menu during a move opens pause after it', async () => {
+      const key = 's13queue';
+      const { ctx, page } = await newPage(browser, bname, key, { width: 1366, height: 768 });
+      await startNormal(page);
+      await ev(page, () => {
+        const S = window.__SUN;
+        S.state.grid.flat().forEach(g => { if (g && g.special) { g.special = null; g.lineDir = null; } });
+        window.__queueRun = S.strike(4, 4, 'bomb');
+      });
+      await page.waitForTimeout(100);
+      const mid = await ev(page, () => {
+        document.getElementById('menuBtn').click();
+        const s = window.__SUN.state;
+        return { busy: s.busy, req: s.pauseRequested, shown: document.getElementById('pauseScreen').classList.contains('show'), t: s.timeLeft, hint: document.getElementById('hintBar').textContent };
+      });
+      assert(mid.busy, 'на 100 мс удара ход уже кончился, проверка пустая');
+      assert(mid.req && !mid.shown, `посреди хода: запрос ${mid.req}, окно паузы ${mid.shown}`);
+      assert(/Пауза после хода/.test(mid.hint), 'подсказка: ' + mid.hint);
+      await page.waitForTimeout(300);
+      const t2 = await ev(page, () => window.__SUN.state.timeLeft);
+      assert(t2 === mid.t, `время шло во время запроса паузы: ${mid.t} -> ${t2}`);
+      await ev(page, () => window.__queueRun);
+      await page.waitForSelector('#pauseScreen.show', { timeout: 3000 });
+      const after = await ev(page, () => ({ paused: window.__SUN.state.paused, req: window.__SUN.state.pauseRequested }));
+      assert(after.paused && !after.req, 'после хода: ' + JSON.stringify(after));
+      await page.click('#resumeBtn');
+      await page.waitForFunction(() => !__SUN.state.paused && __SUN.state.running && !document.querySelector('#pauseScreen.show'), null, { timeout: 3000 });
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(!errs.length, 'ошибки консоли: ' + errs.join(' | '));
+      return `queued pause: timer held at ${mid.t.toFixed(1)}, overlay after move`;
     });
 
     // Телефон 390×844: центр .fx-bomb в 5 % клетки от центра клетки удара
