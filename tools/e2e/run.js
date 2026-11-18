@@ -2290,6 +2290,174 @@ async function smokeFile(bt, bname) {
       return notes.join('; ');
     });
 
+    await scenario(bname, '18 land 5 idols: board, goals, gift, wake, refuse, reshuffle, win gate, phone, reduced', async () => {
+      const notes = [];
+      const idolsOf = (page) => ev(page, () => {
+        const S = window.__SUN;
+        const holes = [];
+        S.state.grid.forEach((row, r) => row.forEach((g, c) => {
+          const fixed = S.state.boulders[r][c] > 0 || !!S.state.idols[r][c];
+          if (!!g === fixed) holes.push([r, c]);
+        }));
+        return {
+          live: document.querySelectorAll('#boulders .idol:not(.break)').length,
+          all: document.querySelectorAll('#boulders .idol').length,
+          state: S.idols(),
+          holes
+        };
+      });
+      const chipOf = (page) => ev(page, () => {
+        const chips = document.querySelectorAll('.goal-chip.goal-idols');
+        return { n: chips.length, text: chips[0] ? chips[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+      });
+      let stage = 'start';
+      const idle = async (page) => {
+        try {
+          await page.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        } catch (e) {
+          throw new Error('busy at ' + stage);
+        }
+      };
+      const cellXY = (page, r, c) => ev(page, ([r, c]) => {
+        const b = document.getElementById('tiles').getBoundingClientRect();
+        return { x: b.left + (c + 0.5) * b.width / 8, y: b.top + (r + 0.5) * b.height / 8, step: b.width / 8 };
+      }, [r, c]);
+      const gridIds = (page) => ev(page, () => window.__SUN.state.grid.map(row => row.map(g => (g ? g.id : 0)).join(',')).join(';'));
+      // Камень над идолом (4,4) — цвета идола, затем молния по строке 3
+      const gift = (page, color) => ev(page, async (color) => {
+        window.__SUN.state.grid[3][4].color = color;
+        await window.__SUN.strike(3, 0, 'line', 'row');
+      }, color);
+
+      // ---- 5-01: идолы на поле и в целях ----
+      const key = 's18';
+      const { ctx, page } = await newPage(browser, bname, key);
+      await startFresh(page, HTTP);
+      await ev(page, () => { window.__SUN.start('5-01'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const lv = await ev(page, () => window.Campaign.resolve('5-01', 'calm').idols);
+      const d0 = await idolsOf(page);
+      assert(d0.live === lv.length && JSON.stringify(d0.state) === JSON.stringify(lv) && d0.holes.length === 0, '5-01 idols: ' + JSON.stringify(d0));
+      const c0 = await chipOf(page);
+      assert(c0.n === 1 && c0.text.includes('Идолы') && c0.text.includes('0 / ' + lv.length), '5-01 chip: ' + JSON.stringify(c0));
+      const hint = await page.textContent('#hintBar');
+      assert(hint.includes('рядом с идолом'), 'hint: ' + hint);
+      const look = await ev(page, () => Array.from(document.querySelectorAll('#boulders .idol')).map(n => {
+        const img = n.querySelector('.idol-img');
+        return { loaded: img.complete && img.naturalWidth > 0, c: n.style.getPropertyValue('--c'), left: n.querySelector('.idol-left text').textContent };
+      }));
+      assert(look.every((x, i) => x.loaded && x.c && x.left === String(lv[i][3])), 'idol look: ' + JSON.stringify(look));
+      await shot(page, bname, 'desktop-idols-level');
+
+      stage = 'gift';
+      // ---- дар своего цвета: 2 -> 1 -> 0, идол уходит, клетка досыпается ----
+      await ev(page, () => window.__SUN.setIdols([[4, 4, 2, 2]]));
+      await idle(page);
+      const lefts = [2];
+      for (let i = 0; i < 2 && lefts[lefts.length - 1] > 0; i++) {
+        await gift(page, 2);
+        await idle(page);
+        const st = (await idolsOf(page)).state;
+        lefts.push(st.length ? st[0][3] : 0);
+      }
+      assert(lefts[lefts.length - 1] === 0 && lefts.every((v, i) => i === 0 || v < lefts[i - 1]), 'gifts ' + JSON.stringify(lefts));
+      notes.push('left ' + lefts.join('>'));
+      await page.waitForTimeout(850);
+      const d1 = await idolsOf(page);
+      assert(d1.all === 0 && d1.holes.length === 0, 'after wake: ' + JSON.stringify(d1));
+      const c1 = await chipOf(page);
+      assert(c1.text.includes('1 / ' + lv.length), 'chip after wake: ' + JSON.stringify(c1));
+
+      stage = 'refuse';
+      // ---- касание идола и свайп на идола не меняют поле ----
+      await ev(page, () => window.__SUN.setIdols([[3, 3, 0, 3]]));
+      await idle(page);
+      const before = await gridIds(page);
+      const p = await cellXY(page, 3, 3);
+      await page.mouse.click(p.x, p.y);
+      await page.waitForTimeout(200);
+      const hintTap = await page.textContent('#hintBar');
+      assert(hintTap.includes('Идол стоит на месте'), 'tap hint: ' + hintTap);
+      await page.waitForTimeout(450);
+      const q = await cellXY(page, 3, 2);
+      await page.mouse.move(q.x, q.y);
+      await page.mouse.down();
+      await page.mouse.move(q.x + q.step * 0.4, q.y, { steps: 3 });
+      await page.mouse.move(q.x + q.step * 0.9, q.y, { steps: 3 });
+      await page.mouse.up();
+      await idle(page);
+      await page.waitForTimeout(200);
+      assert(await gridIds(page) === before, 'grid changed after idol tap/swipe');
+
+      stage = 'reshuffle';
+      await ev(page, async () => { await window.__SUN.reshuffleBoard(false, true); window.__SUN.state.busy = false; });
+      await idle(page);
+      const d3 = await idolsOf(page);
+      assert(JSON.stringify(d3.state) === JSON.stringify([[3, 3, 0, 3]]) && d3.holes.length === 0, 'reshuffle: ' + JSON.stringify(d3));
+
+      stage = 'wingate';
+      await ev(page, () => { window.__SUN.start('5-02'); });
+      await waitStarted(page);
+      await idle(page);
+      const d4 = await idolsOf(page);
+      assert(d4.live === 2 && d4.holes.length === 0, 'retry 5-02 leftovers: ' + JSON.stringify(d4));
+      const ended = await ev(page, () => {
+        const S = window.__SUN;
+        S.state.goals.forEach(g => { if (g.type === 'color') g.got = g.need; });
+        S.checkEnd();
+        const a = S.state.ended;
+        S.state.goals.forEach(g => { g.got = g.need; });
+        S.checkEnd();
+        return [a, S.state.ended];
+      });
+      assert(ended[0] === false && ended[1] === true, 'win gate: ' + JSON.stringify(ended));
+
+      await ev(page, () => { window.__SUN.start('4-01'); });
+      await waitStarted(page);
+      const d5 = await ev(page, () => ({ nodes: document.querySelectorAll('.idol').length, chip: document.querySelectorAll('.goal-idols').length }));
+      assert(d5.nodes === 0 && d5.chip === 0, '4-01 has idols: ' + JSON.stringify(d5));
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(errs.length === 0, 'console: ' + errs.join(' | '));
+
+      // ---- телефон 390×844: идол совпадает с клеткой ----
+      {
+        const { ctx: pc, page: pp } = await newPage(browser, bname, 's18-phone', { width: 390, height: 844 });
+        await startFresh(pp, HTTP);
+        await ev(pp, () => { window.__SUN.start('5-01'); });
+        await waitStarted(pp);
+        await pp.waitForTimeout(300);
+        const box = await ev(pp, () => {
+          const n = document.querySelector('#boulders .idol');
+          const r = +n.dataset.r, c = +n.dataset.c;
+          const b = n.getBoundingClientRect();
+          const t = document.getElementById('tiles').getBoundingClientRect();
+          return { dx: Math.abs(b.left - (t.left + c * t.width / 8)), dy: Math.abs(b.top - (t.top + r * t.height / 8)), w: b.width, cell: t.width / 8 };
+        });
+        assert(box.dx < 2 && box.dy < 2 && Math.abs(box.w - box.cell) < 2, 'phone align: ' + JSON.stringify(box));
+        await shot(pp, bname, 'phone-idols-level');
+        await pc.close();
+        notes.push('phone cell ' + box.cell.toFixed(1) + 'px');
+      }
+
+      // ---- «уменьшить движение»: разбуженный идол исчезает сразу ----
+      {
+        const { ctx: rc, page: rp } = await newPage(browser, bname, 's18-reduced', undefined, { reducedMotion: true });
+        await startFresh(rp, HTTP);
+        await ev(rp, () => { window.__SUN.start('5-01'); });
+        await waitStarted(rp);
+        await ev(rp, () => window.__SUN.setIdols([[4, 4, 2, 1]]));
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        await gift(rp, 2);
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        const n = await ev(rp, () => document.querySelectorAll('#boulders .idol').length);
+        assert(n === 0, 'reduced: idol nodes left ' + n);
+        await rc.close();
+      }
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);
