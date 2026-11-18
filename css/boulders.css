@@ -24,8 +24,35 @@
   background: url("../assets/gems/boulder-3.webp") center / contain no-repeat;
 }
 
-.boulder[data-hp="2"] .boulder-rock { background-image: url("../assets/gems/boulder-2.webp"); }
-.boulder[data-hp="1"] .boulder-rock { background-image: url("../assets/gems/boulder-1.webp"); }
+/* Трещины — по полученным ударам: в начале валун целый (boulder-3),
+   на последнем ударе — весь в трещинах (boulder-1), между ними — boulder-2 */
+.boulder[data-max="3"][data-hp="2"] .boulder-rock { background-image: url("../assets/gems/boulder-2.webp"); }
+.boulder[data-max="2"][data-hp="1"] .boulder-rock,
+.boulder[data-max="3"][data-hp="1"] .boulder-rock { background-image: url("../assets/gems/boulder-1.webp"); }
+
+/* Цифра оставшихся ударов у крепкого валуна; на последнем ударе её нет */
+.boulder-hp {
+  position: absolute;
+  right: -2%;
+  bottom: -2%;
+  width: 44%;
+  height: 44%;
+}
+
+.boulder-hp circle {
+  fill: #1c120c;
+  stroke: #e6b84e;
+  stroke-width: 3;
+}
+
+.boulder-hp text {
+  fill: #fff3cf;
+  font: 700 26px "PT Serif", Georgia, serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.boulder[data-hp="1"] .boulder-hp { display: none; }
 
 /* Удар или попытка сдвинуть: короткое покачивание */
 .boulder.knock .boulder-rock {

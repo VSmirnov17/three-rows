@@ -1,0 +1,5 @@
+$imagegen
+Edit Image 1 (base to edit).
+Change: make the coming dawn clearly visible. The moon has already set. Over the RIGHT third of the picture, behind and above the mountain peaks, the sky becomes a clear soft pre-dawn glow: pale cold blue near the peaks fading up into a light lavender with a faint warm rose tint right along the ridge line, the glow reaching up toward the top-right corner. The upper-left sky stays deep night blue with a few stars, so the sky reads as a gradient from night (left, top) to early dawn (right, low). The peaks and the trail on the right get a faint cool rim light from the glow.
+Preserve: the whole composition, the cliff and trees on the left, the trail, steps, boulders and stone marker on the right, the dark misty gorge in the center, painting style and the dark low-contrast mood of the lower half and the center.
+Constraints: no moon, no sun disc, no sunbeams, no text, no border; the center of the picture stays dark.

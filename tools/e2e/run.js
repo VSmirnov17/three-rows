@@ -2135,6 +2135,13 @@ async function smokeFile(bt, bname) {
       assert(c0.n === 1 && c0.text.includes('Валуны') && c0.text.includes('0 / ' + want), '4-01 chip: ' + JSON.stringify(c0));
       const hint = await page.textContent('#hintBar');
       assert(hint.includes('валунами'), 'hint: ' + hint);
+      // В начале уровня валуны целые; у валунов прочности 1 цифры нет
+      const look0 = await ev(page, () => Array.from(document.querySelectorAll('#boulders .boulder')).map(n => ({
+        max: n.dataset.max, hp: n.dataset.hp, badge: !!n.querySelector('.boulder-hp'),
+        img: getComputedStyle(n.querySelector('.boulder-rock')).backgroundImage
+      })));
+      assert(look0.every(b => b.max === b.hp && /boulder-3\.webp/.test(b.img)), '4-01 boulders not intact: ' + JSON.stringify(look0));
+      assert(look0.every(b => b.badge === (Number(b.max) > 1)), '4-01 badges: ' + JSON.stringify(look0));
       await shot(page, bname, 'desktop-boulders-level');
 
       // ---- прямой удар: молния по строке 4 трескает валун 2 -> 1, потом разбивает ----
@@ -2143,11 +2150,23 @@ async function smokeFile(bt, bname) {
       // прочность только убывает и валун разбит не больше чем за 3 удара
       await ev(page, () => window.__SUN.setBoulders([[4, 4, 3]]));
       await idle(page);
+      const badgeOf = () => ev(page, () => {
+        const t = document.querySelector('#boulders .boulder[data-r="4"][data-c="4"]:not(.break) .boulder-hp');
+        return t && getComputedStyle(t).display !== 'none' ? t.textContent.trim() : null;
+      });
+      assert(await badgeOf() === '3', 'badge on fresh hp3: ' + await badgeOf());
+      await page.waitForTimeout(400);
+      await shot(page, bname, 'desktop-boulder-badge');
       const hpSeq = [await hpOf(page, 4, 4)];
       for (let i = 0; i < 3 && hpSeq[hpSeq.length - 1] !== null; i++) {
         await ev(page, async () => { await window.__SUN.strike(4, 0, 'line', 'row'); });
         await idle(page);
         hpSeq.push(await hpOf(page, 4, 4));
+        const hpNow = hpSeq[hpSeq.length - 1];
+        if (hpNow !== null) {
+          const badge = await badgeOf();
+          assert(Number(hpNow) >= 2 ? badge === hpNow : badge === null, `badge ${badge} at hp ${hpNow}`);
+        }
       }
       const nums = hpSeq.map(v => (v === null ? 0 : Number(v)));
       assert(nums[0] === 3 && nums.every((v, i) => i === 0 || v < nums[i - 1]) && nums[nums.length - 1] === 0,

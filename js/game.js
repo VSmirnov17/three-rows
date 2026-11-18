@@ -731,8 +731,16 @@
     });
   }
 
-  /* Слой валунов поверх камней: узел на каждую клетку с валуном, data-hp
-     выбирает картинку трещин (css/boulders.css). Касания слой пропускает. */
+  /* Слой валунов поверх камней: узел на каждую клетку с валуном. В начале
+     уровня любой валун целый; data-hp (сколько ударов осталось) и data-max
+     (начальная прочность) выбирают трещины (css/boulders.css), у крепкого
+     валуна в углу цифра оставшихся ударов. Касания слой пропускает. */
+  function setBoulderHp(node, hp) {
+    node.dataset.hp = String(hp);
+    const badge = node.querySelector('.boulder-hp text');
+    if (badge) badge.textContent = String(hp);
+  }
+
   function renderBoulders() {
     if (!dom.boulders) return;
     dom.boulders.innerHTML = '';
@@ -743,8 +751,16 @@
       node.dataset.r = String(r);
       node.dataset.c = String(c);
       node.dataset.hp = String(v);
+      node.dataset.max = String(v);
       node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
       node.appendChild(document.createElement('span')).className = 'boulder-rock';
+      if (v > 1) {
+        // SVG сам масштабируется под клетку: цифра крупная и на телефоне
+        node.insertAdjacentHTML('beforeend',
+          '<svg class="boulder-hp" viewBox="0 0 40 40" aria-hidden="true">' +
+          '<circle cx="20" cy="20" r="17" />' +
+          '<text x="20" y="21">' + v + '</text></svg>');
+      }
       dom.boulders.appendChild(node);
     }));
   }
@@ -759,7 +775,7 @@
       const node = dom.boulders.querySelector(`.boulder[data-r="${h.r}"][data-c="${h.c}"]:not(.break)`);
       if (!node) return;
       if (h.left > 0) {
-        node.dataset.hp = String(h.left);
+        setBoulderHp(node, h.left);
         if (still) return;
         node.classList.remove('knock');
         void node.offsetWidth;

@@ -80,13 +80,18 @@
     id: 4,
     key: 'mountain',
     name: 'Горная тропа',
-    /* Фон и мозаика временные (земля 3 и bg-sun), свои — в задаче 7 плана */
-    bg: 'assets/backdrop/land3/plate.webp',
+    bg: 'assets/backdrop/land4/plate.webp',
+    /* Живой фон (js/visuals-backdrop.js): своя плита с предрассветным небом
+       (первый шаг рассвета по землям), луна уже зашла; облака общие с землёй 1.
+       Размер плиты — из assets/backdrop/land4/backdrop.json
+       (tools/pack_backdrop.py --land 4) */
     backdrop: {
-      plate: 'assets/backdrop/land3/plate.webp',
+      plate: 'assets/backdrop/land4/plate.webp',
+      clouds: 'assets/backdrop/land1/clouds.webp',
       waterfall: false
     },
-    mosaic: 'assets/art/bg-sun.webp',
+    /* Своего тайла мозаики нет: мозаика — та же плита фона (bg-moon занята землёй 3) */
+    mosaic: 'assets/backdrop/land4/plate.webp',
     mechanic: 'boulders',
     scenes: {
       intro: [
