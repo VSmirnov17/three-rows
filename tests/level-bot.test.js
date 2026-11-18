@@ -157,3 +157,14 @@ test('playLevel: уровень с валунами проходится, пок
   assert.equal(r.won, true);
   assert.ok(r.moves >= 2, 'крепкому валуну нужно два удара');
 });
+
+test('playLevel: уровень с идолами проходится, когда оба опустились на дно', () => {
+  const resolved = {
+    id: 't-relics', timer: null, econTime: 300, vines: [], plates: [], boulders: [],
+    relics: [[0, 2], [0, 5]],
+    goals: [{ type: 'relics', need: 2 }]
+  };
+  const r = playLevel(resolved, 1, { policy: 'greedy' });
+  assert.equal(r.won, true);
+  assert.ok(r.moves >= 2, 'идолу нужно несколько ходов до дна');
+});
