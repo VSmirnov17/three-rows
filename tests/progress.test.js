@@ -285,8 +285,8 @@ test('currentLevelId: первый непройденный, а после вс�
   assert.equal(Progress.currentLevelId(Progress.empty(), Campaign), '1-01');
   const mid = Progress.migrateV1({ unlocked: 20, relaxed: true }, IDS);
   assert.equal(Progress.currentLevelId(mid, Campaign), '2-01');
-  const all = Progress.migrateV1({ unlocked: 99, relaxed: true }, IDS);
-  assert.equal(Progress.currentLevelId(all, Campaign), '4-20');
+  const all = Progress.migrateV1({ unlocked: 999, relaxed: true }, IDS);
+  assert.equal(Progress.currentLevelId(all, Campaign), '5-20');
 });
 
 test('starsTotal: сумма максимумов по каждой сложности каждого уровня', () => {
@@ -388,7 +388,7 @@ test('миграция: числа в строках читаются как у 
   assert.equal(Object.keys(Progress.migrateV1({ unlocked: ' 3 ' }, IDS).levels).length, 3);
   assert.deepEqual(Progress.migrateV1({ unlocked: '-3', best: '-10' }, IDS), Progress.empty());
   assert.deepEqual(Progress.migrateV1({ unlocked: 'abc', best: 'abc' }, IDS), Progress.empty());
-  assert.equal(Object.keys(Progress.migrateV1({ unlocked: '99' }, IDS).levels).length, IDS.length);
+  assert.equal(Object.keys(Progress.migrateV1({ unlocked: '999' }, IDS).levels).length, IDS.length);
   assert.equal(Progress.migrateV1({ best: '123.5' }, IDS).best, 123.5);
 
   const st = stubStorage({ [Progress.OLD_KEY]: '{"best":"9000","unlocked":"4","relaxed":false}' });
