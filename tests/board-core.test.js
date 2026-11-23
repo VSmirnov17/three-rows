@@ -901,3 +901,94 @@ test('simulateMove с opts.idols: клетки живых идолов пуст�
   }
   assert.ok(fed > 0, 'хоть один дар');
 });
+
+/* ---------- Мох (земля 6) ---------- */
+
+test('makeMoss и mossLeft', () => {
+  const moss = Board.makeMoss([[1, 1], [6, 2]]);
+  assert.equal(moss[1][1], 1);
+  assert.equal(moss[0][0], 0);
+  assert.equal(Board.mossLeft(moss), 2);
+  assert.equal(Board.mossLeft(Board.makeMoss()), 0);
+});
+
+test('hitMoss: ряд в любой из восьми клеток вокруг счищает мох, дальний не трогает', () => {
+  const grid = gridFrom(withRows({ 0: '000.....' }));
+  const plan = Board.planCascade(grid, null);
+  const moss = Board.makeMoss([[1, 3], [1, 1], [2, 1]]);
+  const hits = Board.hitMoss(moss, plan);
+  assert.deepEqual(hits.map(h => [h.r, h.c]).sort(), [[1, 1], [1, 3]], 'по диагонали (1,3) и снизу (1,1)');
+  assert.equal(moss[2][1], 1, 'через клетку — не задет');
+  assert.deepEqual(Board.hitMoss(null, plan), []);
+});
+
+test('hitMoss: прямой удар спецкамня по клетке мха (voids)', () => {
+  const grid = gridFrom([
+    '0001234.', '........', '........', '........',
+    '........', '........', '........', '........'
+  ], { '0,0': { special: 'line', lineDir: 'row' } });
+  const plan = Board.planCascade(grid, null);
+  const moss = Board.makeMoss([[0, 7]]);
+  assert.deepEqual(Board.hitMoss(moss, plan), [{ r: 0, c: 7 }]);
+  assert.equal(Board.mossLeft(moss), 0);
+});
+
+test('growMoss: съедает обычного соседа по стороне, не спецкамень и не лиану', () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const grid = Board.generateGrid({ colors: 5, moss: [[3, 3]], vines: [[2, 3]] }, seeded(seed), counter());
+    grid[3][2].special = 'bomb';
+    const moss = Board.makeMoss([[3, 3]]);
+    const grown = Board.growMoss(moss, grid, seeded(seed + 100));
+    assert.ok(grown, 'есть куда расти');
+    assert.ok([[3, 4], [4, 3]].some(([r, c]) => grown.r === r && grown.c === c), 'только (3,4) или (4,3)');
+    assert.equal(grid[grown.r][grown.c], null);
+    assert.equal(moss[grown.r][grown.c], 1);
+    assert.equal(Board.mossLeft(moss), 2);
+    assert.equal(Board.hasMove(grid), true);
+  }
+});
+
+test('growMoss: не растёт на плиту, сверх предела и без мха', () => {
+  const grid = Board.generateGrid({ colors: 5, moss: [[0, 0]] }, seeded(3), counter());
+  const plates = Board.makePlates([[0, 1], [1, 0]]);
+  assert.equal(Board.growMoss(Board.makeMoss([[0, 0]]), grid, seeded(1), { plates }), null, 'оба соседа на плитах');
+  const moss = Board.makeMoss([[0, 0], [5, 5]]);
+  assert.equal(Board.growMoss(moss, grid, seeded(1), { cap: 2 }), null, 'предел 2 достигнут');
+  assert.ok(Board.growMoss(moss, grid, seeded(1), { cap: 3 }));
+  assert.equal(Board.growMoss(Board.makeMoss(), grid, seeded(1)), null);
+});
+
+test('growMoss: сколько ни расти, ход на поле остаётся; растёт до тупика и встаёт', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const grid = Board.generateGrid({ colors: 5, moss: [[3, 3]] }, seeded(seed), counter());
+    const moss = Board.makeMoss([[3, 3]]);
+    let n = 0;
+    while (Board.growMoss(moss, grid, seeded(seed * 7 + n))) {
+      n++;
+      assert.equal(Board.hasMove(grid), true, 'после роста ' + n + ' ход есть');
+    }
+    assert.ok(n > 10, 'мох вырос заметно: ' + n);
+    assert.equal(Board.mossLeft(moss), n + 1);
+  }
+});
+
+test('simulateMove с opts.moss: клетки мха пусты, поле без дыр, мох счищается', () => {
+  let cleared = 0;
+  const list = [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5], [4, 6], [4, 7]];
+  for (let seed = 1; seed <= 15; seed++) {
+    const grid = Board.generateGrid({ colors: 5, moss: list }, seeded(seed), counter());
+    const moss = Board.makeMoss(list);
+    for (let turn = 0; turn < 6; turn++) {
+      const move = Board.findMove(grid);
+      if (!move) break;
+      const res = Board.simulateMove(grid, move.a, move.b, seeded(seed * 31 + turn), counter(), { colors: 5, moss });
+      assert.ok(res);
+      cleared += res.mossHits.length;
+      grid.forEach((row, r) => row.forEach((g, c) => {
+        if (moss[r][c]) assert.equal(g, null, 'мох пуст: ' + r + ',' + c);
+        else assert.ok(g && g.r === r && g.c === c, 'нет дыр: ' + r + ',' + c);
+      }));
+    }
+  }
+  assert.ok(cleared > 0, 'хоть одна кочка счищена');
+});

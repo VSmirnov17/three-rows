@@ -506,11 +506,14 @@
      (plan.voids) или соседняя по стороне клетка — камень из clear, unlocks
      или creates. За шаг не больше одного удара на валун. Меняет boulders,
      возвращает задетые { r, c, left }. */
-  function hitBoulders(boulders, plan) {
-    if (!boulders) return [];
+  const SIDES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+  /* Клетки слоя layer (значение > 0), задетые шагом plan: прямой удар из
+     plan.voids или соседство dirs с камнем из clear, unlocks или creates. */
+  function struckCells(layer, plan, dirs) {
     const hit = new Set();
     const mark = (r, c) => {
-      if (r >= 0 && r < ROWS && c >= 0 && c < COLS && boulders[r][c] > 0) hit.add(keyOf(r, c));
+      if (r >= 0 && r < ROWS && c >= 0 && c < COLS && layer[r][c] > 0) hit.add(keyOf(r, c));
     };
     (plan.voids || []).forEach(k => { const p = parseKey(k); mark(p.r, p.c); });
     const sources = new Set(plan.clear);
@@ -518,8 +521,14 @@
     (plan.creates || []).forEach(cr => sources.add(keyOf(cr.r, cr.c)));
     sources.forEach(k => {
       const { r, c } = parseKey(k);
-      mark(r - 1, c); mark(r + 1, c); mark(r, c - 1); mark(r, c + 1);
+      dirs.forEach(([dr, dc]) => mark(r + dr, c + dc));
     });
+    return hit;
+  }
+
+  function hitBoulders(boulders, plan) {
+    if (!boulders) return [];
+    const hit = struckCells(boulders, plan, SIDES);
     const hits = [];
     hit.forEach(k => {
       const { r, c } = parseKey(k);
@@ -573,6 +582,74 @@
       }
     }
     return hits;
+  }
+
+  /* ---------- Мох (земля 6) ----------
+     Слой клеток, как валуны прочности 1: в сетке клетка мха пустая, камни
+     падают сквозь неё. moss[r][c] — 1 (мох) или 0. list — [[r, c], …]. */
+  function makeMoss(list) {
+    const moss = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    (list || []).forEach(v => { moss[v[0]][v[1]] = 1; });
+    return moss;
+  }
+
+  const mossLeft = bouldersLeft;
+
+  /* Шаг каскада plan счищает мох: удар спецкамня по его клетке (voids) или
+     камень из clear, unlocks, creates в одной из восьми клеток вокруг.
+     Меняет moss, возвращает счищенные { r, c }. */
+  function hitMoss(moss, plan) {
+    if (!moss) return [];
+    const hits = [];
+    struckCells(moss, plan, AROUND).forEach(k => {
+      const { r, c } = parseKey(k);
+      moss[r][c] = 0;
+      hits.push({ r, c });
+    });
+    return hits;
+  }
+
+  /* Мох разрастается на одну клетку: съедает обычный камень (не спецкамень,
+     не в лианах, не на плите opts.plates) рядом по стороне с мхом. Не растёт,
+     если мха уже opts.cap или больше и если после роста на поле не осталось
+     бы хода. Меняет moss и grid, возвращает { r, c, gem } или null. */
+  function growMoss(moss, grid, rng, opts) {
+    if (!moss) return null;
+    const cap = opts && opts.cap;
+    const plates = opts && opts.plates;
+    const left = mossLeft(moss);
+    if (!left || (cap && left >= cap)) return null;
+    const seen = new Set();
+    const cand = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (!moss[r][c]) continue;
+        SIDES.forEach(([dr, dc]) => {
+          const rr = r + dr;
+          const cc = c + dc;
+          const gem = gemAt(grid, rr, cc);
+          const k = keyOf(rr, cc);
+          if (!gem || gem.special || gem.locked || seen.has(k)) return;
+          if (plates && plates[rr][cc] > 0) return;
+          seen.add(k);
+          cand.push(gem);
+        });
+      }
+    }
+    const random = rng || Math.random;
+    for (let i = cand.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      const t = cand[i]; cand[i] = cand[j]; cand[j] = t;
+    }
+    for (const gem of cand) {
+      grid[gem.r][gem.c] = null;
+      if (hasMove(grid)) {
+        moss[gem.r][gem.c] = 1;
+        return { r: gem.r, c: gem.c, gem };
+      }
+      grid[gem.r][gem.c] = gem;
+    }
+    return null;
   }
 
   /* ---------- Обрушение ----------
@@ -631,8 +708,8 @@
     const random = rng || Math.random;
     const newId = nextId || (() => ++fallbackId);
     const vineKeys = new Set(((level && level.vines) || []).map(v => keyOf(v[0], v[1])));
-    const boulderKeys = new Set(((level && level.boulders) || []).concat((level && level.idols) || [])
-      .map(v => keyOf(v[0], v[1])));
+    const boulderKeys = new Set(((level && level.boulders) || []).concat((level && level.idols) || [],
+      (level && level.moss) || []).map(v => keyOf(v[0], v[1])));
     let grid;
     let attempts = 0;
     do {
@@ -753,7 +830,8 @@
      совпадения) — сетка при этом остаётся как была.
      opts.colors — число цветов для досыпки (по умолчанию 6); opts.boulders —
      слой валунов (меняется), задетые валуны — в boulderHits; opts.idols —
-     слой идолов (меняется), дары — в idolHits. */
+     слой идолов (меняется), дары — в idolHits; opts.moss — слой мха
+     (меняется), счищенный мох — в mossHits. Рост мха — отдельно, growMoss. */
   function simulateMove(grid, a, b, rng, nextId, opts) {
     if (!a || !b) return null;
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return null;
@@ -793,13 +871,15 @@
     });
     const boulders = opts && opts.boulders;
     const idols = opts && opts.idols;
-    const blocked = (boulders || idols)
-      ? (r, c) => (boulders && boulders[r][c] > 0) || !!(idols && idols[r][c])
+    const moss = opts && opts.moss;
+    const blocked = (boulders || idols || moss)
+      ? (r, c) => (boulders && boulders[r][c] > 0) || !!(idols && idols[r][c]) || !!(moss && moss[r][c])
       : null;
     const cascades = [];
     const removed = [];
     const boulderHits = [];
     const idolHits = [];
+    const mossHits = [];
     for (let guard = 0; guard < 200; guard++) {
       const plan = planCascade(grid, swapCell);
       if (!plan) break;
@@ -807,9 +887,10 @@
       if (idols) idolHits.push(...feedIdols(idols, grid, plan));
       removed.push(...applyCascade(grid, plan).removed);
       if (boulders) boulderHits.push(...hitBoulders(boulders, plan));
+      if (moss) mossHits.push(...hitMoss(moss, plan));
       collapse(grid, spawn, blocked);
     }
-    return { cascades, removed, boulderHits, idolHits };
+    return { cascades, removed, boulderHits, idolHits, mossHits };
   }
 
   return {
@@ -838,6 +919,10 @@
     makeIdols,
     idolsLeft,
     feedIdols,
+    makeMoss,
+    mossLeft,
+    hitMoss,
+    growMoss,
     collapse,
     generateGrid,
     shuffle,
