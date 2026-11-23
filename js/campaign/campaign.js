@@ -14,7 +14,7 @@
 })(function () {
   'use strict';
 
-  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js', './land-04.js', './land-05.js'];
+  const LAND_FILES = ['./land-01.js', './land-02.js', './land-03.js', './land-04.js', './land-05.js', './land-06.js'];
   const DIFFICULTIES = ['calm', 'normal', 'challenge'];
   const ROWS = 8;
   const COLS = 8;
@@ -86,12 +86,18 @@
       .map(v => [v[0], v[1], v[2] || 1]);
     /* Идолы — [r, c, цвет, даров] (на всех сложностях одинаковые) */
     const idols = (lv.idols || []).map(v => [v[0], v[1], v[2], v[3] || 1]);
+    /* Мох — [r, c]; mossCap — больше стольких клеток мох не разрастается,
+       mossEvery — растёт после каждого N-го хода мимо мха (на «Спокойно» реже) */
+    const moss = cellsOf('moss');
+    const mossCap = moss.length ? (lv.mossMax || moss.length + 8) : 0;
+    const mossEvery = difficulty === 'calm' ? 2 : 1;
 
     const goals = lv.goals.map(g => {
       if (g.type === 'vines') return { type: 'vines', need: vines.length };
       if (g.type === 'plates') return { type: 'plates', need: plates.length };
       if (g.type === 'boulders') return { type: 'boulders', need: boulders.length };
       if (g.type === 'idols') return { type: 'idols', need: idols.length };
+      if (g.type === 'moss') return { type: 'moss', need: moss.length };
       const need = hard ? Math.ceil(g.need * CHALLENGE_NEED) : g.need;
       return { type: g.type, color: g.color, need };
     });
@@ -110,6 +116,9 @@
       plates,
       boulders,
       idols,
+      moss,
+      mossCap,
+      mossEvery,
       stars: stars.slice()
     };
   }
@@ -148,7 +157,7 @@
                 errors.push(tag + ': цвет цели вне 0..' + (COLORS - 1));
               }
               if (!(g.need > 0)) errors.push(tag + ': need цели должен быть > 0');
-            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders' && g.type !== 'idols') {
+            } else if (g.type !== 'vines' && g.type !== 'plates' && g.type !== 'boulders' && g.type !== 'idols' && g.type !== 'moss') {
               errors.push(tag + ': неизвестный тип цели ' + g.type);
             }
           });
@@ -215,6 +224,25 @@
         });
         if (lv.goals.some(g => g.type === 'idols') && (lv.idols || []).length === 0) {
           errors.push(tag + ': цель idols без идолов');
+        }
+
+        /* Мох: [r, c], не на валуне, идоле, плите или лиане (с клетками «Испытания») */
+        const mossCells = new Set();
+        allOf('moss').forEach(v => {
+          if (!inBoard(v)) {
+            errors.push(tag + ': мох вне поля ' + JSON.stringify(v));
+            return;
+          }
+          const cell = v[0] * COLS + v[1];
+          if (mossCells.has(cell)) errors.push(tag + ': мох повторяется ' + JSON.stringify(v));
+          if (boulderCells.has(cell)) errors.push(tag + ': мох на валуне ' + JSON.stringify(v));
+          if (idolCells.has(cell)) errors.push(tag + ': мох на идоле ' + JSON.stringify(v));
+          if (plateCells.has(cell)) errors.push(tag + ': мох на плите ' + JSON.stringify(v));
+          if (vineCells.has(cell)) errors.push(tag + ': мох на лиане ' + JSON.stringify(v));
+          mossCells.add(cell);
+        });
+        if (lv.goals.some(g => g.type === 'moss') && (lv.moss || []).length === 0) {
+          errors.push(tag + ': цель moss без мха');
         }
 
         DIFFICULTIES.forEach(d => {

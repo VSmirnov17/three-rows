@@ -72,6 +72,11 @@
     boulders: [],
     // Слой идолов 8×8 (Board.makeIdols): null или { color, left }; в grid там null
     idols: [],
+    // Слой мха 8×8 (Board.makeMoss): 1 — кочка; в grid там null
+    moss: [],
+    // Ходов подряд мимо мха (рост — после level.mossEvery таких ходов)
+    mossMissed: 0,
+    mossHitThisMove: false,
     gemSeq: 0,
     selected: null,
     dragStart: null,
@@ -154,14 +159,17 @@
     boulders: 'Собирай ряды рядом с валунами. Разбей все валуны',
     boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет',
     idols: 'Собирай рядом с идолом ряды цвета его ореола. Разбуди всех идолов',
-    idol: 'Идол стоит на месте. Собери рядом с ним ряд цвета его ореола'
+    idol: 'Идол стоит на месте. Собери рядом с ним ряд цвета его ореола',
+    moss: 'Собирай ряды рядом с мхом. Не тронешь мох за ход — он разрастётся',
+    mossFixed: 'Мох не сдвинуть. Собери ряд рядом с кочкой, и она исчезнет',
+    mossGrew: 'Мох разросся'
   };
 
   /* Подсказка уровня: обучение новой механики земли (идолы — земля 5,
      валуны — земля 4, плиты — земля 3), иначе обычная. */
   function levelHint(level) {
     const has = key => level && level[key] && level[key].length;
-    const text = has('idols') ? hintMessages.idols : has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
+    const text = has('moss') ? hintMessages.moss : has('idols') ? hintMessages.idols : has('boulders') ? hintMessages.boulders : has('plates') ? hintMessages.plates : hintMessages.default;
     return level.name + ' — ' + text;
   }
 
@@ -228,6 +236,8 @@
   }
 
   function goalCountText(g) {
+    // Мох растёт, поэтому показываем, сколько осталось, а не «N / M»
+    if (g.type === 'moss') return 'осталось ' + Math.max(0, g.need - g.got);
     return Math.min(g.got, g.need) + ' / ' + g.need;
   }
 
@@ -237,10 +247,13 @@
       const plates = g.type === 'plates';
       const boulders = g.type === 'boulders';
       const idols = g.type === 'idols';
-      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : idols ? ' goal-idols' : '';
+      const moss = g.type === 'moss';
+      const cls = vines ? ' goal-vines' : plates ? ' goal-plates' : boulders ? ' goal-boulders' : idols ? ' goal-idols'
+        : moss ? ' goal-moss' : '';
       const icon = vines ? GOAL_VINE_ICON : plates ? GOAL_PLATE_ICON : boulders ? GOAL_BOULDER_ICON
-        : idols ? GOAL_IDOL_ICON : ART.gemSvg(g.color, 'mini-gem');
-      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : idols ? 'Идолы' : ART.GEMS[g.color].name;
+        : idols ? GOAL_IDOL_ICON : moss ? GOAL_MOSS_ICON : ART.gemSvg(g.color, 'mini-gem');
+      const name = vines ? 'Лианы' : plates ? 'Плиты' : boulders ? 'Валуны' : idols ? 'Идолы' : moss ? 'Мох'
+        : ART.GEMS[g.color].name;
       return `
       <div class="goal-chip${cls}" data-i="${i}">
         ${icon}
@@ -530,7 +543,7 @@
     setBodyState('levelId', level.id);
     setBodyState('difficulty', difficulty);
     setBodyState('outcome', '');
-    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders' || g.type === 'idols')
+    state.goals = level.goals.map(g => (g.type === 'vines' || g.type === 'plates' || g.type === 'boulders' || g.type === 'idols' || g.type === 'moss')
       ? { type: g.type, need: g.need, got: 0 }
       : { type: 'color', color: g.color, need: g.need, got: 0 });
     state.totalTime = level.econTime;
@@ -608,6 +621,7 @@
     '</svg>';
 
   const GOAL_BOULDER_ICON = '<img class="mini-gem goal-boulder-icon" src="assets/gems/boulder-3.webp" alt="" draggable="false">';
+  const GOAL_MOSS_ICON = '<span class="mini-gem goal-moss-icon"><span class="moss-tuft"></span></span>';
   const GOAL_IDOL_ICON = '<img class="mini-gem goal-idol-icon" src="assets/gems/idol.webp" alt="" draggable="false">';
 
   /* Включает/выключает лианы на камне: класс и оверлей. */
@@ -678,9 +692,10 @@
     if (t - lastRefuseAt < 380) return;
     lastRefuseAt = t;
     const idol = isIdol(cell);
-    flashHint(idol ? hintMessages.idol : hintMessages.boulder, undefined, 2800);
+    const moss = isMoss(cell);
+    flashHint(moss ? hintMessages.mossFixed : idol ? hintMessages.idol : hintMessages.boulder, undefined, 2800);
     if (reducedMotion() || !dom.boulders) return;
-    const kind = idol ? '.idol' : '.boulder';
+    const kind = moss ? '.moss' : idol ? '.idol' : '.boulder';
     const node = dom.boulders.querySelector(`${kind}[data-r="${cell.r}"][data-c="${cell.c}"]:not(.break)`);
     if (!node) return;
     node.classList.remove('knock');
@@ -696,9 +711,13 @@
     return !!(cell && state.idols[cell.r] && state.idols[cell.r][cell.c]);
   }
 
-  /* Клетка без камня, которую не сдвинуть: валун или идол */
+  function isMoss(cell) {
+    return !!(cell && state.moss[cell.r] && state.moss[cell.r][cell.c]);
+  }
+
+  /* Клетка без камня, которую не сдвинуть: валун, идол или мох */
   function isFixed(cell) {
-    return isBoulder(cell) || isIdol(cell);
+    return isBoulder(cell) || isIdol(cell) || isMoss(cell);
   }
 
   function applyPos(gem) {
@@ -712,10 +731,13 @@
     const vines = state.level ? state.level.vines : [];
     const boulders = (state.level && state.level.boulders) || [];
     const idols = (state.level && state.level.idols) || [];
-    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders, idols }, Math.random, () => ++state.gemSeq);
+    const moss = (state.level && state.level.moss) || [];
+    state.grid = Board.generateGrid({ colors: TYPES, vines, boulders, idols, moss }, Math.random, () => ++state.gemSeq);
     state.plates = Board.makePlates(state.level ? state.level.plates : []);
     state.boulders = Board.makeBoulders(boulders);
     state.idols = Board.makeIdols(idols);
+    state.moss = Board.makeMoss(moss);
+    state.mossMissed = 0;
   }
 
   /* Слой золотых плит под камнями: узел на каждую клетку с плитой. */
@@ -869,11 +891,79 @@
     });
   }
 
+  /* Мох (земля 6) живёт в том же слое #boulders. Кочка — узел .moss на
+     клетке; счищенная тает за 0,5 с, выросшая вырастает за 0,5 с (при
+     prefers-reduced-motion — сразу). */
+  function mossNode(r, c) {
+    const node = document.createElement('div');
+    node.className = 'moss';
+    node.dataset.r = String(r);
+    node.dataset.c = String(c);
+    node.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+    node.appendChild(document.createElement('span')).className = 'moss-tuft';
+    return node;
+  }
+
+  function renderMoss() {
+    if (!dom.boulders) return;
+    dom.boulders.querySelectorAll('.moss').forEach(n => n.remove());
+    (state.moss || []).forEach((row, r) => row.forEach((v, c) => {
+      if (v) dom.boulders.appendChild(mossNode(r, c));
+    }));
+  }
+
+  function clearMossNodes(hits) {
+    if (!dom.boulders || !hits.length) return;
+    const still = reducedMotion();
+    hits.forEach(h => {
+      const node = dom.boulders.querySelector(`.moss[data-r="${h.r}"][data-c="${h.c}"]:not(.break)`);
+      if (!node) return;
+      if (still) {
+        node.remove();
+        return;
+      }
+      node.classList.add('break');
+      spawnBurst(h.r, h.c, '#9fd36a', 7);
+      setTimeout(() => node.remove(), 600);
+    });
+  }
+
+  /* После хода мимо мха (level.mossEvery таких подряд) мох съедает соседний
+     камень. Ядро выбирает клетку и следит, чтобы ход на поле остался. */
+  async function growMossAfterMove() {
+    const level = state.level;
+    if (!level || !Board.mossLeft(state.moss)) return;
+    if (state.mossHitThisMove) {
+      state.mossMissed = 0;
+      return;
+    }
+    state.mossMissed++;
+    if (state.mossMissed < (level.mossEvery || 1)) return;
+    state.mossMissed = 0;
+    const grown = Board.growMoss(state.moss, state.grid, Math.random, { cap: level.mossCap, plates: state.plates });
+    if (!grown) return;
+    state.goals.forEach(goal => { if (goal.type === 'moss') goal.need++; });
+    updateGoals();
+    const node = mossNode(grown.r, grown.c);
+    if (reducedMotion()) {
+      if (grown.gem.el) grown.gem.el.remove();
+      dom.boulders.appendChild(node);
+      return;
+    }
+    node.classList.add('grow');
+    dom.boulders.appendChild(node);
+    if (grown.gem.el) grown.gem.el.classList.add('moss-eaten');
+    flashHint(hintMessages.mossGrew, 'bad', 1400);
+    await sleep(500);
+    if (grown.gem.el) grown.gem.el.remove();
+  }
+
   function spawnBoard() {
     dom.tiles.innerHTML = '';
     renderPlates();
     renderBoulders();
     renderIdols();
+    renderMoss();
     // Отложенные расколы и цикл частиц старого поля не должны дожить до нового
     fxSafe(() => Fx.clear());
     dom.fx.innerHTML = '';
@@ -1057,7 +1147,9 @@
     }
 
     state.swapCell = { r: b.r, c: b.c };
+    state.mossHitThisMove = false;
     const maxChain = await resolveBoard();
+    if (!state.ended) await growMossAfterMove();
     state.busy = false;
     state.lastAction = now();
     if (!state.ended) {
@@ -1396,6 +1488,19 @@
       }
       if (!triggers.length) SFX.impact();
     }
+    // Цель «Мох»: как валун — до обрушения, чтобы клетка досыпалась этим шагом
+    const mossHits = Board.hitMoss(state.moss, plan);
+    if (mossHits.length) {
+      state.mossHitThisMove = true;
+      state.goals.forEach(goal => {
+        if (goal.type === 'moss') goal.got = Math.min(goal.need, goal.got + mossHits.length);
+      });
+      try {
+        clearMossNodes(mossHits);
+      } catch (err) {
+        console.error('[moss] ' + (err && err.message ? err.message : err), err);
+      }
+    }
     const changed = state.goals.findIndex((g, i) => g.got !== gotBefore[i]);
     if (changed >= 0) updateGoals(changed);
 
@@ -1446,7 +1551,8 @@
     const { moves, spawned } = Board.collapse(
       state.grid,
       (r, c) => makeGem(randomColor(), r, c),
-      (r, c) => (state.boulders[r] && state.boulders[r][c] > 0) || !!(state.idols[r] && state.idols[r][c])
+      (r, c) => (state.boulders[r] && state.boulders[r][c] > 0) || !!(state.idols[r] && state.idols[r][c]) ||
+        !!(state.moss[r] && state.moss[r][c])
     );
 
     let maxDist = 0;
@@ -2139,6 +2245,25 @@
           }
         }));
         renderIdols();
+        await dropGems();
+      },
+      // Мох: [[r, c], …]
+      moss() {
+        const out = [];
+        (state.moss || []).forEach((row, r) => row.forEach((v, c) => { if (v) out.push([r, c]); }));
+        return out;
+      },
+      // Ставит мох в клетки [[r, c], …] (остальной убирает): камни на них
+      // исчезают, освобождённые клетки досыпаются
+      async setMoss(list) {
+        state.moss = Board.makeMoss(list || []);
+        state.grid.forEach((row, r) => row.forEach((gem, c) => {
+          if (gem && state.moss[r][c]) {
+            if (gem.el) gem.el.remove();
+            state.grid[r][c] = null;
+          }
+        }));
+        renderMoss();
         await dropGems();
       },
       // Ставит лианы на камни в клетках [[r, c], …] (остальные снимает)

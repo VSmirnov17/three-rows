@@ -1,0 +1,58 @@
+/* Мох (земля 6): узлы .moss в слое #boulders (поверх камней, касания
+   пропускает, см. css/boulders.css). Позицию клетки задаёт инлайн-transform,
+   анимации идут на .moss-tuft. Пока вид — временный, нарисован в CSS. */
+.moss {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12.5%;
+  height: 12.5%;
+}
+
+.moss-tuft {
+  position: absolute;
+  inset: 4%;
+  border-radius: 38% 46% 34% 42%;
+  background:
+    radial-gradient(circle at 30% 30%, #b6e37a 0 9%, transparent 10%),
+    radial-gradient(circle at 68% 40%, #9fd060 0 8%, transparent 9%),
+    radial-gradient(circle at 45% 70%, #8ec456 0 10%, transparent 11%),
+    radial-gradient(circle at 50% 45%, #4f8a2c 0%, #2f5a1a 62%, #1d3a10 100%);
+  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, .45), 0 0 0 2px #142a0a;
+}
+
+/* Кочка счищена: съёживается и тает */
+.moss.break .moss-tuft { animation: moss-clear .5s ease-in forwards; }
+
+/* Мох разросся: кочка вырастает на месте съеденного камня */
+.moss.grow .moss-tuft { animation: moss-grow .5s ease-out; }
+.gem.moss-eaten { transition: opacity .45s ease-in; opacity: 0; }
+
+/* Отказ касанием */
+.moss.knock .moss-tuft { animation: moss-knock .4s ease-out; }
+
+@keyframes moss-clear {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.4); }
+}
+
+@keyframes moss-grow {
+  0%   { opacity: 0; transform: scale(.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes moss-knock {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Значок цели */
+.goal-moss-icon { position: relative; display: inline-block; }
+.goal-moss-icon .moss-tuft { inset: 6%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .moss.break .moss-tuft,
+  .moss.grow .moss-tuft,
+  .moss.knock .moss-tuft { animation: none; }
+}
