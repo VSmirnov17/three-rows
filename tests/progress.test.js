@@ -286,7 +286,7 @@ test('currentLevelId: первый непройденный, а после вс�
   const mid = Progress.migrateV1({ unlocked: 20, relaxed: true }, IDS);
   assert.equal(Progress.currentLevelId(mid, Campaign), '2-01');
   const all = Progress.migrateV1({ unlocked: 999, relaxed: true }, IDS);
-  assert.equal(Progress.currentLevelId(all, Campaign), '5-20');
+  assert.equal(Progress.currentLevelId(all, Campaign), '6-20');
 });
 
 test('starsTotal: сумма максимумов по каждой сложности каждого уровня', () => {

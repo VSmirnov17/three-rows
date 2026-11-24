@@ -5,11 +5,11 @@ const assert = require('node:assert/strict');
 
 const Campaign = require('../js/campaign/campaign.js');
 
-test('в кампании 5 земель и 100 уровней с уникальными id', () => {
-  assert.equal(Campaign.lands().length, 5);
+test('в кампании 6 земель и 120 уровней с уникальными id', () => {
+  assert.equal(Campaign.lands().length, 6);
   const ids = Campaign.allLevelIds();
-  assert.equal(ids.length, 100);
-  assert.equal(new Set(ids).size, 100);
+  assert.equal(ids.length, 120);
+  assert.equal(new Set(ids).size, 120);
   assert.equal(ids[0], '1-01');
   assert.equal(ids[19], '1-20');
   assert.equal(ids[20], '2-01');
@@ -20,6 +20,8 @@ test('в кампании 5 земель и 100 уровней с уникаль
   assert.equal(ids[79], '4-20');
   assert.equal(ids[80], '5-01');
   assert.equal(ids[99], '5-20');
+  assert.equal(ids[100], '6-01');
+  assert.equal(ids[119], '6-20');
 });
 
 test('validate() пуст', () => {
@@ -110,7 +112,8 @@ test('nextLevelId', () => {
   assert.equal(Campaign.nextLevelId('2-20'), '3-01');
   assert.equal(Campaign.nextLevelId('3-20'), '4-01');
   assert.equal(Campaign.nextLevelId('4-20'), '5-01');
-  assert.equal(Campaign.nextLevelId('5-20'), null);
+  assert.equal(Campaign.nextLevelId('5-20'), '6-01');
+  assert.equal(Campaign.nextLevelId('6-20'), null);
   assert.equal(Campaign.nextLevelId('9-99'), null);
 });
 
@@ -277,4 +280,44 @@ test('validate() ловит ошибки в идолах', () => {
   assert.ok(run({ idols: [[0, 0, 1, 2]], challenge: { plates: [[0, 0]] } }).some(e => e.includes('идол на плите')),
     'клетки «Испытания» тоже проверяются');
   assert.ok(run({ idols: [] }).some(e => e.includes('цель idols без идолов')));
+});
+
+/* ---------- Земля 6: мох ---------- */
+
+test('в земле 6 в каждом уровне есть мох и цель moss, не больше четырёх целей', () => {
+  Campaign.allLevelIds().filter(id => id.startsWith('6-')).forEach(id => {
+    const lvl = Campaign.level(id);
+    assert.ok(lvl.moss.length > 0, id);
+    assert.ok(lvl.goals.some(g => g.type === 'moss'), id);
+    assert.ok(lvl.goals.length <= 4, id + ': не больше четырёх целей');
+  });
+});
+
+test('resolve: мох с добавкой «Испытания», предел роста, на «Спокойно» растёт через ход', () => {
+  const lv = Campaign.level('6-04');
+  const normal = Campaign.resolve('6-04', 'normal');
+  const hard = Campaign.resolve('6-04', 'challenge');
+  const calm = Campaign.resolve('6-04', 'calm');
+  assert.equal(normal.moss.length, lv.moss.length);
+  assert.equal(hard.moss.length, lv.moss.length + lv.challenge.moss.length);
+  assert.equal(hard.goals.find(g => g.type === 'moss').need, hard.moss.length);
+  assert.equal(normal.mossCap, lv.moss.length + 8);
+  assert.equal(normal.mossEvery, 1);
+  assert.equal(calm.mossEvery, 2);
+  assert.deepEqual(Campaign.resolve('1-01', 'normal').moss, []);
+  assert.equal(Campaign.resolve('1-01', 'normal').mossCap, 0);
+});
+
+test('validate() ловит ошибки во мху', () => {
+  const lv = Campaign.level('6-01');
+  const saved = { moss: lv.moss, boulders: lv.boulders, plates: lv.plates, vines: lv.vines, idols: lv.idols, challenge: lv.challenge };
+  const run = patch => { Object.assign(lv, patch); const e = Campaign.validate(); Object.assign(lv, saved); return e; };
+  assert.ok(run({ moss: [[0, 0], [0, 0]] }).some(e => e.includes('мох повторяется')));
+  assert.ok(run({ moss: [[8, 0]] }).some(e => e.includes('мох вне поля')));
+  assert.ok(run({ moss: [[0, 0]], boulders: [[0, 0, 1]] }).some(e => e.includes('мох на валуне')));
+  assert.ok(run({ moss: [[0, 0]], idols: [[0, 0, 1, 2]] }).some(e => e.includes('мох на идоле')));
+  assert.ok(run({ moss: [[0, 0]], challenge: { plates: [[0, 0]] } }).some(e => e.includes('мох на плите')),
+    'клетки «Испытания» тоже проверяются');
+  assert.ok(run({ moss: [[0, 0]], vines: [[0, 0]] }).some(e => e.includes('мох на лиане')));
+  assert.ok(run({ moss: [] }).some(e => e.includes('цель moss без мха')));
 });

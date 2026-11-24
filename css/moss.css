@@ -1,6 +1,6 @@
 /* Мох (земля 6): узлы .moss в слое #boulders (поверх камней, касания
    пропускает, см. css/boulders.css). Позицию клетки задаёт инлайн-transform,
-   анимации идут на .moss-tuft. Пока вид — временный, нарисован в CSS. */
+   анимации идут на .moss-tuft. Спрайт — assets/gems/moss-*.webp (tools/pack_moss.py). */
 .moss {
   position: absolute;
   left: 0;
@@ -11,15 +11,13 @@
 
 .moss-tuft {
   position: absolute;
-  inset: 4%;
-  border-radius: 38% 46% 34% 42%;
-  background:
-    radial-gradient(circle at 30% 30%, #b6e37a 0 9%, transparent 10%),
-    radial-gradient(circle at 68% 40%, #9fd060 0 8%, transparent 9%),
-    radial-gradient(circle at 45% 70%, #8ec456 0 10%, transparent 11%),
-    radial-gradient(circle at 50% 45%, #4f8a2c 0%, #2f5a1a 62%, #1d3a10 100%);
-  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, .45), 0 0 0 2px #142a0a;
+  inset: 2%;
+  background: url("../assets/gems/moss-a.webp") center / contain no-repeat;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .5));
 }
+
+/* Образец: вариант Б (тёмный, с фиолетовым свечением) — ?moss=b */
+body[data-moss="b"] .moss-tuft { background-image: url("../assets/gems/moss-b.webp"); }
 
 /* Кочка счищена: съёживается и тает */
 .moss.break .moss-tuft { animation: moss-clear .5s ease-in forwards; }

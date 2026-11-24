@@ -2458,6 +2458,178 @@ async function smokeFile(bt, bname) {
       return notes.join('; ');
     });
 
+    await scenario(bname, '19 land 6 moss: board, goal, clear, grow, refuse, reshuffle, win gate, phone, reduced', async () => {
+      const notes = [];
+      const mossOf = (page) => ev(page, () => {
+        const S = window.__SUN;
+        const holes = [];
+        S.state.grid.forEach((row, r) => row.forEach((g, c) => {
+          const fixed = S.state.boulders[r][c] > 0 || !!S.state.idols[r][c] || !!S.state.moss[r][c];
+          if (!!g === fixed) holes.push([r, c]);
+        }));
+        return {
+          live: document.querySelectorAll('#boulders .moss:not(.break)').length,
+          all: document.querySelectorAll('#boulders .moss').length,
+          state: S.moss(),
+          holes
+        };
+      });
+      const chipOf = (page) => ev(page, () => {
+        const chips = document.querySelectorAll('.goal-chip.goal-moss');
+        return { n: chips.length, text: chips[0] ? chips[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+      });
+      let stage = 'start';
+      const idle = async (page) => {
+        try {
+          await page.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        } catch (e) {
+          throw new Error('busy at ' + stage);
+        }
+      };
+      const cellXY = (page, r, c) => ev(page, ([r, c]) => {
+        const b = document.getElementById('tiles').getBoundingClientRect();
+        return { x: b.left + (c + 0.5) * b.width / 8, y: b.top + (r + 0.5) * b.height / 8, step: b.width / 8 };
+      }, [r, c]);
+      const gridIds = (page) => ev(page, () => window.__SUN.state.grid.map(row => row.map(g => (g ? g.id : 0)).join(',')).join(';'));
+      // Молния по строке 3 задевает кочку (4,4) снизу
+      const hit = (page) => ev(page, async () => { await window.__SUN.strike(3, 0, 'line', 'row'); });
+
+      // ---- 6-01: мох на поле и в целях ----
+      const key = 's19';
+      const { ctx, page } = await newPage(browser, bname, key);
+      await startFresh(page, HTTP);
+      await ev(page, () => { window.__SUN.start('6-01'); });
+      await waitStarted(page);
+      await page.waitForTimeout(300);
+      const lv = await ev(page, () => window.Campaign.resolve('6-01', 'calm').moss);
+      const d0 = await mossOf(page);
+      assert(d0.live === lv.length && JSON.stringify(d0.state) === JSON.stringify(lv) && d0.holes.length === 0, '6-01 moss: ' + JSON.stringify(d0));
+      const c0 = await chipOf(page);
+      assert(c0.n === 1 && c0.text.includes('Мох') && c0.text.includes('осталось ' + lv.length), '6-01 chip: ' + JSON.stringify(c0));
+      const hint = await page.textContent('#hintBar');
+      assert(hint.includes('рядом с мхом'), 'hint: ' + hint);
+      await shot(page, bname, 'desktop-moss-level');
+
+      stage = 'clear';
+      // ---- ряд рядом счищает кочку, клетка досыпается, цель уменьшается ----
+      await ev(page, () => window.__SUN.setMoss([[4, 4], [0, 0]]));
+      await idle(page);
+      await hit(page);
+      await idle(page);
+      await page.waitForTimeout(700);
+      const d1 = await mossOf(page);
+      assert(JSON.stringify(d1.state) === '[[0,0]]' && d1.all === 1 && d1.holes.length === 0, 'after clear: ' + JSON.stringify(d1));
+
+      stage = 'grow';
+      // ---- ход мимо мха: мох съедает соседний камень, цель растёт ----
+      const g = await ev(page, async () => {
+        const S = window.__SUN;
+        S.state.mossHitThisMove = false;
+        S.state.mossMissed = 0;
+        S.state.level.mossEvery = 1;
+        const need0 = S.state.goals.find(x => x.type === 'moss').need;
+        await S.growMoss();
+        return { need0, need1: S.state.goals.find(x => x.type === 'moss').need, gems: S.state.grid.flat().filter(Boolean).length };
+      });
+      await page.waitForTimeout(600);
+      const d2 = await mossOf(page);
+      assert(d2.state.length === 2 && d2.live === 2 && d2.holes.length === 0 && g.need1 === g.need0 + 1 && g.gems === 62, 'grow: ' + JSON.stringify([g, d2]));
+      assert(d2.state.some(([r, c]) => (r === 0 && c === 1) || (r === 1 && c === 0)), 'grew next to (0,0): ' + JSON.stringify(d2.state));
+      const eaten = await ev(page, () => document.querySelectorAll('#tiles .gem').length);
+      assert(eaten === 62, 'eaten gem node removed: ' + eaten);
+      const c2 = await chipOf(page);
+      assert(c2.text.includes('осталось 2'), 'chip after grow: ' + JSON.stringify(c2));
+
+      stage = 'refuse';
+      // ---- касание кочки и свайп на неё не меняют поле ----
+      await ev(page, () => window.__SUN.setMoss([[3, 3]]));
+      await idle(page);
+      const before = await gridIds(page);
+      const p = await cellXY(page, 3, 3);
+      await page.mouse.click(p.x, p.y);
+      await page.waitForTimeout(200);
+      const hintTap = await page.textContent('#hintBar');
+      assert(hintTap.includes('Мох не сдвинуть'), 'tap hint: ' + hintTap);
+      await page.waitForTimeout(450);
+      const q = await cellXY(page, 3, 2);
+      await page.mouse.move(q.x, q.y);
+      await page.mouse.down();
+      await page.mouse.move(q.x + q.step * 0.4, q.y, { steps: 3 });
+      await page.mouse.move(q.x + q.step * 0.9, q.y, { steps: 3 });
+      await page.mouse.up();
+      await idle(page);
+      await page.waitForTimeout(200);
+      assert(await gridIds(page) === before, 'grid changed after moss tap/swipe');
+
+      stage = 'reshuffle';
+      await ev(page, async () => { await window.__SUN.reshuffleBoard(false, true); window.__SUN.state.busy = false; });
+      await idle(page);
+      const d3 = await mossOf(page);
+      assert(JSON.stringify(d3.state) === '[[3,3]]' && d3.holes.length === 0, 'reshuffle: ' + JSON.stringify(d3));
+
+      stage = 'wingate';
+      await ev(page, () => { window.__SUN.start('6-02'); });
+      await waitStarted(page);
+      await idle(page);
+      const d4 = await mossOf(page);
+      const lv2 = await ev(page, () => window.Campaign.resolve('6-02', 'calm').moss.length);
+      assert(d4.live === lv2 && d4.holes.length === 0, 'retry 6-02 leftovers: ' + JSON.stringify(d4));
+      const ended = await ev(page, () => {
+        const S = window.__SUN;
+        S.state.goals.forEach(g => { if (g.type === 'color') g.got = g.need; });
+        S.checkEnd();
+        const a = S.state.ended;
+        S.state.goals.forEach(g => { g.got = g.need; });
+        S.checkEnd();
+        return [a, S.state.ended];
+      });
+      assert(ended[0] === false && ended[1] === true, 'win gate: ' + JSON.stringify(ended));
+
+      await ev(page, () => { window.__SUN.start('5-01'); });
+      await waitStarted(page);
+      const d5 = await ev(page, () => ({ nodes: document.querySelectorAll('.moss').length, chip: document.querySelectorAll('.goal-moss').length }));
+      assert(d5.nodes === 0 && d5.chip === 0, '5-01 has moss: ' + JSON.stringify(d5));
+      const errs = (consoleLog[bname + '/' + key] || []).filter(l => !/warning/.test(l));
+      await ctx.close();
+      assert(errs.length === 0, 'console: ' + errs.join(' | '));
+
+      // ---- телефон 390×844: кочка совпадает с клеткой ----
+      {
+        const { ctx: pc, page: pp } = await newPage(browser, bname, 's19-phone', { width: 390, height: 844 });
+        await startFresh(pp, HTTP);
+        await ev(pp, () => { window.__SUN.start('6-01'); });
+        await waitStarted(pp);
+        await pp.waitForTimeout(300);
+        const box = await ev(pp, () => {
+          const n = document.querySelector('#boulders .moss');
+          const r = +n.dataset.r, c = +n.dataset.c;
+          const b = n.getBoundingClientRect();
+          const t = document.getElementById('tiles').getBoundingClientRect();
+          return { dx: Math.abs(b.left - (t.left + c * t.width / 8)), dy: Math.abs(b.top - (t.top + r * t.height / 8)), w: b.width, cell: t.width / 8 };
+        });
+        assert(box.dx < 2 && box.dy < 2 && Math.abs(box.w - box.cell) < 2, 'phone align: ' + JSON.stringify(box));
+        await shot(pp, bname, 'phone-moss-level');
+        await pc.close();
+        notes.push('phone cell ' + box.cell.toFixed(1) + 'px');
+      }
+
+      // ---- «уменьшить движение»: счищенная кочка исчезает сразу ----
+      {
+        const { ctx: rc, page: rp } = await newPage(browser, bname, 's19-reduced', undefined, { reducedMotion: true });
+        await startFresh(rp, HTTP);
+        await ev(rp, () => { window.__SUN.start('6-01'); });
+        await waitStarted(rp);
+        await ev(rp, () => window.__SUN.setMoss([[4, 4]]));
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        await hit(rp);
+        await rp.waitForFunction(() => !window.__SUN.state.busy, null, { timeout: 15000 });
+        const n = await ev(rp, () => document.querySelectorAll('#boulders .moss').length);
+        assert(n === 0, 'reduced: moss nodes left ' + n);
+        await rc.close();
+      }
+      return notes.join('; ');
+    });
+
     await scenario(bname, 'file:// smoke (load, no errors, level starts, save persists)', async () => {
       const { ctx, page } = await newPage(browser, bname, 'file-smoke');
       await startFresh(page, FILE);

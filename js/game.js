@@ -160,7 +160,7 @@
     boulder: 'Валун не сдвинуть. Собери ряд рядом с ним, и он треснет',
     idols: 'Собирай рядом с идолом ряды цвета его ореола. Разбуди всех идолов',
     idol: 'Идол стоит на месте. Собери рядом с ним ряд цвета его ореола',
-    moss: 'Собирай ряды рядом с мхом. Не тронешь мох за ход — он разрастётся',
+    moss: 'Собирай ряды рядом с мхом, иначе он разрастётся',
     mossFixed: 'Мох не сдвинуть. Собери ряд рядом с кочкой, и она исчезнет',
     mossGrew: 'Мох разросся'
   };
@@ -2169,6 +2169,8 @@
 
   /* ---------- Отладка (для тестов) ----------
      Хук доступен только при открытии с ?debug в адресе. */
+  // Образец спрайта мха: ?moss=b (временно, до выбора варианта)
+  if (new URLSearchParams(location.search).get('moss') === 'b') document.body.dataset.moss = 'b';
   if (new URLSearchParams(location.search).has('debug')) {
     window.__SUN = {
       state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
@@ -2247,6 +2249,8 @@
         renderIdols();
         await dropGems();
       },
+      // Рост мха после хода (как в attemptSwap): __SUN.growMoss()
+      growMoss: growMossAfterMove,
       // Мох: [[r, c], …]
       moss() {
         const out = [];

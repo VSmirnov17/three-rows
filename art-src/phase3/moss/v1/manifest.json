@@ -1,0 +1,19 @@
+{
+  "plan_sha256": "9ecbed9c0b81a15cf170ea918e6f28a27fd9fd179e5921407aaa7a605bc811f4",
+  "backend": "codex",
+  "completed": {
+    "image": {
+      "path": "image.png",
+      "label": "image",
+      "sha256": "939edb43b67cf6d6cc7c55b1733961ebdc8759af74c864a62fd30422c0a19669",
+      "image_model": "managed by Codex; not reported",
+      "review": "pending"
+    }
+  },
+  "status": "complete",
+  "total": 1,
+  "pid": 87391,
+  "updated_at": 1795542371.8971012,
+  "errors": {},
+  "running": []
+}
