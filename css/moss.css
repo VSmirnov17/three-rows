@@ -1,0 +1,53 @@
+/* Мох (земля 6): узлы .moss в слое #boulders (поверх камней, касания
+   пропускает, см. css/boulders.css). Позицию клетки задаёт инлайн-transform,
+   анимации идут на .moss-tuft. Спрайт — assets/gems/moss.webp (вариант А выбран пользователем) (tools/pack_moss.py). */
+.moss {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12.5%;
+  height: 12.5%;
+}
+
+.moss-tuft {
+  position: absolute;
+  inset: 2%;
+  background: url("../assets/gems/moss.webp") center / contain no-repeat;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .5));
+}
+
+/* Кочка счищена: съёживается и тает */
+.moss.break .moss-tuft { animation: moss-clear .5s ease-in forwards; }
+
+/* Мох разросся: кочка вырастает на месте съеденного камня */
+.moss.grow .moss-tuft { animation: moss-grow .5s ease-out; }
+.gem.moss-eaten { transition: opacity .45s ease-in; opacity: 0; }
+
+/* Отказ касанием */
+.moss.knock .moss-tuft { animation: moss-knock .4s ease-out; }
+
+@keyframes moss-clear {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.4); }
+}
+
+@keyframes moss-grow {
+  0%   { opacity: 0; transform: scale(.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes moss-knock {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Значок цели */
+.goal-moss-icon { position: relative; display: inline-block; }
+.goal-moss-icon .moss-tuft { inset: 6%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .moss.break .moss-tuft,
+  .moss.grow .moss-tuft,
+  .moss.knock .moss-tuft { animation: none; }
+}

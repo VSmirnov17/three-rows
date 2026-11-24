@@ -1,0 +1,6 @@
+$imagegen
+Asset: game sprite sheet for a match-three board, square image, transparent background, two sprites in one horizontal row with a wide transparent gap
+Request: two alternative designs of a clump of dark swamp moss that grows over a board cell and eats gems (an obstacle cast by the Lord of Night). Left: a low round cushion of dense dark olive-green moss with many tiny pale yellow-green spore stalks and a few drops of swamp water. Right: the same kind of moss mound but darker, with a faint violet night glow deep inside and two or three short curling dark tendrils
+Look: same painterly-3D manner, material quality and lighting as the gems in Image 1 (style reference only); soft fuzzy moss texture, cool highlight from top-left, murky deep shadows; clearly organic and soft, not a gem, not a stone, not leaves or vines
+Composition: each clump seen slightly from above, fills a square cell almost edge to edge, chunky rounded silhouette that reads at 40 px
+Constraints: no text, no gems, no stones, no leaves, no base, no ground, no shadow outside the clump, no border

@@ -117,11 +117,13 @@ function cloneProgress(p) {
    boulders — слой валунов (необязателен), тоже МЕНЯЕТСЯ. Очков не дают; для
    выбора хода каждая трещина — единица прогресса (иначе бот не бил бы крепкие
    валуны), в цель (gained.boulders) идут только разбитые. idols — слой идолов,
-   так же: каждый дар — единица прогресса, в цель (gained.idols) — довольные. */
-function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, boulders, idols) {
+   так же: каждый дар — единица прогресса, в цель (gained.idols) — довольные.
+   moss — слой мха, тоже МЕНЯЕТСЯ: каждая счищенная кочка — единица прогресса
+   (gained.moss); рост мха — в playLevel, после хода. */
+function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, boulders, idols, moss) {
   const rng = mulberry32(turnSeed);
   let idCounter = 1000000;
-  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS, boulders, idols });
+  const res = Board.simulateMove(grid, a, b, rng, () => ++idCounter, { colors: COLORS, boulders, idols, moss });
   if (!res) return null;
 
   const left = new Map(progress.colorLeft);
@@ -176,11 +178,12 @@ function runMove(grid, a, b, turnSeed, progress, timeLefts, totalTime, plates, b
   progressUnits += res.boulderHits.length;
   const idolsGain = Math.min(res.idolHits.filter(h => h.left === 0).length, progress.idolsLeft || 0);
   progressUnits += res.idolHits.length;
+  progressUnits += res.mossHits.length;
 
   if (offset !== res.removed.length) {
     throw new Error('runMove: removed (' + res.removed.length + ') не совпадает с суммой clear (' + offset + ') — ядро поля изменилось');
   }
-  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain, idols: idolsGain } };
+  return { progress: progressUnits, score: scores[0], scores, gained: { colors: colorGain, vines: vinesGain, plates: platesGain, boulders: bouldersGain, idols: idolsGain, moss: res.mossHits.length } };
 }
 
 /* Все обмены, дающие совпадение (проверка как в Board.findMove). */
@@ -230,18 +233,23 @@ function playLevel(resolved, seed, opts) {
   let idCounter = 0;
   const nextId = () => ++idCounter;
 
-  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines, boulders: resolved.boulders, idols: resolved.idols }, rng, nextId);
+  const grid = Board.generateGrid({ colors: COLORS, vines: resolved.vines, boulders: resolved.boulders, idols: resolved.idols, moss: resolved.moss }, rng, nextId);
   const plates = Board.makePlates(resolved.plates);
   const boulders = Board.makeBoulders(resolved.boulders);
   const idols = Board.makeIdols(resolved.idols);
   const cloneIdols = () => idols.map(row => row.map(v => (v ? Object.assign({}, v) : null)));
+  const moss = Board.makeMoss(resolved.moss);
+  const mossEvery = resolved.mossEvery || 1;
+  let mossMissed = 0;
+  let mossGrown = 0;
   const progress = makeProgress(resolved);
+  const done = () => isDone(progress) && Board.mossLeft(moss) === 0;
 
   let moves = 0;
   const scores = models.map(() => 0);
   let shuffles = 0;
 
-  while (!isDone(progress) && moves < maxMoves) {
+  while (!done() && moves < maxMoves) {
     if (!Board.hasMove(grid)) {
       Board.shuffle(grid, rng, { colors: COLORS });
       shuffles++;
@@ -254,7 +262,7 @@ function playLevel(resolved, seed, opts) {
 
     const cands = [];
     legalMoves(grid).forEach((mv, order) => {
-      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()), boulders.map(row => row.slice()), cloneIdols());
+      const r = runMove(cloneGrid(grid), mv.a, mv.b, evalSeed, progress, timeLefts.slice(0, 1), total, plates.map(row => row.slice()), boulders.map(row => row.slice()), cloneIdols(), moss.map(row => row.slice()));
       if (r) cands.push({ mv, order, progress: r.progress, score: r.score });
     });
     if (!cands.length) break;
@@ -266,7 +274,7 @@ function playLevel(resolved, seed, opts) {
       pick = cands[Math.floor(pickRng() * top)];
     }
 
-    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates, boulders, idols);
+    const r = runMove(grid, pick.mv.a, pick.mv.b, turnSeed, progress, timeLefts, total, plates, boulders, idols, moss);
     moves++;
     r.scores.forEach((v, k) => { scores[k] += v; });
     r.gained.colors.forEach((n, color) => {
@@ -276,9 +284,18 @@ function playLevel(resolved, seed, opts) {
     progress.platesLeft -= r.gained.plates;
     progress.bouldersLeft -= r.gained.boulders;
     progress.idolsLeft -= r.gained.idols;
+    // Мох растёт, как в игре (js/game.js growMossAfterMove): после mossEvery
+    // ходов подряд мимо мха
+    if (Board.mossLeft(moss)) {
+      if (r.gained.moss) mossMissed = 0;
+      else if (++mossMissed >= mossEvery) {
+        mossMissed = 0;
+        if (Board.growMoss(moss, grid, rng, { cap: resolved.mossCap, plates })) mossGrown++;
+      }
+    }
   }
 
-  return { won: isDone(progress), moves, score: scores[0], scores, shuffles };
+  return { won: done(), moves, score: scores[0], scores, shuffles, mossGrown };
 }
 
 /* ---------- Сбор статистики ---------- */
@@ -322,9 +339,13 @@ function analyzeLevel(id, seeds, offset, starSeeds) {
   };
 
   const out = {};
-  const gCN = run(['calm', 'normal'], 'greedy', seeds);
+  /* С мхом «Спокойно» и «Обычно» различаются ростом мха — играются раздельно */
+  const pair = (policy, count) => (!resolved.calm.moss.length
+    ? run(['calm', 'normal'], policy, count)
+    : [run(['calm'], policy, count)[0], run(['normal'], policy, count)[0]]);
+  const gCN = pair('greedy', seeds);
   const gCh = run(['challenge'], 'greedy', seeds);
-  const hCN = run(['calm', 'normal'], 'human', nStar);
+  const hCN = pair('human', nStar);
   const hCh = run(['challenge'], 'human', nStar);
   out.calm = { resolved: resolved.calm, greedy: gCN[0], human: hCN[0] };
   out.normal = { resolved: resolved.normal, greedy: gCN[1], human: hCN[1] };
