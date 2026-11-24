@@ -1,6 +1,6 @@
 /* Мох (земля 6): узлы .moss в слое #boulders (поверх камней, касания
    пропускает, см. css/boulders.css). Позицию клетки задаёт инлайн-transform,
-   анимации идут на .moss-tuft. Спрайт — assets/gems/moss-*.webp (tools/pack_moss.py). */
+   анимации идут на .moss-tuft. Спрайт — assets/gems/moss.webp (вариант А выбран пользователем) (tools/pack_moss.py). */
 .moss {
   position: absolute;
   left: 0;
@@ -12,12 +12,9 @@
 .moss-tuft {
   position: absolute;
   inset: 2%;
-  background: url("../assets/gems/moss-a.webp") center / contain no-repeat;
+  background: url("../assets/gems/moss.webp") center / contain no-repeat;
   filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .5));
 }
-
-/* Образец: вариант Б (тёмный, с фиолетовым свечением) — ?moss=b */
-body[data-moss="b"] .moss-tuft { background-image: url("../assets/gems/moss-b.webp"); }
 
 /* Кочка счищена: съёживается и тает */
 .moss.break .moss-tuft { animation: moss-clear .5s ease-in forwards; }

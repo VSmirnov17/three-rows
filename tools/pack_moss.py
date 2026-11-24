@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Режет лист кочек мха Codex -> assets/gems/moss-{a,b}.webp.
+"""Режет лист кочек мха Codex; выбранный вариант А -> assets/gems/moss.webp.
 
 Лист — art-src/phase3/moss/v1/image.png: слева сидящий идол (a), справа
 голова в ступенчатом уборе (b). Вокруг фигур Codex оставляет полупрозрачную
@@ -49,8 +49,10 @@ def main():
         side = round(max(crop.size) * 1.08)
         sq = Image.new('RGBA', (side, side))
         sq.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
-        sq.resize((SIZE, SIZE), Image.LANCZOS).save(OUT / ('moss-%s.webp' % name), quality=88, method=6)
-        print('moss-%s.webp' % name)
+        if name != 'a':  # вариант Б пользователь не выбрал
+            continue
+        sq.resize((SIZE, SIZE), Image.LANCZOS).save(OUT / 'moss.webp', quality=88, method=6)
+        print('moss.webp')
 
 
 if __name__ == '__main__':

@@ -2518,10 +2518,15 @@ async function smokeFile(bt, bname) {
       await idle(page);
       await page.waitForTimeout(700);
       const d1 = await mossOf(page);
-      assert(JSON.stringify(d1.state) === '[[0,0]]' && d1.all === 1 && d1.holes.length === 0, 'after clear: ' + JSON.stringify(d1));
+      // Каскад после удара может случайно счистить и (0,0) — проверяем только (4,4)
+      assert(!d1.state.some(([r, c]) => r === 4 && c === 4) && d1.all === d1.state.length && d1.holes.length === 0, 'after clear: ' + JSON.stringify(d1));
+      await ev(page, () => window.__SUN.setMoss([[0, 0]]));
+      await idle(page);
 
       stage = 'grow';
       // ---- ход мимо мха: мох съедает соседний камень, цель растёт ----
+      const leftOf = (t) => Number((/осталось (\d+)/.exec(t) || [])[1]);
+      const k1 = leftOf((await chipOf(page)).text);
       const g = await ev(page, async () => {
         const S = window.__SUN;
         S.state.mossHitThisMove = false;
@@ -2538,7 +2543,7 @@ async function smokeFile(bt, bname) {
       const eaten = await ev(page, () => document.querySelectorAll('#tiles .gem').length);
       assert(eaten === 62, 'eaten gem node removed: ' + eaten);
       const c2 = await chipOf(page);
-      assert(c2.text.includes('осталось 2'), 'chip after grow: ' + JSON.stringify(c2));
+      assert(leftOf(c2.text) === k1 + 1, 'chip after grow: ' + JSON.stringify([k1, c2]));
 
       stage = 'refuse';
       // ---- касание кочки и свайп на неё не меняют поле ----

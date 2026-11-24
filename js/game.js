@@ -2169,8 +2169,6 @@
 
   /* ---------- Отладка (для тестов) ----------
      Хук доступен только при открытии с ?debug в адресе. */
-  // Образец спрайта мха: ?moss=b (временно, до выбора варианта)
-  if (new URLSearchParams(location.search).get('moss') === 'b') document.body.dataset.moss = 'b';
   if (new URLSearchParams(location.search).has('debug')) {
     window.__SUN = {
       state, gemAt, findMove, findMatches, attemptSwap, resolveBoard,
